@@ -74,14 +74,14 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
         finally:
             await state.shutdown()
 
-    app = FastAPI(title="Central Proxy", version="0.1.0", docs_url="/docs", redoc_url=None, lifespan=lifespan)
+    app = FastAPI(title="Unify LLM", version="0.1.0", docs_url="/docs", redoc_url=None, lifespan=lifespan)
     app.state.proxy = state
 
     # ---------- health / status / dashboard ----------
 
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:
-        return {"ok": True, "service": "central_proxy", "version": "0.1.0"}
+        return {"ok": True, "service": "unify_llm", "version": "0.1.0"}
 
     @app.get("/api/status")
     async def api_status() -> dict[str, Any]:

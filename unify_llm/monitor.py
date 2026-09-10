@@ -419,7 +419,7 @@ class Monitor:
             models.sort(key=lambda m: m["total"], reverse=True)
             return {
                 "ok": True,
-                "version": __import__("central_proxy").__version__,
+                "version": __import__("unify_llm").__version__,
                 "uptime_seconds": round(time.time() - self.started_at, 1),
                 "totals": {
                     "active": self._global_active,

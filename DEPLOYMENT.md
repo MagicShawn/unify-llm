@@ -1,4 +1,4 @@
-# Central Proxy 部署文档
+# Unify LLM 部署文档
 
 本地多厂商 LLM 中转站：固定端口统一接入、模型路由、超时重试、并发监控与 Web Dashboard。
 
@@ -11,7 +11,7 @@
 ```
 ┌─────────────────┐     ┌──────────────────────────────┐     ┌─────────────────┐
 │  OpenAI 客户端   │────▶│                              │────▶│ OpenAI / 兼容API │
-│  /v1/chat/...   │     │   Central Proxy  :8787       │────▶│ DeepSeek/Ollama  │
+│  /v1/chat/...   │     │   Unify LLM  :8787       │────▶│ DeepSeek/Ollama  │
 └─────────────────┘     │                              │     └─────────────────┘
 ┌─────────────────┐     │  · 模型路由 / 别名            │     ┌─────────────────┐
 │ Anthropic 客户端 │────▶│  · 超时 / 重试 / fallback     │────▶│ Anthropic API    │
@@ -65,7 +65,7 @@ python -m pip --version
 ### 2.2 准备目录
 
 ```powershell
-cd D:\Work_space\01_Work_Projects\central_proxy
+cd D:\Work_space\01_Work_Projects\unify_llm
 ```
 
 若从压缩包/仓库克隆得到代码，保证目录内至少有：
@@ -74,11 +74,11 @@ cd D:\Work_space\01_Work_Projects\central_proxy
 main.py
 requirements.txt
 config.example.yaml
-central_proxy\
+unify_llm\
   app.py
   config.py
   ...
-static 在 central_proxy\static\dashboard.html
+static 在 unify_llm\static\dashboard.html
 ```
 
 ---
@@ -88,7 +88,7 @@ static 在 central_proxy\static\dashboard.html
 ### 3.1 方式 A：venv（推荐）
 
 ```powershell
-cd D:\Work_space\01_Work_Projects\central_proxy
+cd D:\Work_space\01_Work_Projects\unify_llm
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -282,7 +282,7 @@ setx ANTHROPIC_API_KEY "sk-ant-..."
 ### 5.1 前台启动
 
 ```powershell
-cd D:\Work_space\01_Work_Projects\central_proxy
+cd D:\Work_space\01_Work_Projects\unify_llm
 .\.venv\Scripts\Activate.ps1   # 若使用 venv
 python main.py
 ```
@@ -290,7 +290,7 @@ python main.py
 启动日志示例：
 
 ```
-Central Proxy listening on http://127.0.0.1:8787
+Unify LLM listening on http://127.0.0.1:8787
   Dashboard:  http://127.0.0.1:8787/dashboard
   OpenAI:     http://127.0.0.1:8787/v1
   Anthropic:  http://127.0.0.1:8787/v1/messages
@@ -318,7 +318,7 @@ python main.py -c config.yaml --port 8787 --host 127.0.0.1
 
 ```powershell
 curl http://127.0.0.1:8787/healthz
-# {"ok":true,"service":"central_proxy","version":"0.1.0"}
+# {"ok":true,"service":"unify_llm","version":"0.1.0"}
 ```
 
 PowerShell 也可用：
@@ -478,7 +478,7 @@ $s.providers | Format-Table id, active, total, errors
 
 ```bat
 @echo off
-cd /d D:\Work_space\01_Work_Projects\central_proxy
+cd /d D:\Work_space\01_Work_Projects\unify_llm
 call .venv\Scripts\activate.bat
 python main.py
 ```
@@ -488,7 +488,7 @@ python main.py
 **用任务计划程序更稳：**
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute "D:\Work_space\01_Work_Projects\central_proxy\start_proxy.bat"
+$action  = New-ScheduledTaskAction -Execute "D:\Work_space\01_Work_Projects\unify_llm\start_proxy.bat"
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 Register-ScheduledTask -TaskName "CentralProxy" -Action $action -Trigger $trigger -Description "Local LLM gateway"
 ```
@@ -511,20 +511,20 @@ Get-NetTCPConnection -LocalPort 8787 -State Listen |
 
 ### 7.5 systemd（Linux 服务器可选）
 
-`/etc/systemd/system/central-proxy.service`：
+`/etc/systemd/system/unify-llm.service`：
 
 ```ini
 [Unit]
-Description=Central Proxy LLM Gateway
+Description=Unify LLM LLM Gateway
 After=network.target
 
 [Service]
 Type=simple
 User=youruser
-WorkingDirectory=/opt/central_proxy
+WorkingDirectory=/opt/unify_llm
 Environment=OPENAI_API_KEY=sk-...
 Environment=ANTHROPIC_API_KEY=sk-ant-...
-ExecStart=/opt/central_proxy/.venv/bin/python main.py -c config.yaml
+ExecStart=/opt/unify_llm/.venv/bin/python main.py -c config.yaml
 Restart=on-failure
 RestartSec=3
 
@@ -534,9 +534,9 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now central-proxy
-sudo systemctl status central-proxy
-journalctl -u central-proxy -f
+sudo systemctl enable --now unify-llm
+sudo systemctl status unify-llm
+journalctl -u unify-llm -f
 ```
 
 ---

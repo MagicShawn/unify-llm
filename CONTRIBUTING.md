@@ -1,6 +1,6 @@
-# Contributing to Central Proxy
+# Contributing to Unify LLM
 
-Thanks for your interest in improving Central Proxy.
+Thanks for your interest in improving Unify LLM.
 
 ## Before you start
 
@@ -30,7 +30,7 @@ Follow the [Google Python Style Guide](https://google.github.io/styleguide/pygui
 - Keep functions focused; avoid deep nesting.
 - Use type hints on public functions.
 - Do not add comments that restate the code. Comment only non-obvious constraints.
-- Match the existing layout under `central_proxy/`.
+- Match the existing layout under `unify_llm/`.
 - Keep cross-protocol conversion text-focused unless you extend `convert.py` deliberately.
 
 ### Tests

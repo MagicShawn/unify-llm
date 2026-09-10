@@ -7,7 +7,7 @@ import uvicorn
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Central Proxy — local LLM gateway")
+    parser = argparse.ArgumentParser(description="Unify LLM — local multi-provider gateway")
     parser.add_argument(
         "-c",
         "--config",
@@ -18,8 +18,8 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=None, help="Override server.port")
     args = parser.parse_args()
 
-    from central_proxy.app import create_app
-    from central_proxy.config import load_config
+    from unify_llm.app import create_app
+    from unify_llm.config import load_config
 
     cfg_path = Path(args.config)
     if not cfg_path.exists():
@@ -34,7 +34,7 @@ def main() -> None:
     port = args.port or config.server.port
     app = create_app(config=config)
 
-    print(f"Central Proxy listening on http://{host}:{port}")
+    print(f"Unify LLM listening on http://{host}:{port}")
     print(f"  Dashboard:  http://{host}:{port}/dashboard")
     print(f"  OpenAI:     http://{host}:{port}/v1")
     print(f"  Anthropic:  http://{host}:{port}/v1/messages")

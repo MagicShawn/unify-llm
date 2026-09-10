@@ -247,8 +247,8 @@ async def main_async(args: argparse.Namespace) -> None:
     if args.mode == "mock":
         server, port = await start_async_dummy(delay_ms=args.mock_delay_ms)
         # temporary config with dummy provider only
-        from central_proxy.app import create_app
-        from central_proxy.config import AppConfig, ProviderConfig
+        from unify_llm.app import create_app
+        from unify_llm.config import AppConfig, ProviderConfig
 
         cfg = AppConfig(
             providers={

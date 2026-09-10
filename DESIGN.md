@@ -1,4 +1,4 @@
-# Central Proxy — Design
+# Unify LLM — Design
 
 Local LLM gateway: one fixed port, multi-provider routing, dual protocol (OpenAI + Anthropic), concurrency monitoring, Web dashboard.
 
@@ -30,14 +30,14 @@ Local LLM gateway: one fixed port, multi-provider routing, dual protocol (OpenAI
 ## Directory layout
 
 ```
-central_proxy/
+unify_llm/
 ├── DESIGN.md
 ├── README.md
 ├── requirements.txt
 ├── config.example.yaml
 ├── config.yaml                 # local, gitignored
 ├── main.py                     # uvicorn entry
-├── central_proxy/
+├── unify_llm/
 │   ├── __init__.py
 │   ├── config.py               # load / validate YAML
 │   ├── registry.py             # provider + model routing
@@ -65,7 +65,7 @@ central_proxy/
 
 ```mermaid
 flowchart LR
-  ClientA[OpenAI client] -->|POST /v1/chat/completions| GW[central_proxy :8787]
+  ClientA[OpenAI client] -->|POST /v1/chat/completions| GW[unify_llm :8787]
   ClientB[Anthropic client] -->|POST /v1/messages| GW
   Browser[Browser] -->|GET /dashboard| GW
   GW --> Router[Registry / model route]

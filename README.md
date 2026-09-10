@@ -1,4 +1,4 @@
-# Central Proxy
+# Unify LLM
 
 Local multi-provider LLM gateway. One fixed port routes OpenAI-compatible and Anthropic clients to DeepSeek, Kimi, GLM, and other upstreams, with concurrency monitoring and a web dashboard.
 
@@ -197,7 +197,7 @@ python scripts/bench.py live --model deepseek-flash --protocol openai \
 ## Project layout
 
 ```
-central_proxy/
+unify_llm/
   app.py              # FastAPI app and proxy routes
   config.py           # YAML load and validation
   registry.py         # Model → provider routing

@@ -50,10 +50,10 @@ def start_dummy() -> tuple[HTTPServer, int]:
 
 async def run_checks(port: int) -> None:
     from fastapi.testclient import TestClient  # noqa: PLC0415
-    from central_proxy.app import create_app
-    from central_proxy.config import AppConfig, DefaultsConfig, ProviderConfig
-    from central_proxy.registry import Registry
-    from central_proxy.monitor import Monitor
+    from unify_llm.app import create_app
+    from unify_llm.config import AppConfig, DefaultsConfig, ProviderConfig
+    from unify_llm.registry import Registry
+    from unify_llm.monitor import Monitor
 
     # --- unit-ish ---
     cfg = AppConfig(
@@ -140,7 +140,7 @@ async def run_checks(port: int) -> None:
         assert body["totals"]["requests"] >= 1
 
         r = client.get("/dashboard")
-        assert r.status_code == 200 and b"Central Proxy" in r.content
+        assert r.status_code == 200 and b"Unify LLM" in r.content
 
     print("SMOKE OK")
 
