@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Central Proxy</title>
+  <style>
+    :root {
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+        "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
+      --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --gap: 16px;
+      --max: 1120px;
+    }
+    [data-theme="light"] {
+      --bg: #f5f5f7;
+      --bg-elev: #ffffff;
+      --bg-soft: #fafafa;
+      --ink: #1d1d1f;
+      --ink-2: #6e6e73;
+      --ink-3: #aeaeb2;
+      --line: rgba(0, 0, 0, 0.08);
+      --accent: #0071e3;
+      --accent-soft: rgba(0, 113, 227, 0.1);
+      --ok: #34c759;
+      --ok-soft: rgba(52, 199, 89, 0.12);
+      --err: #ff3b30;
+      --err-soft: rgba(255, 59, 48, 0.1);
+      --warn: #ff9f0a;
+      --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.04);
+      --chart-grid: rgba(0,0,0,.06);
+      --chart-p50: #0071e3;
+      --chart-p95: #ff9f0a;
+    }
+    [data-theme="dark"] {
+      --bg: #000000;
+      --bg-elev: #1c1c1e;
+      --bg-soft: #2c2c2e;
+      --ink: #f5f5f7;
+      --ink-2: #a1a1a6;
+      --ink-3: #636366;
+      --line: rgba(255, 255, 255, 0.1);
+      --accent: #2997ff;
+      --accent-soft: rgba(41, 151, 255, 0.15);
+      --ok: #30d158;
+      --ok-soft: rgba(48, 209, 88, 0.15);
+      --err: #ff453a;
+      --err-soft: rgba(255, 69, 58, 0.15);
+      --warn: #ffd60a;
+      --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 8px 32px rgba(0,0,0,.45);
+      --chart-grid: rgba(255,255,255,.08);
+      --chart-p50: #2997ff;
+      --chart-p95: #ffd60a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      transition: background .25s ease, color .25s ease;
+    }
+    .wrap {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 28px 20px 64px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .brand .sub {
+      color: var(--ink-2);
+      font-size: 13px;
+      font-family: var(--mono);
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .live-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--ink-2);
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+    }
+    .live-dot i {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 0 3px var(--ok-soft);
+    }
+    .theme-btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--bg-elev);
+      color: var(--ink);
+      width: 38px; height: 38px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 16px;
+      display: grid;
+      place-items: center;
+      transition: transform .15s ease, background .2s;
+    }
+    .theme-btn:hover { transform: scale(1.05); }
+    .theme-btn:active { transform: scale(0.96); }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--gap);
+      margin-bottom: var(--gap);
+    }
+    @media (max-width: 900px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 520px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+      .brand h1 { font-size: 22px; }
+    }
+    .card {
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px 18px 16px;
+    }
+    .kpi .label {
+      font-size: 12px;
+      color: var(--ink-2);
+      font-weight: 500;
+      letter-spacing: .01em;
+      margin-bottom: 8px;
+    }
+    .kpi .value {
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .kpi .hint {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--ink-3);
+      font-family: var(--mono);
+    }
+    .kpi .value.accent { color: var(--accent); }
+    .kpi .value.ok { color: var(--ok); }
+    .kpi .value.err { color: var(--err); }
+
+    section { margin-top: 22px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      padding: 0 4px;
+    }
+    .sec-head h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .sec-head .meta {
+      font-size: 12px;
+      color: var(--ink-2);
+      font-family: var(--mono);
+    }
+
+    .chart-card { padding: 16px 12px 8px; }
+    .chart-legend {
+      display: flex;
+      gap: 16px;
+      padding: 0 10px 10px;
+      font-size: 12px;
+      color: var(--ink-2);
+    }
+    .chart-legend span::before {
+      content: "";
+      display: inline-block;
+      width: 10px; height: 3px;
+      border-radius: 2px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .chart-legend .p50::before { background: var(--chart-p50); }
+    .chart-legend .p95::before { background: var(--chart-p95); }
+    .chart-legend .raw::before { background: var(--ink-3); }
+    canvas#latencyChart {
+      width: 100%;
+      height: 220px;
+      display: block;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: var(--gap);
+    }
+    @media (max-width: 860px) {
+      .split { grid-template-columns: 1fr; }
+    }
+
+    .model-list { display: flex; flex-direction: column; gap: 10px; }
+    .model-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+    }
+    .model-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-weight: 550;
+      font-size: 14px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 999px;
+      letter-spacing: .01em;
+    }
+    .chip.provider {
+      background: var(--accent-soft);
+      color: var(--accent);
+      text-transform: capitalize;
+    }
+    .chip.type {
+      background: var(--bg-elev);
+      color: var(--ink-2);
+      border: 1px solid var(--line);
+    }
+    .model-stats {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ink-2);
+      grid-column: 1 / -1;
+    }
+    .model-stats b {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .provider-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .prov {
+      padding: 14px 14px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+    }
+    .prov-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .prov-name {
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-weight: 500;
+    }
+    .badge.on { background: var(--ok-soft); color: var(--ok); }
+    .badge.off { background: var(--bg-elev); color: var(--ink-3); border: 1px solid var(--line); }
+    .prov-url {
+      font-size: 11px;
+      color: var(--ink-3);
+      font-family: var(--mono);
+      word-break: break-all;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+    .prov-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      text-align: center;
+    }
+    .prov-stats .n {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .prov-stats .t {
+      font-size: 10px;
+      color: var(--ink-3);
+      margin-top: 2px;
+    }
+    .prov-stats .n.live { color: var(--accent); }
+    .prov-stats .n.bad { color: var(--err); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+    th {
+      color: var(--ink-2);
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    tr:last-child td { border-bottom: none; }
+    td.mono, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .pill.ok { background: var(--ok-soft); color: var(--ok); }
+    .pill.err { background: var(--err-soft); color: var(--err); }
+    .pill.proto {
+      background: var(--accent-soft);
+      color: var(--accent);
+      text-transform: capitalize;
+    }
+    .empty {
+      color: var(--ink-3);
+      text-align: center;
+      padding: 28px 12px;
+      font-size: 13px;
+    }
+    .err-text { color: var(--err); font-size: 12px; max-width: 220px; }
+    .table-wrap { overflow-x: auto; }
+    footer {
+      margin-top: 28px;
+      text-align: center;
+      color: var(--ink-3);
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .tokens-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--gap);
+      margin-top: var(--gap);
+    }
+    @media (max-width: 700px) {
+      .tokens-row { grid-template-columns: 1fr; }
+    }
+    .tok .value { font-size: 24px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Central Proxy</h1>
+        <div class="sub" id="subline">loading…</div>
+      </div>
+      <div class="header-actions">
+        <div class="live-dot"><i></i><span id="liveLabel">live</span></div>
+        <button class="theme-btn" id="themeBtn" title="切换主题" aria-label="切换主题">◐</button>
+      </div>
+    </header>
+
+    <div class="kpi-grid">
+      <div class="card kpi">
+        <div class="label">Active</div>
+        <div class="value accent" id="kpiActive">0</div>
+        <div class="hint">in-flight now</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Requests</div>
+        <div class="value" id="kpiTotal">0</div>
+        <div class="hint" id="kpiRps">—</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Errors</div>
+        <div class="value err" id="kpiErrors">0</div>
+        <div class="hint" id="kpiErrRate">0%</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Total tokens</div>
+        <div class="value ok" id="kpiTokens">0</div>
+        <div class="hint" id="kpiTokSplit">in 0 · out 0</div>
+      </div>
+    </div>
+
+    <section>
+      <div class="sec-head">
+        <h2>Latency</h2>
+        <div class="meta" id="latMeta">rolling p50 / p95</div>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-legend">
+          <span class="p50">p50</span>
+          <span class="p95">p95</span>
+          <span class="raw">raw</span>
+        </div>
+        <canvas id="latencyChart" width="1080" height="220"></canvas>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>Tokens</h2>
+        <div class="meta">prompt / completion</div>
+      </div>
+      <div class="tokens-row">
+        <div class="card kpi tok">
+          <div class="label">Prompt tokens</div>
+          <div class="value" id="tokIn">0</div>
+          <div class="hint">input</div>
+        </div>
+        <div class="card kpi tok">
+          <div class="label">Completion tokens</div>
+          <div class="value" id="tokOut">0</div>
+          <div class="hint">output</div>
+        </div>
+        <div class="card kpi tok">
+          <div class="label">Avg tokens / req</div>
+          <div class="value" id="tokAvg">0</div>
+          <div class="hint">total / requests</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>Models</h2>
+        <div class="meta">from recent history</div>
+      </div>
+      <div class="card">
+        <div class="model-list" id="modelList">
+          <div class="empty">No traffic yet</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>Providers</h2>
+        <div class="meta">concurrency</div>
+      </div>
+      <div class="provider-grid" id="providerGrid"></div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>In-flight</h2>
+        <div class="meta" id="inflightCount">0</div>
+      </div>
+      <div class="card table-wrap" id="inflightWrap">
+        <div class="empty">Idle</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>Recent</h2>
+        <div class="meta">last 20</div>
+      </div>
+      <div class="card table-wrap" id="historyWrap">
+        <div class="empty">No completed requests</div>
+      </div>
+    </section>
+
+    <footer>
+      <a href="/api/status">status.json</a>
+      ·
+      <a href="/docs">docs</a>
+      · poll 2s
+    </footer>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const THEME_KEY = "cp-theme";
+
+    function applyTheme(t) {
+      document.documentElement.setAttribute("data-theme", t);
+      localStorage.setItem(THEME_KEY, t);
+      $("themeBtn").textContent = t === "dark" ? "☀" : "◐";
+    }
+    (function initTheme() {
+      const saved = localStorage.getItem(THEME_KEY);
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      applyTheme(saved || (prefersDark ? "dark" : "light"));
+    })();
+    $("themeBtn").addEventListener("click", () => {
+      const cur = document.documentElement.getAttribute("data-theme");
+      applyTheme(cur === "dark" ? "light" : "dark");
+      drawChart(lastLatency);
+    });
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[c]);
+    }
+    function fmtN(n) {
+      n = Number(n) || 0;
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
+      return String(Math.round(n));
+    }
+    function fmtMs(ms) {
+      if (ms == null) return "—";
+      if (ms < 1000) return Math.round(ms) + "ms";
+      return (ms / 1000).toFixed(2) + "s";
+    }
+    function fmtUptime(sec) {
+      sec = Math.floor(sec || 0);
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      if (h) return `${h}h ${m}m`;
+      if (m) return `${m}m ${s}s`;
+      return `${s}s`;
+    }
+    function hashHue(str) {
+      let h = 0;
+      for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+      return h % 360;
+    }
+
+    let lastLatency = { series: [], points: [] };
+    let lastTotal = 0;
+    let lastTs = 0;
+
+    function cssVar(name, fallback) {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    }
+
+    function strokePath(ctx, xs, ys, color, width) {
+      if (!xs.length) return;
+      ctx.beginPath();
+      ctx.moveTo(xs[0], ys[0]);
+      for (let i = 1; i < xs.length; i++) ctx.lineTo(xs[i], ys[i]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+
+    function drawChart(latency) {
+      lastLatency = latency || { series: [], points: [] };
+      const canvas = $("latencyChart");
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = Math.max(canvas.clientWidth || canvas.parentElement.clientWidth || 1000, 320);
+      const cssH = 220;
+      canvas.style.width = "100%";
+      canvas.style.height = cssH + "px";
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      const grid = cssVar("--chart-grid", "rgba(0,0,0,.08)");
+      const c50 = cssVar("--chart-p50", "#0071e3");
+      const c95 = cssVar("--chart-p95", "#ff9f0a");
+      const cRaw = cssVar("--ink-3", "#aeaeb2");
+      const ink3 = cssVar("--ink-3", "#aeaeb2");
+      const bgElev = cssVar("--bg-elev", "#fff");
+
+      const pad = { l: 48, r: 16, t: 12, b: 28 };
+      const w = cssW - pad.l - pad.r;
+      const h = cssH - pad.t - pad.b;
+
+      const series = lastLatency.series || [];
+      if (!series.length) {
+        ctx.fillStyle = ink3;
+        ctx.font = "13px -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("No successful requests yet — send traffic to draw the curve", cssW / 2, cssH / 2);
+        ctx.textAlign = "left";
+        return;
+      }
+
+      const n = series.length;
+      const maxV = Math.max(20, ...series.map((p) => Math.max(Number(p.p50) || 0, Number(p.p95) || 0, Number(p.ms) || 0))) * 1.2;
+      const xAt = (i) => (n === 1 ? pad.l + w / 2 : pad.l + (w * i) / (n - 1));
+      const yAt = (v) => pad.t + h - (Math.max(0, v) / maxV) * h;
+
+      // grid + y labels
+      ctx.strokeStyle = grid;
+      ctx.lineWidth = 1;
+      ctx.fillStyle = ink3;
+      ctx.font = "10px ui-monospace, monospace";
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.t + (h * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(pad.l, y);
+        ctx.lineTo(pad.l + w, y);
+        ctx.stroke();
+        ctx.fillText(Math.round(maxV * (1 - i / 4)) + "ms", 4, y + 3);
+      }
+
+      // x labels (first / mid / last time)
+      const t0 = series[0].t || 0;
+      const t1 = series[n - 1].t || 0;
+      const tf = (t) => new Date(t * 1000).toLocaleTimeString();
+      ctx.fillStyle = ink3;
+      ctx.fillText(tf(t0), pad.l, cssH - 8);
+      if (n > 2) ctx.fillText(tf(series[Math.floor(n / 2)].t), pad.l + w / 2 - 20, cssH - 8);
+      ctx.fillText(tf(t1), Math.max(pad.l, pad.l + w - 52), cssH - 8);
+
+      // raw latency thin line
+      const rawX = [], rawY = [];
+      for (let i = 0; i < n; i++) {
+        rawX.push(xAt(i));
+        rawY.push(yAt(series[i].ms || 0));
+      }
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      strokePath(ctx, rawX, rawY, cRaw, 1.25);
+      ctx.restore();
+
+      // area under p50
+      const xs = [], y50 = [], y95 = [];
+      for (let i = 0; i < n; i++) {
+        xs.push(xAt(i));
+        y50.push(yAt(series[i].p50 || 0));
+        y95.push(yAt(series[i].p95 || 0));
+      }
+      if (xs.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(xs[0], y50[0]);
+        for (let i = 1; i < xs.length; i++) ctx.lineTo(xs[i], y50[i]);
+        ctx.lineTo(xs[xs.length - 1], pad.t + h);
+        ctx.lineTo(xs[0], pad.t + h);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + h);
+        grad.addColorStop(0, "rgba(0,113,227,0.22)");
+        grad.addColorStop(1, "rgba(0,113,227,0.02)");
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+
+      // p95 then p50 — thick visible lines
+      strokePath(ctx, xs, y95, c95, 2.5);
+      strokePath(ctx, xs, y50, c50, 2.75);
+
+      // vertex dots (every point if few, else every few)
+      const step = n <= 30 ? 1 : Math.ceil(n / 20);
+      for (let i = 0; i < n; i += step) {
+        for (const [ys, col] of [[y95, c95], [y50, c50]]) {
+          ctx.beginPath();
+          ctx.arc(xs[i], ys[i], 2.6, 0, Math.PI * 2);
+          ctx.fillStyle = col;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(xs[i], ys[i], 4.2, 0, Math.PI * 2);
+          ctx.strokeStyle = bgElev;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      }
+      // always highlight the latest point
+      const li = n - 1;
+      for (const [ys, col] of [[y95, c95], [y50, c50]]) {
+        ctx.beginPath();
+        ctx.arc(xs[li], ys[li], 4, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(xs[li], ys[li], 6.5, 0, Math.PI * 2);
+        ctx.strokeStyle = bgElev;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    function renderModels(models) {
+      const el = $("modelList");
+      if (!models || !models.length) {
+        el.innerHTML = '<div class="empty">No traffic yet</div>';
+        return;
+      }
+      el.innerHTML = models.slice(0, 12).map((m) => {
+        const hue = hashHue(m.model || "");
+        return `
+          <div class="model-row">
+            <div class="model-name">
+              <span>${esc(m.model)}</span>
+              <span class="chip provider" style="background:hsla(${hue},80%,50%,.14);color:hsl(${hue},70%,${document.documentElement.getAttribute("data-theme")==="dark"?70:35}%)">${esc(m.provider)}</span>
+            </div>
+            <div class="mono" style="font-size:12px;color:var(--ink-2)">${fmtMs(m.p50)} p50 · ${fmtMs(m.p95)} p95</div>
+            <div class="model-stats">
+              <span>req <b>${m.total}</b></span>
+              <span>err <b>${m.errors}</b></span>
+              <span>tok in <b>${fmtN(m.prompt_tokens)}</b></span>
+              <span>tok out <b>${fmtN(m.completion_tokens)}</b></span>
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    function renderProviders(providers) {
+      const el = $("providerGrid");
+      if (!providers || !providers.length) {
+        el.innerHTML = '<div class="empty">No providers</div>';
+        return;
+      }
+      el.innerHTML = providers.map((p) => `
+        <div class="prov">
+          <div class="prov-top">
+            <div class="prov-name">
+              ${esc(p.id)}
+              <span class="chip type">${esc(p.type)}</span>
+            </div>
+            <span class="badge ${p.enabled ? "on" : "off"}">${p.enabled ? "on" : "off"}</span>
+          </div>
+          <div class="prov-url">${esc(p.base_url)}</div>
+          <div class="prov-stats">
+            <div><div class="n live">${p.active}</div><div class="t">active</div></div>
+            <div><div class="n">${p.total}</div><div class="t">total</div></div>
+            <div><div class="n ${p.errors ? "bad" : ""}">${p.errors}</div><div class="t">err</div></div>
+            <div><div class="n">${fmtN((p.prompt_tokens||0)+(p.completion_tokens||0))}</div><div class="t">tokens</div></div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderInFlight(providers) {
+      const rows = [];
+      for (const p of providers || []) {
+        for (const r of p.in_flight || []) rows.push(r);
+      }
+      $("inflightCount").textContent = String(rows.length);
+      const wrap = $("inflightWrap");
+      if (!rows.length) {
+        wrap.innerHTML = '<div class="empty">Idle</div>';
+        return;
+      }
+      wrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Provider</th><th>Model</th>
+              <th>Protocol</th><th>Path</th><th>Elapsed</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r) => `
+              <tr>
+                <td class="mono">${esc(r.id)}</td>
+                <td>${esc(r.provider_id)}</td>
+                <td><span class="chip type">${esc(r.model)}</span></td>
+                <td><span class="pill proto">${esc(r.protocol)}</span></td>
+                <td class="mono">${esc(r.path)}</td>
+                <td class="mono">${fmtMs(r.elapsed_ms)}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    function renderHistory(providers) {
+      const rows = [];
+      for (const p of providers || []) {
+        for (const r of p.recent || []) rows.push(r);
+      }
+      rows.sort((a, b) => (b.finished_at || 0) - (a.finished_at || 0));
+      const top = rows.slice(0, 20);
+      const wrap = $("historyWrap");
+      if (!top.length) {
+        wrap.innerHTML = '<div class="empty">No completed requests</div>';
+        return;
+      }
+      wrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th><th>Model</th><th>Status</th>
+              <th>Latency</th><th>Tokens</th><th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${top.map((r) => {
+              const t = r.finished_at
+                ? new Date(r.finished_at * 1000).toLocaleTimeString()
+                : "";
+              const pill = r.status === "ok"
+                ? '<span class="pill ok">ok</span>'
+                : '<span class="pill err">error</span>';
+              const tokens = (r.prompt_tokens || r.completion_tokens)
+                ? `${fmtN(r.prompt_tokens)}+${fmtN(r.completion_tokens)}`
+                : "—";
+              return `
+                <tr>
+                  <td class="mono">${esc(t)}</td>
+                  <td>
+                    <div>${esc(r.model || r.requested_model)}</div>
+                    <div style="font-size:11px;color:var(--ink-3)">${esc(r.provider_id)} · ${esc(r.protocol)}</div>
+                  </td>
+                  <td>${pill}</td>
+                  <td class="mono">${fmtMs(r.latency_ms)}</td>
+                  <td class="mono">${tokens}</td>
+                  <td class="err-text">${esc(r.error || "")}</td>
+                </tr>`;
+            }).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch("/api/status");
+        if (!res.ok) throw new Error("status " + res.status);
+        const data = await res.json();
+        const t = data.totals || {};
+        const providers = data.providers || [];
+        const now = Date.now();
+
+        $("kpiActive").textContent = t.active ?? 0;
+        $("kpiTotal").textContent = fmtN(t.requests ?? 0);
+        $("kpiErrors").textContent = fmtN(t.errors ?? 0);
+        $("kpiTokens").textContent = fmtN(t.total_tokens ?? 0);
+        $("kpiTokSplit").textContent = `in ${fmtN(t.prompt_tokens||0)} · out ${fmtN(t.completion_tokens||0)}`;
+        $("tokIn").textContent = fmtN(t.prompt_tokens || 0);
+        $("tokOut").textContent = fmtN(t.completion_tokens || 0);
+        const avgTok = (t.requests > 0) ? Math.round((t.total_tokens || 0) / t.requests) : 0;
+        $("tokAvg").textContent = fmtN(avgTok);
+        const errRate = t.requests ? ((t.errors / t.requests) * 100).toFixed(1) + "%" : "0%";
+        $("kpiErrRate").textContent = errRate;
+
+        if (lastTs && now > lastTs) {
+          const dt = (now - lastTs) / 1000;
+          const dReq = (t.requests || 0) - lastTotal;
+          if (dReq >= 0) $("kpiRps").textContent = (dReq / dt).toFixed(2) + " rps window";
+        }
+        lastTotal = t.requests || 0;
+        lastTs = now;
+
+        $("subline").textContent =
+          `v${data.version} · up ${fmtUptime(data.uptime_seconds)} · ${providers.filter(p=>p.enabled).length} providers`;
+
+        const latency = data.latency || { series: [], points: [], window: 10 };
+        const series = latency.series || [];
+        $("latMeta").textContent =
+          `rolling n=${latency.window || 10} · ${series.length} pts`;
+        drawChart(latency);
+        renderModels(data.models || []);
+        renderProviders(providers);
+        renderInFlight(providers);
+        renderHistory(providers);
+      } catch (e) {
+        $("liveLabel").textContent = "offline";
+      }
+    }
+
+    window.addEventListener("resize", () => drawChart(lastLatency));
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>
