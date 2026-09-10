@@ -270,6 +270,19 @@ async def run_checks(port: int) -> None:
             assert t["latency_ms"] >= 0
             assert secret_key not in r.text
 
+            # last_health stored on the provider snapshot
+            r = client.get("/api/providers")
+            by_id = {p["id"]: p for p in r.json()["providers"]}
+            lh = by_id["dummy"]["last_health"]
+            assert lh is not None and lh["ok"] is True
+            assert lh["status_code"] == 200
+            assert "checked_at" in lh
+            assert secret_key not in r.text
+
+            r = client.get("/api/status")
+            snap = next(p for p in r.json()["providers"] if p["id"] == "dummy")
+            assert snap["last_health"]["ok"] is True
+
             # POST test on missing provider
             r = client.post("/api/providers/nope/test")
             assert r.status_code == 404

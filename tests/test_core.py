@@ -13,10 +13,11 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from unify_llm.app import create_app
+from unify_llm.app import create_app, probe_provider
 from unify_llm.config import (
     AppConfig,
     AuthConfig,
+    DefaultsConfig,
     ProviderConfig,
     expand_env,
     load_config,
@@ -28,7 +29,7 @@ from unify_llm.convert import (
     openai_response_to_anthropic_message,
 )
 from unify_llm.errors import ModelNotFoundError
-from unify_llm.monitor import StreamUsageSniffer, extract_usage
+from unify_llm.monitor import Monitor, StreamUsageSniffer, extract_usage
 from unify_llm.registry import Registry
 
 
@@ -437,3 +438,206 @@ def test_create_app_no_gateway_key_open_v1():
         r = client.get("/v1/models")
         assert r.status_code == 200
         assert r.json()["object"] == "list"
+
+
+# ---------------------------------------------------------------------------
+# background provider health
+# ---------------------------------------------------------------------------
+
+
+def test_defaults_health_interval_seconds():
+    assert DefaultsConfig().health_interval_seconds == 60.0
+    assert DefaultsConfig(health_interval_seconds=15).health_interval_seconds == 15.0
+    assert DefaultsConfig(health_interval_seconds=0).health_interval_seconds == 0.0
+
+
+def test_monitor_set_health_snapshot_and_totals():
+    mon = Monitor()
+    mon.register_provider(
+        "p1",
+        type="openai",
+        base_url="http://127.0.0.1:9",
+        enabled=True,
+        models=["m"],
+    )
+    assert mon.provider_totals("p1")["last_health"] is None
+
+    mon.set_health("p1", {"ok": True, "status_code": 200, "latency_ms": 12})
+    totals = mon.provider_totals("p1")
+    assert totals["last_health"]["ok"] is True
+    assert totals["last_health"]["status_code"] == 200
+    assert totals["last_health"]["latency_ms"] == 12
+    assert totals["last_health"]["checked_at"] > 0
+
+    snap = next(p for p in mon.status()["providers"] if p["id"] == "p1")
+    assert snap["last_health"]["ok"] is True
+
+    mon.set_health("p1", {"ok": False, "status_code": 0, "latency_ms": 5, "error": "ConnectError"})
+    snap = next(p for p in mon.status()["providers"] if p["id"] == "p1")
+    assert snap["last_health"]["ok"] is False
+    assert snap["last_health"]["error"] == "ConnectError"
+
+    # unknown provider is a no-op
+    mon.set_health("nope", {"ok": True, "status_code": 200, "latency_ms": 1})
+
+
+def test_probe_provider_openai_and_anthropic_url_shapes():
+    """Probe builds openai /models vs anthropic base — verified via mock transport."""
+    import asyncio
+
+    class _FakeResp:
+        status_code = 200
+
+    class _FakeHttp:
+        def __init__(self):
+            self.calls = []
+
+        async def get(self, url, headers=None, timeout=None):
+            self.calls.append({"url": url, "headers": dict(headers or {})})
+            return _FakeResp()
+
+    async def _run():
+        http = _FakeHttp()
+        openai_p = ProviderConfig(
+            type="openai",
+            base_url="http://example.com/v1/",
+            api_key="sk-openai-secret",
+            models=["m"],
+        )
+        anthro_p = ProviderConfig(
+            type="anthropic",
+            base_url="http://example.com/anthropic/",
+            api_key="sk-ant-secret",
+            models=["c"],
+        )
+        r1 = await probe_provider(http, openai_p)  # type: ignore[arg-type]
+        r2 = await probe_provider(http, anthro_p)  # type: ignore[arg-type]
+        return r1, r2, http.calls
+
+    r1, r2, calls = asyncio.run(_run())
+    assert r1["ok"] is True and r1["status_code"] == 200
+    assert r2["ok"] is True and r2["status_code"] == 200
+    assert calls[0]["url"] == "http://example.com/v1/models"
+    assert calls[0]["headers"]["Authorization"] == "Bearer sk-openai-secret"
+    assert calls[1]["url"] == "http://example.com/anthropic"
+    assert calls[1]["headers"]["x-api-key"] == "sk-ant-secret"
+    assert calls[1]["headers"]["anthropic-version"] == "2023-06-01"
+
+
+def test_api_providers_include_last_health_after_test():
+    secret = "secret-key-do-not-leak"
+    cfg = AppConfig(
+        defaults=DefaultsConfig(health_interval_seconds=0),
+        providers={
+            "p1": ProviderConfig(
+                type="openai",
+                base_url="http://127.0.0.1:9",
+                api_key=secret,
+                enabled=True,
+                models=["m-x"],
+            )
+        },
+    )
+    app = create_app(config=cfg)
+    with TestClient(app) as client:
+        # background tasks disabled by interval=0
+        assert app.state.proxy._health_tasks == []
+
+        r = client.post("/api/providers/p1/test")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["ok"] is False
+        # 0 on transport error; some environments intercept dead ports (e.g. 502)
+        assert body["status_code"] >= 0
+        assert secret not in r.text
+
+        r2 = client.get("/api/providers")
+        assert r2.status_code == 200
+        p = r2.json()["providers"][0]
+        assert p["last_health"]["ok"] is False
+        assert "checked_at" in p["last_health"]
+        assert secret not in r2.text
+
+        r3 = client.get("/api/status")
+        assert r3.status_code == 200
+        snap = next(x for x in r3.json()["providers"] if x["id"] == "p1")
+        assert snap["last_health"]["ok"] is False
+
+
+def test_health_tasks_spawn_on_startup_and_cancel_on_shutdown():
+    cfg = AppConfig(
+        defaults=DefaultsConfig(health_interval_seconds=30),
+        providers={
+            "p1": ProviderConfig(
+                type="openai",
+                base_url="http://127.0.0.1:9",
+                api_key="k",
+                enabled=True,
+                models=["m-x"],
+            ),
+            "off": ProviderConfig(
+                type="openai",
+                base_url="http://127.0.0.1:9",
+                api_key="k",
+                enabled=False,
+                models=["m-off"],
+            ),
+        },
+    )
+    app = create_app(config=cfg)
+    with TestClient(app) as client:
+        state = app.state.proxy
+        assert len(state._health_tasks) == 1
+        assert state._health_tasks[0].get_name() == "unify-health-p1"
+        # client still usable while health tasks run
+        assert client.get("/healthz").status_code == 200
+    # lifespan shutdown cancels tasks
+    assert app.state.proxy._health_tasks == []
+
+
+def test_health_tasks_restart_on_admin_reload_and_patch(tmp_path: Path):
+    import yaml as _yaml
+
+    raw = {
+        "defaults": {"health_interval_seconds": 30},
+        "providers": {
+            "dummy": {
+                "type": "openai",
+                "base_url": "http://127.0.0.1:9",
+                "api_key": "k",
+                "enabled": True,
+                "models": ["m"],
+            },
+            "off": {
+                "type": "openai",
+                "base_url": "http://127.0.0.1:9",
+                "api_key": "k",
+                "enabled": False,
+                "models": ["m-off"],
+            },
+        },
+    }
+    path = tmp_path / "config.yaml"
+    path.write_text(_yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    app = create_app(config_path=path)
+    with TestClient(app) as client:
+        state = app.state.proxy
+        assert len(state._health_tasks) == 1
+
+        # enable second provider → restart spawns both
+        r = client.patch("/api/providers/off", json={"enabled": True})
+        assert r.status_code == 200
+        assert len(state._health_tasks) == 2
+
+        # disable first → only "off" remains
+        r = client.patch("/api/providers/dummy", json={"enabled": False})
+        assert r.status_code == 200
+        assert len(state._health_tasks) == 1
+
+        # reload from disk (dummy re-enabled on disk)
+        disk = _yaml.safe_load(path.read_text(encoding="utf-8"))
+        disk["providers"]["dummy"]["enabled"] = True
+        path.write_text(_yaml.safe_dump(disk, sort_keys=False), encoding="utf-8")
+        r = client.post("/api/admin/reload")
+        assert r.status_code == 200
+        assert len(state._health_tasks) == 2

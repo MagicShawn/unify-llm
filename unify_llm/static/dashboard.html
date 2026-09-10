@@ -807,6 +807,32 @@
     .prov-stats .n.live { color: var(--accent); }
     .prov-stats .n.bad { color: var(--err); }
 
+    /* background health dot on provider cards */
+    .prov-health {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--ink-3);
+      opacity: 0.45;
+      box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+    }
+    .prov-health.ok {
+      background: var(--ok);
+      opacity: 1;
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 25%, transparent);
+    }
+    .prov-health.err {
+      background: var(--err);
+      opacity: 1;
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--err) 25%, transparent);
+    }
+    .prov-health.off {
+      background: var(--ink-3);
+      opacity: 0.4;
+      box-shadow: none;
+    }
+
     /* ── Provider ops controls ── */
     .prov-controls {
       display: flex;
@@ -1507,6 +1533,73 @@
       outline: 2px solid var(--accent);
       outline-offset: -2px;
     }
+
+    /* ── Keyboard help / exports ── */
+    .help-wrap {
+      position: relative;
+      flex-shrink: 0;
+      display: inline-flex;
+    }
+    .shortcuts-pop {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      z-index: 40;
+      min-width: 220px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--line-strong);
+      background: var(--bg-elev);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-2);
+    }
+    .shortcuts-pop[hidden] { display: none !important; }
+    .shortcuts-pop h3 {
+      margin: 0 0 8px;
+      font-family: var(--font);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .shortcuts-pop ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .shortcuts-pop li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--ink-2);
+    }
+    kbd, .kbd {
+      display: inline-block;
+      min-width: 18px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--line-strong);
+      background: var(--bg-soft);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 10.5px;
+      line-height: 1.4;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .export-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body class="is-loading">
@@ -1521,28 +1614,28 @@
         </div>
       </div>
       <nav class="nav" id="mainNav" role="tablist">
-        <button class="nav-item active" data-panel="overview" role="tab" aria-selected="true">
+        <button class="nav-item active" data-panel="overview" role="tab" aria-selected="true" aria-keyshortcuts="1" title="Overview (1)">
           <span class="nav-icon">◉</span>
           <span class="nav-label">
             <span class="nav-en">Overview</span>
             <span class="nav-zh">总览</span>
           </span>
         </button>
-        <button class="nav-item" data-panel="providers" role="tab" aria-selected="false">
+        <button class="nav-item" data-panel="providers" role="tab" aria-selected="false" aria-keyshortcuts="2" title="Providers (2)">
           <span class="nav-icon">⬡</span>
           <span class="nav-label">
             <span class="nav-en">Providers</span>
             <span class="nav-zh">供应商</span>
           </span>
         </button>
-        <button class="nav-item" data-panel="traffic" role="tab" aria-selected="false">
+        <button class="nav-item" data-panel="traffic" role="tab" aria-selected="false" aria-keyshortcuts="3" title="Traffic (3)">
           <span class="nav-icon">⇄</span>
           <span class="nav-label">
             <span class="nav-en">Traffic</span>
             <span class="nav-zh">流量</span>
           </span>
         </button>
-        <button class="nav-item" data-panel="logs" role="tab" aria-selected="false">
+        <button class="nav-item" data-panel="logs" role="tab" aria-selected="false" aria-keyshortcuts="4" title="Logs (4)">
           <span class="nav-icon">☰</span>
           <span class="nav-label">
             <span class="nav-en">Logs</span>
@@ -1592,7 +1685,30 @@
       <span class="sys-item">
         <span class="k" id="sysUpdated">—</span>
       </span>
-      <button class="theme-btn" id="themeBtn" title="Toggle theme / 切换主题" aria-label="Toggle theme">
+      <div class="help-wrap">
+        <button
+          type="button"
+          class="theme-btn"
+          id="shortcutsBtn"
+          title="Keyboard shortcuts (?) / 键盘快捷键"
+          aria-label="Keyboard shortcuts"
+          aria-expanded="false"
+          aria-haspopup="dialog"
+          aria-controls="shortcutsPop"
+        >?</button>
+        <div class="shortcuts-pop" id="shortcutsPop" role="dialog" aria-label="Keyboard shortcuts" hidden>
+          <h3>Shortcuts · 快捷键</h3>
+          <ul>
+            <li><span>Overview / Providers / Traffic / Logs</span><span><kbd>1</kbd>–<kbd>4</kbd></span></li>
+            <li><span>Refresh · 刷新</span><kbd>r</kbd></li>
+            <li><span>Theme · 主题</span><kbd>t</kbd></li>
+            <li><span>Log model filter</span><kbd>/</kbd></li>
+            <li><span>This panel</span><kbd>?</kbd></li>
+            <li><span>Close drawer / toasts</span><kbd>Esc</kbd></li>
+          </ul>
+        </div>
+      </div>
+      <button class="theme-btn" id="themeBtn" title="Toggle theme (t) / 切换主题" aria-label="Toggle theme" aria-keyshortcuts="t">
         <span id="themeIcon">◐</span>
         <span id="themeLabel">light</span>
       </button>
@@ -1608,7 +1724,16 @@
             <h1 class="page-title">Overview</h1>
             <div class="page-sub">Gateway metrics · 网关指标</div>
           </div>
-          <div class="page-meta" id="overviewMeta">—</div>
+          <div class="page-actions">
+            <button
+              type="button"
+              class="btn-ops"
+              id="exportStatusBtn"
+              title="Download /api/status as JSON"
+              aria-label="Export gateway status as JSON"
+            >Export JSON</button>
+            <div class="page-meta" id="overviewMeta">—</div>
+          </div>
         </div>
 
         <div class="kpi-grid">
@@ -1715,6 +1840,8 @@
           <span class="sep">·</span>
           <span>poll 2s</span>
           <span class="sep">·</span>
+          <span>press <kbd class="kbd">?</kbd> for shortcuts</span>
+          <span class="sep">·</span>
           <span>self-contained</span>
         </footer>
       </div>
@@ -1763,7 +1890,16 @@
             <h1 class="page-title">Logs</h1>
             <div class="page-sub">Recent history · 最近记录</div>
           </div>
-          <div class="page-meta" id="logsMeta">last 20</div>
+          <div class="page-actions">
+            <button
+              type="button"
+              class="btn-ops"
+              id="exportCsvBtn"
+              title="Export recent history as CSV"
+              aria-label="Export recent history as CSV"
+            >Export CSV</button>
+            <div class="page-meta" id="logsMeta">last 20</div>
+          </div>
         </div>
         <div class="card logs-toolbar">
           <div class="filter-row">
@@ -1775,6 +1911,7 @@
               spellcheck="false"
               placeholder="Filter model… 模型筛选"
               aria-label="Filter by model"
+              aria-keyshortcuts="/"
             />
             <div class="status-seg" id="logStatusFilter" role="group" aria-label="Filter by status">
               <button type="button" data-status="all" class="active">all</button>
@@ -1840,25 +1977,28 @@
         window.matchMedia("(prefers-color-scheme: dark)").matches;
       applyTheme(saved || (prefersDark ? "dark" : "dark")); // dark-first
     })();
-    $("themeBtn").addEventListener("click", () => {
+    function toggleTheme() {
       const cur = document.documentElement.getAttribute("data-theme");
       applyTheme(cur === "dark" ? "light" : "dark");
       drawChart(lastLatency);
       renderModels(lastModels);
-    });
+    }
+    $("themeBtn").addEventListener("click", toggleTheme);
 
     /* ── Nav ── */
-    document.querySelectorAll(".nav-item").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const target = btn.dataset.panel;
-        document.querySelectorAll(".nav-item").forEach((b) => {
-          b.classList.toggle("active", b === btn);
-          b.setAttribute("aria-selected", b === btn ? "true" : "false");
-        });
-        document.querySelectorAll(".panel").forEach((p) => {
-          p.classList.toggle("active", p.id === "panel-" + target);
-        });
+    function switchPanel(target) {
+      if (!target) return;
+      document.querySelectorAll(".nav-item").forEach((b) => {
+        const on = b.dataset.panel === target;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-selected", on ? "true" : "false");
       });
+      document.querySelectorAll(".panel").forEach((p) => {
+        p.classList.toggle("active", p.id === "panel-" + target);
+      });
+    }
+    document.querySelectorAll(".nav-item").forEach((btn) => {
+      btn.addEventListener("click", () => switchPanel(btn.dataset.panel));
     });
 
     /* ── Utils ── */
@@ -1951,6 +2091,15 @@
         el.classList.add("is-leaving");
         window.setTimeout(() => el.remove(), 200);
       }, 4000);
+    }
+
+    function clearToasts() {
+      const host = $("toastHost");
+      if (!host) return;
+      host.querySelectorAll(".toast").forEach((el) => {
+        el.classList.add("is-leaving");
+        window.setTimeout(() => el.remove(), 200);
+      });
     }
 
     /* ── Provider ops state ── */
@@ -2386,10 +2535,20 @@
         const pending = pendingToggles.get(p.id);
         const shownEnabled = pending !== undefined ? pending : !!p.enabled;
         const isTesting = testingProviders.has(p.id);
+        const h = p.last_health || null;
+        const hCls = !shownEnabled ? "off" : (h == null ? "off" : (h.ok ? "ok" : "err"));
+        const hTitle = !shownEnabled
+          ? "health: disabled"
+          : (h == null
+            ? "health: unknown"
+            : "health: " + (h.ok ? "ok" : "fail") +
+              " · " + (h.status_code ?? "—") +
+              " · " + (h.latency_ms ?? "—") + "ms");
         return `
           <div class="prov" data-provider-card="${esc(p.id)}">
             <div class="prov-head">
               <div class="prov-name">
+                <i class="prov-health ${hCls}" title="${esc(hTitle)}" aria-label="${esc(hTitle)}"></i>
                 <span>${esc(p.id)}</span>
                 <span class="chip type">${esc(p.type)}</span>
               </div>
@@ -2846,11 +3005,6 @@
 
       document.addEventListener("keydown", (e) => {
         if (!drawerOpen) return;
-        if (e.key === "Escape") {
-          e.preventDefault();
-          closeRequestDrawer();
-          return;
-        }
         if (e.key !== "Tab") return;
         const focusables = Array.prototype.filter.call(
           reqDrawerPanel.querySelectorAll(
@@ -2959,6 +3113,183 @@
       }
     })();
 
+    /* ── Downloads (JSON / CSV) ── */
+    let lastStatusRaw = null;
+
+    function downloadBlob(content, mime, filename) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function exportStamp() {
+      const d = new Date();
+      const p = (n) => String(n).padStart(2, "0");
+      return (
+        d.getFullYear() +
+        p(d.getMonth() + 1) +
+        p(d.getDate()) +
+        "-" +
+        p(d.getHours()) +
+        p(d.getMinutes()) +
+        p(d.getSeconds())
+      );
+    }
+
+    async function exportStatusJson() {
+      try {
+        const res = await apiFetch("/api/status");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        lastStatusRaw = data;
+        downloadBlob(
+          JSON.stringify(data, null, 2),
+          "application/json;charset=utf-8",
+          "unify-llm-status-" + exportStamp() + ".json"
+        );
+        showToast("ok", "Status exported", "JSON · /api/status");
+      } catch (e) {
+        showToast("err", "Export failed", e.message || String(e));
+      }
+    }
+
+    function csvCell(v) {
+      if (v == null) return "";
+      const s = String(v);
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    function exportHistoryCsv() {
+      try {
+        const rows = applyLogFilters(lastHistoryRows || []);
+        if (!rows.length) {
+          showToast("err", "Nothing to export", "no recent history rows");
+          return;
+        }
+        const headers = [
+          "id", "finished_at", "status", "provider_id", "model",
+          "requested_model", "protocol", "path", "latency_ms",
+          "prompt_tokens", "completion_tokens", "http_status",
+          "error", "client",
+        ];
+        const lines = [headers.join(",")];
+        for (const r of rows) {
+          lines.push(headers.map((h) => csvCell(r[h])).join(","));
+        }
+        downloadBlob(
+          "\uFEFF" + lines.join("\r\n"),
+          "text/csv;charset=utf-8",
+          "unify-llm-history-" + exportStamp() + ".csv"
+        );
+        showToast("ok", "History exported", rows.length + " rows · CSV");
+      } catch (e) {
+        showToast("err", "Export failed", e.message || String(e));
+      }
+    }
+
+    const exportStatusBtn = $("exportStatusBtn");
+    if (exportStatusBtn) exportStatusBtn.addEventListener("click", exportStatusJson);
+    const exportCsvBtn = $("exportCsvBtn");
+    if (exportCsvBtn) exportCsvBtn.addEventListener("click", exportHistoryCsv);
+
+    /* ── Shortcuts popover + keyboard ── */
+    let shortcutsPopOpen = false;
+    const shortcutsBtn = $("shortcutsBtn");
+    const shortcutsPop = $("shortcutsPop");
+
+    function openShortcutsPop() {
+      if (!shortcutsPop || !shortcutsBtn) return;
+      shortcutsPop.hidden = false;
+      shortcutsPopOpen = true;
+      shortcutsBtn.setAttribute("aria-expanded", "true");
+    }
+
+    function closeShortcutsPop() {
+      if (!shortcutsPop || !shortcutsBtn) return;
+      shortcutsPop.hidden = true;
+      shortcutsPopOpen = false;
+      shortcutsBtn.setAttribute("aria-expanded", "false");
+    }
+
+    function toggleShortcutsPop() {
+      if (shortcutsPopOpen) closeShortcutsPop();
+      else openShortcutsPop();
+    }
+
+    if (shortcutsBtn) {
+      shortcutsBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleShortcutsPop();
+      });
+    }
+
+    document.addEventListener("click", (e) => {
+      if (!shortcutsPopOpen) return;
+      if (shortcutsPop && shortcutsPop.contains(e.target)) return;
+      if (shortcutsBtn && shortcutsBtn.contains(e.target)) return;
+      closeShortcutsPop();
+    });
+
+    function focusLogFilter() {
+      switchPanel("logs");
+      const input = $("logModelFilter");
+      if (input) {
+        input.focus();
+        try { input.select(); } catch (_) {}
+      }
+    }
+
+    function isTypingTarget(el) {
+      if (!el || !el.tagName) return false;
+      const tag = String(el.tagName).toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (el.isContentEditable) return true;
+      return false;
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (drawerOpen) {
+          e.preventDefault();
+          closeRequestDrawer();
+          return;
+        }
+        if (shortcutsPopOpen) {
+          e.preventDefault();
+          closeShortcutsPop();
+          return;
+        }
+        const host = $("toastHost");
+        if (host && host.querySelector(".toast")) {
+          e.preventDefault();
+          clearToasts();
+        }
+        return;
+      }
+
+      if (drawerOpen || shortcutsPopOpen) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+
+      const key = e.key;
+      if (key === "1") { e.preventDefault(); switchPanel("overview"); }
+      else if (key === "2") { e.preventDefault(); switchPanel("providers"); }
+      else if (key === "3") { e.preventDefault(); switchPanel("traffic"); }
+      else if (key === "4") { e.preventDefault(); switchPanel("logs"); }
+      else if (key === "r" || key === "R") { e.preventDefault(); refresh(); }
+      else if (key === "t" || key === "T") { e.preventDefault(); toggleTheme(); }
+      else if (key === "/") { e.preventDefault(); focusLogFilter(); }
+      else if (key === "?") { e.preventDefault(); toggleShortcutsPop(); }
+    });
+
     /* ── Health / system bar ── */
     function setHealth(ok, offline) {
       const pill = $("healthPill");
@@ -3019,6 +3350,7 @@
         const res = await apiFetch("/api/status");
         if (!res.ok) throw new Error("status " + res.status);
         const data = await res.json();
+        lastStatusRaw = data;
         markReady();
         const t = data.totals || {};
         const providers = data.providers || [];
