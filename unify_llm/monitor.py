@@ -41,29 +41,22 @@ class StreamUsageSniffer:
             self._buf += chunk.decode("utf-8", errors="replace")
         except Exception:  # noqa: BLE001
             return
-        # keep buffer bounded
         if len(self._buf) > 512_000:
             self._buf = self._buf[-64_000:]
 
+        # Process only complete lines; keep the incomplete tail for the next chunk.
         while True:
-            # SSE events separated by blank line; also handle line-wise data:
-            idx = self._buf.find("\n\n")
-            if idx < 0:
-                # try line-based for data: ...\n
+            nl = self._buf.find("\n")
+            if nl < 0:
                 break
-            block, self._buf = self._buf[:idx], self._buf[idx + 2 :]
-            self._handle_block(block)
-
-        # also drain any complete data lines left without trailing blank yet
-        lines = self._buf.split("\n")
-        keep = []
-        for line in lines:
+            line, self._buf = self._buf[:nl], self._buf[nl + 1 :]
+            line = line.rstrip("\r")
+            if not line:
+                continue
             if line.startswith("data:"):
                 self._handle_data_line(line[5:].strip())
-            else:
-                keep.append(line)
-        # only keep trailing incomplete structure
-        self._buf = "\n".join(keep[-5:])
+            elif line.startswith("event:"):
+                continue
 
     def _handle_block(self, block: str) -> None:
         for line in block.splitlines():

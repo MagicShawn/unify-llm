@@ -211,6 +211,17 @@ def test_stream_usage_sniffer_split_chunks():
     assert sniffer.usage() == (1, 2)
 
 
+def test_stream_usage_sniffer_partial_json_rebuffer():
+    """JSON payload split mid-token must be re-buffered, not dropped."""
+    sniffer = StreamUsageSniffer("openai")
+    full = 'data: {"id":"c1","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":9}}\n\n'
+    mid = len(full) // 2
+    sniffer.feed(full[:mid].encode("utf-8"))
+    assert sniffer.usage() == (0, 0)
+    sniffer.feed(full[mid:].encode("utf-8"))
+    assert sniffer.usage() == (7, 9)
+
+
 # ---------------------------------------------------------------------------
 # registry
 # ---------------------------------------------------------------------------
