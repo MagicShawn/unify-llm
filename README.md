@@ -13,6 +13,9 @@ Local multi-provider LLM gateway. One fixed port routes OpenAI-compatible and An
 - Stream SSE end to end; recover token usage from stream chunks when available.
 - Configure timeouts, retries, and an optional fallback model.
 - Watch live concurrency, in-flight requests, latency (rolling p50/p95), and token totals on the dashboard.
+- Optional LAN gateway key (`UNIFY_GATEWAY_KEY`) for multi-machine access on a private network.
+- Provider admin API: list, enable/disable, upstream test, config hot-reload.
+- Dashboard ops: toggle providers, test upstream, reload config, filter logs.
 
 ## Requirements
 
