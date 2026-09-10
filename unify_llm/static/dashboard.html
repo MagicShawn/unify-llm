@@ -702,6 +702,160 @@
     .prov-stats .n.live { color: var(--accent); }
     .prov-stats .n.bad { color: var(--err); }
 
+    /* ── Provider ops controls ── */
+    .prov-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 32px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+    .switch .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .switch .slider::before {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      left: 2px;
+      top: 2px;
+      background: var(--ink-3);
+      border-radius: 50%;
+      transition: transform .15s, background .15s;
+    }
+    .switch input:checked + .slider {
+      background: var(--accent-soft);
+      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+    .switch input:checked + .slider::before {
+      transform: translateX(14px);
+      background: var(--accent);
+    }
+    .switch input:disabled + .slider {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-ops {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink-2);
+      height: 22px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: background .12s, color .12s, border-color .12s;
+      white-space: nowrap;
+    }
+    .btn-ops:hover:not(:disabled) {
+      background: var(--bg-hover);
+      color: var(--ink);
+      border-color: var(--line-strong);
+    }
+    .btn-ops:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .btn-ops.primary {
+      height: 26px;
+      border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .btn-ops.primary:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--accent) 20%, transparent);
+    }
+    .page-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .prov-test-result {
+      margin-top: 10px;
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      font-family: var(--mono);
+      font-size: 10.5px;
+      line-height: 1.35;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink-2);
+      word-break: break-word;
+    }
+    .prov-test-result.ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+      border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+    }
+    .prov-test-result.err {
+      background: var(--err-soft);
+      color: var(--err);
+      border-color: color-mix(in srgb, var(--err) 30%, transparent);
+    }
+    .prov-test-result.pending {
+      color: var(--ink-3);
+    }
+
+    /* ── Toast ── */
+    .toast-host {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      background: var(--bg-elev);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      min-width: 220px;
+      max-width: 360px;
+      animation: toastIn .18s ease;
+    }
+    .toast.ok { border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .toast.err { border-color: color-mix(in srgb, var(--err) 40%, transparent); }
+    .toast .t-title { font-weight: 600; margin-bottom: 2px; }
+    .toast.ok .t-title { color: var(--ok); }
+    .toast.err .t-title { color: var(--err); }
+    .toast .t-body { color: var(--ink-2); word-break: break-word; }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     /* ── Tables ── */
     .table-wrap { overflow-x: auto; }
     table {
@@ -770,6 +924,162 @@
       font-family: var(--mono);
       word-break: break-all;
     }
+
+    /* ── Logs toolbar / filters ── */
+    .logs-toolbar {
+      margin-bottom: var(--gap);
+      padding: 10px 12px;
+    }
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    .filter-input {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink);
+      font: inherit;
+      font-family: var(--mono);
+      font-size: 12px;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
+      min-width: 180px;
+      flex: 1;
+      max-width: 320px;
+      outline: none;
+      transition: border-color .12s, background .12s;
+    }
+    .filter-input::placeholder { color: var(--ink-3); }
+    .filter-input:focus {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+      background: var(--bg-elev);
+    }
+    .status-seg {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: var(--bg-soft);
+      flex-shrink: 0;
+    }
+    .status-seg button {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--ink-3);
+      font: inherit;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 0 12px;
+      height: 30px;
+      cursor: pointer;
+      border-right: 1px solid var(--line);
+      transition: background .12s, color .12s;
+      text-transform: lowercase;
+    }
+    .status-seg button:last-child { border-right: none; }
+    .status-seg button:hover {
+      color: var(--ink);
+      background: var(--bg-hover);
+    }
+    .status-seg button.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .status-seg button.active[data-status="ok"] {
+      background: var(--ok-soft);
+      color: var(--ok);
+    }
+    .status-seg button.active[data-status="error"] {
+      background: var(--err-soft);
+      color: var(--err);
+    }
+    .filter-meta {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Request id copy ── */
+    .id-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 160px;
+    }
+    .id-text {
+      color: var(--ink-2);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .copy-id {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink-3);
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1;
+      display: inline-grid;
+      place-items: center;
+      flex-shrink: 0;
+      padding: 0;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    .copy-id:hover {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+      background: var(--accent-soft);
+    }
+    .copy-id.copied {
+      color: var(--ok);
+      background: var(--ok-soft);
+      border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+    }
+
+    /* ── Path chip / sparkline ── */
+    .chip.path {
+      background: var(--bg-soft);
+      color: var(--ink-3);
+      border: 1px solid var(--line);
+      font-weight: 500;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chip-path-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      align-items: center;
+      margin-top: 3px;
+    }
+    .lat-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+    .spark {
+      display: inline-block;
+      color: var(--accent);
+      opacity: .85;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+    .spark.errish { color: var(--err); }
 
     footer {
       margin-top: 28px;
@@ -1048,7 +1358,10 @@
             <h1 class="page-title">Providers</h1>
             <div class="page-sub">Concurrency &amp; health · 并发与状态</div>
           </div>
-          <div class="page-meta" id="providersMeta">—</div>
+          <div class="page-actions">
+            <button class="btn-ops primary" id="reloadConfigBtn" title="Reload configuration from disk">Reload config</button>
+            <div class="page-meta" id="providersMeta">—</div>
+          </div>
         </div>
         <div class="provider-grid" id="providerGrid"></div>
       </div>
@@ -1074,7 +1387,26 @@
             <h1 class="page-title">Logs</h1>
             <div class="page-sub">Recent history · 最近记录</div>
           </div>
-          <div class="page-meta">last 20</div>
+          <div class="page-meta" id="logsMeta">last 20</div>
+        </div>
+        <div class="card logs-toolbar">
+          <div class="filter-row">
+            <input
+              id="logModelFilter"
+              class="filter-input"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Filter model… 模型筛选"
+              aria-label="Filter by model"
+            />
+            <div class="status-seg" id="logStatusFilter" role="group" aria-label="Filter by status">
+              <button type="button" data-status="all" class="active">all</button>
+              <button type="button" data-status="ok">ok</button>
+              <button type="button" data-status="error">error</button>
+            </div>
+            <span class="filter-meta" id="logFilterMeta">—</span>
+          </div>
         </div>
         <div class="card tight table-wrap" id="historyWrap">
           <div class="empty">No completed requests · 暂无完成请求</div>
@@ -1083,6 +1415,8 @@
 
     </main>
   </div>
+
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="false"></div>
 
   <script>
     "use strict";
@@ -1158,6 +1492,65 @@
       const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
       return v || fallback;
     }
+
+    /* ── Gateway auth (optional Bearer) ── */
+    const GW_KEY_STORAGE = "unify-gateway-key";
+    let gatewayKey = localStorage.getItem(GW_KEY_STORAGE) || "";
+    let authPrompted = false;
+
+    function authHeaders() {
+      return gatewayKey ? { Authorization: "Bearer " + gatewayKey } : {};
+    }
+
+    function promptGatewayKey() {
+      if (gatewayKey) return gatewayKey;
+      if (authPrompted) return gatewayKey;
+      authPrompted = true;
+      const k = window.prompt("Gateway API key required / 需要网关密钥\nStored locally as unify-gateway-key", "");
+      if (k && k.trim()) {
+        gatewayKey = k.trim();
+        try { localStorage.setItem(GW_KEY_STORAGE, gatewayKey); } catch (_) {}
+      }
+      return gatewayKey;
+    }
+
+    async function apiFetch(url, opts = {}) {
+      const init = { ...opts, headers: { ...(opts.headers || {}), ...authHeaders() } };
+      let res = await fetch(url, init);
+      if (res.status === 401 && url.startsWith("/api/")) {
+        promptGatewayKey();
+        if (gatewayKey) {
+          const retry = { ...opts, headers: { ...(opts.headers || {}), ...authHeaders() } };
+          res = await fetch(url, retry);
+        }
+      }
+      return res;
+    }
+
+    function setAuthNote(text) {
+      $("sysAuthWrap").hidden = false;
+      $("sysAuth").textContent = text;
+    }
+
+    /* ── Toast ── */
+    function showToast(kind, title, body) {
+      const host = $("toastHost");
+      if (!host) return;
+      const el = document.createElement("div");
+      el.className = "toast " + (kind === "ok" ? "ok" : "err");
+      el.innerHTML =
+        '<div class="t-title">' + esc(title) + "</div>" +
+        (body ? '<div class="t-body">' + esc(body) + "</div>" : "");
+      host.appendChild(el);
+      window.setTimeout(() => {
+        el.remove();
+      }, 4200);
+    }
+
+    /* ── Provider ops state ── */
+    const testResults = {};      // id -> {cls, text}
+    const testingProviders = new Set();
+    const pendingToggles = new Map(); // id -> desired enabled
 
     /* ── Provider color palette ── */
     const PROV_COLORS = [
@@ -1385,15 +1778,25 @@
       $("sideProvCount").textContent = enabled + "/" + providers.length;
       $("providersMeta").textContent = enabled + " on · " + providers.length + " total";
       el.innerHTML = providers.map((p) => {
-        const pc = provColor(p.id);
+        const pending = pendingToggles.get(p.id);
+        const shownEnabled = pending !== undefined ? pending : !!p.enabled;
+        const isTesting = testingProviders.has(p.id);
         return `
-          <div class="prov">
+          <div class="prov" data-provider-card="${esc(p.id)}">
             <div class="prov-head">
               <div class="prov-name">
                 <span>${esc(p.id)}</span>
                 <span class="chip type">${esc(p.type)}</span>
               </div>
-              <span class="badge ${p.enabled ? "on" : "off"}">${p.enabled ? "on" : "off"}</span>
+              <div class="prov-controls">
+                <label class="switch" title="${shownEnabled ? "Disable" : "Enable"} ${esc(p.id)}">
+                  <input type="checkbox" class="prov-toggle" data-provider="${esc(p.id)}"
+                    ${shownEnabled ? "checked" : ""} aria-label="Enable ${esc(p.id)}" />
+                  <span class="slider"></span>
+                </label>
+                <button type="button" class="btn-ops btn-test" data-provider="${esc(p.id)}"
+                  ${isTesting ? "disabled" : ""} title="Probe upstream">${isTesting ? "…" : "Test"}</button>
+              </div>
             </div>
             <div class="prov-body">
               <div class="prov-url">${esc(p.base_url)}</div>
@@ -1403,10 +1806,144 @@
                 <div class="cell"><div class="n ${p.errors ? "bad" : ""}">${p.errors ?? 0}</div><div class="t">err</div></div>
                 <div class="cell"><div class="n">${fmtN((p.prompt_tokens || 0) + (p.completion_tokens || 0))}</div><div class="t">tokens</div></div>
               </div>
+              <div class="prov-test-result" data-test-result="${esc(p.id)}" hidden></div>
             </div>
           </div>`;
       }).join("");
+
+      // restore inline test results wiped by poll re-render
+      for (const [id, r] of Object.entries(testResults)) {
+        const slot = el.querySelector('[data-test-result="' + CSS.escape(id) + '"]');
+        if (slot) {
+          slot.hidden = false;
+          slot.className = "prov-test-result " + r.cls;
+          slot.textContent = r.text;
+        }
+      }
     }
+
+    async function toggleProvider(id, enabled, inputEl) {
+      pendingToggles.set(id, enabled);
+      try {
+        const res = await apiFetch("/api/providers/" + encodeURIComponent(id), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: !!enabled }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+          pendingToggles.delete(id);
+          if (inputEl) inputEl.checked = !enabled;
+          const msg = (data.error && data.error.message) || ("HTTP " + res.status);
+          showToast("err", "Toggle failed · " + id, msg);
+          return;
+        }
+        pendingToggles.delete(id);
+        const warn = data.warning ? " · " + data.warning : "";
+        showToast("ok", id + (enabled ? " enabled" : " disabled"), (data.written ? "saved to config" : "in-memory") + warn);
+        refresh();
+      } catch (e) {
+        pendingToggles.delete(id);
+        if (inputEl) inputEl.checked = !enabled;
+        showToast("err", "Toggle failed · " + id, e.message || String(e));
+      }
+    }
+
+    async function testProvider(id) {
+      if (testingProviders.has(id)) return;
+      testingProviders.add(id);
+      const card = $("providerGrid").querySelector('[data-provider-card="' + CSS.escape(id) + '"]');
+      const btn = card && card.querySelector(".btn-test");
+      const slot = card && card.querySelector(".prov-test-result");
+      if (btn) { btn.disabled = true; btn.textContent = "…"; }
+      if (slot) {
+        slot.hidden = false;
+        slot.className = "prov-test-result pending";
+        slot.textContent = "testing…";
+        testResults[id] = { cls: "pending", text: "testing…" };
+      }
+      try {
+        const res = await apiFetch("/api/providers/" + encodeURIComponent(id) + "/test", {
+          method: "POST",
+        });
+        const data = await res.json().catch(() => ({}));
+        const ok = !!(data.ok);
+        const code = data.status_code != null ? data.status_code : (res.status || 0);
+        const lat = fmtMs(data.latency_ms);
+        const errHint = data.error ? " · " + data.error : "";
+        const text = ok
+          ? "OK · HTTP " + code + " · " + lat
+          : "FAIL · HTTP " + code + " · " + lat + errHint;
+        const cls = ok ? "ok" : "err";
+        testResults[id] = { cls, text };
+        if (slot) {
+          slot.hidden = false;
+          slot.className = "prov-test-result " + cls;
+          slot.textContent = text;
+        }
+        showToast(ok ? "ok" : "err", id + (ok ? " test OK" : " test failed"), text);
+      } catch (e) {
+        const text = "FAIL · " + (e.message || String(e));
+        testResults[id] = { cls: "err", text };
+        if (slot) {
+          slot.hidden = false;
+          slot.className = "prov-test-result err";
+          slot.textContent = text;
+        }
+        showToast("err", id + " test failed", text);
+      } finally {
+        testingProviders.delete(id);
+        const card2 = $("providerGrid").querySelector('[data-provider-card="' + CSS.escape(id) + '"]');
+        const btn2 = card2 && card2.querySelector(".btn-test");
+        if (btn2) { btn2.disabled = false; btn2.textContent = "Test"; }
+      }
+    }
+
+    async function reloadConfig(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "…"; }
+      try {
+        const res = await apiFetch("/api/admin/reload", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+          const msg = (data.error && data.error.message) || ("HTTP " + res.status);
+          showToast("err", "Reload failed", msg);
+        } else {
+          showToast(
+            "ok",
+            "Config reloaded",
+            (data.providers != null ? data.providers : "?") + " providers · " +
+              (data.enabled != null ? data.enabled : "?") + " enabled"
+          );
+          refresh();
+        }
+      } catch (e) {
+        showToast("err", "Reload failed", e.message || String(e));
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = "Reload config"; }
+      }
+    }
+
+    /* Provider ops event delegation (survives poll re-render) */
+    (function bindProviderOps() {
+      const grid = $("providerGrid");
+      if (!grid) return;
+      grid.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t && t.classList && t.classList.contains("prov-toggle")) {
+          toggleProvider(t.dataset.provider, t.checked, t);
+        }
+      });
+      grid.addEventListener("click", (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest(".btn-test") : null;
+        if (btn && grid.contains(btn)) {
+          testProvider(btn.dataset.provider);
+        }
+      });
+      const reloadBtn = $("reloadConfigBtn");
+      if (reloadBtn) {
+        reloadBtn.addEventListener("click", () => reloadConfig(reloadBtn));
+      }
+    })();
 
     /* ── In-flight ── */
     function renderInFlight(providers) {
@@ -1425,7 +1962,7 @@
           <thead>
             <tr>
               <th>ID</th><th>Provider</th><th>Model</th>
-              <th>Protocol</th><th>Path</th><th>Elapsed</th>
+              <th>Endpoint</th><th>Elapsed</th>
             </tr>
           </thead>
           <tbody>
@@ -1433,11 +1970,15 @@
               const pc = provColor(r.provider_id);
               return `
               <tr>
-                <td class="mono">${esc(r.id)}</td>
+                <td>${idCellHtml(r.id)}</td>
                 <td><span class="chip provider" style="background:${pc.bg};color:${pc.fg}">${esc(r.provider_id)}</span></td>
                 <td><span class="chip model">${esc(r.model)}</span></td>
-                <td><span class="pill proto">${esc(r.protocol)}</span></td>
-                <td class="mono">${esc(r.path)}</td>
+                <td>
+                  <div class="chip-path-row">
+                    <span class="pill proto">${esc(r.protocol)}</span>
+                    <span class="chip path" title="${esc(r.path)}">${esc(r.path)}</span>
+                  </div>
+                </td>
                 <td class="mono">${fmtMs(r.elapsed_ms)}</td>
               </tr>`;
             }).join("")}
@@ -1446,23 +1987,69 @@
     }
 
     /* ── History ── */
+    let lastHistoryRows = [];
+    let logModelQ = "";
+    let logStatus = "all";
+
+    function applyLogFilters(rows) {
+      const q = (logModelQ || "").trim().toLowerCase();
+      return rows.filter((r) => {
+        if (logStatus === "ok" && r.status !== "ok") return false;
+        if (logStatus === "error" && r.status === "ok") return false;
+        if (!q) return true;
+        const hay = [
+          r.model, r.requested_model, r.provider_id, r.path, r.id, r.protocol
+        ].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    function modelLatencySeries(rows, modelKey) {
+      const vals = [];
+      for (const r of rows) {
+        const k = r.model || r.requested_model || "";
+        if (k !== modelKey) continue;
+        if (typeof r.latency_ms === "number") vals.push(r.latency_ms);
+      }
+      return vals.slice(-12);
+    }
+
     function renderHistory(providers) {
       const rows = [];
       for (const p of providers || []) {
         for (const r of p.recent || []) rows.push(r);
       }
       rows.sort((a, b) => (b.finished_at || 0) - (a.finished_at || 0));
-      const top = rows.slice(0, 20);
+      lastHistoryRows = rows;
+      paintHistory();
+    }
+
+    function paintHistory() {
+      const all = lastHistoryRows;
+      const filtered = applyLogFilters(all);
+      const top = filtered.slice(0, 40);
       const wrap = $("historyWrap");
+      const meta = $("logFilterMeta");
+      const logsMeta = $("logsMeta");
+      if (logsMeta) logsMeta.textContent = "last " + Math.min(all.length, 40);
+      if (meta) {
+        meta.textContent = filtered.length === all.length
+          ? filtered.length + " rows"
+          : filtered.length + " / " + all.length + " rows";
+      }
       if (!top.length) {
-        wrap.innerHTML = '<div class="empty">No completed requests · 暂无完成请求</div>';
+        wrap.innerHTML = all.length
+          ? '<div class="empty">No matches · 无匹配记录</div>'
+          : '<div class="empty">No completed requests · 暂无完成请求</div>';
         return;
       }
+      /* series built from unfiltered (time-sorted) history for stable sparklines */
+      const chrono = all.slice().sort((a, b) => (a.finished_at || 0) - (b.finished_at || 0));
       wrap.innerHTML = `
         <table>
           <thead>
             <tr>
-              <th>Time</th><th>Model</th><th>Status</th>
+              <th>Time</th><th>Request</th><th>Model</th><th>Status</th>
               <th>Latency</th><th>Tokens</th><th>Error</th>
             </tr>
           </thead>
@@ -1478,18 +2065,28 @@
                 ? fmtN(r.prompt_tokens) + "+" + fmtN(r.completion_tokens)
                 : "—";
               const pc = provColor(r.provider_id);
+              const modelKey = r.model || r.requested_model || "";
+              const series = modelLatencySeries(chrono, modelKey);
+              const spark = sparklineSVG(series, r.status === "ok" ? "" : "errish");
               return `
                 <tr>
                   <td class="mono">${esc(t)}</td>
+                  <td>${idCellHtml(r.id)}</td>
                   <td>
-                    <div class="mono" style="font-size:12px;color:var(--ink)">${esc(r.model || r.requested_model)}</div>
-                    <div style="margin-top:3px;display:flex;gap:6px;align-items:center">
+                    <div class="mono" style="font-size:12px;color:var(--ink)">${esc(modelKey)}</div>
+                    <div class="chip-path-row">
                       <span class="chip provider" style="background:${pc.bg};color:${pc.fg}">${esc(r.provider_id)}</span>
-                      <span class="chip type">${esc(r.protocol)}</span>
+                      <span class="pill proto">${esc(r.protocol)}</span>
+                      <span class="chip path" title="${esc(r.path)}">${esc(r.path)}</span>
                     </div>
                   </td>
                   <td>${pill}</td>
-                  <td class="mono">${fmtMs(r.latency_ms)}</td>
+                  <td>
+                    <span class="lat-cell">
+                      <span class="mono">${fmtMs(r.latency_ms)}</span>
+                      ${spark}
+                    </span>
+                  </td>
                   <td class="mono">${tokens}</td>
                   <td class="err-text">${esc(r.error || "")}</td>
                 </tr>`;
@@ -1497,6 +2094,95 @@
           </tbody>
         </table>`;
     }
+
+    function sparklineSVG(values, extraCls) {
+      if (!values || values.length < 3) return "";
+      const w = 52, h = 16;
+      let min = Infinity, max = -Infinity;
+      for (const v of values) {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      const span = (max - min) || 1;
+      const pts = values.map((v, i) => {
+        const x = 1 + (i / (values.length - 1)) * (w - 2);
+        const y = h - 2 - ((v - min) / span) * (h - 4);
+        return x.toFixed(1) + "," + y.toFixed(1);
+      }).join(" ");
+      return `<svg class="spark${extraCls ? " " + extraCls : ""}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true" focusable="false"><polyline fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" points="${pts}"/></svg>`;
+    }
+
+    function idCellHtml(id) {
+      const raw = String(id ?? "");
+      const short = raw.length > 10 ? raw.slice(0, 8) + "…" : raw;
+      return `
+        <span class="id-cell">
+          <span class="mono id-text" title="${esc(raw)}">${esc(short)}</span>
+          <button type="button" class="copy-id" data-copy="${esc(raw)}" title="Copy request id" aria-label="Copy request id">⧉</button>
+        </span>`;
+    }
+
+    async function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (_) { /* fall through */ }
+      }
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    document.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".copy-id");
+      if (!btn) return;
+      const text = btn.getAttribute("data-copy") || "";
+      if (!text) return;
+      const ok = await copyText(text);
+      if (ok) {
+        btn.classList.add("copied");
+        const prev = btn.textContent;
+        btn.textContent = "✓";
+        setTimeout(() => {
+          btn.classList.remove("copied");
+          btn.textContent = prev;
+        }, 900);
+      }
+    });
+
+    (function initLogFilters() {
+      const input = $("logModelFilter");
+      if (input) {
+        input.addEventListener("input", () => {
+          logModelQ = input.value || "";
+          paintHistory();
+        });
+      }
+      const seg = $("logStatusFilter");
+      if (seg) {
+        seg.addEventListener("click", (e) => {
+          const btn = e.target.closest("button[data-status]");
+          if (!btn) return;
+          logStatus = btn.getAttribute("data-status") || "all";
+          seg.querySelectorAll("button[data-status]").forEach((b) => {
+            b.classList.toggle("active", b === btn);
+          });
+          paintHistory();
+        });
+      }
+    })();
 
     /* ── Health / system bar ── */
     function setHealth(ok, offline) {
@@ -1518,12 +2204,27 @@
     /* ── Optional /api/info ── */
     async function fetchInfo() {
       try {
-        const res = await fetch("/api/info");
+        const res = await apiFetch("/api/info");
+        if (res.status === 401) {
+          setAuthNote("auth: key required");
+          promptGatewayKey();
+          if (gatewayKey) {
+            const res2 = await apiFetch("/api/info");
+            if (res2.ok) {
+              setAuthNote("auth: protected");
+              return;
+            }
+          }
+          return;
+        }
         if (!res.ok) return;
         const info = await res.json();
-        if (info && info.auth) {
-          $("sysAuthWrap").hidden = false;
-          $("sysAuth").textContent = String(info.auth).slice(0, 80);
+        if (info && info.auth_required) {
+          setAuthNote("auth: protected");
+          if (!gatewayKey) promptGatewayKey();
+        } else if (info && info.auth) {
+          // legacy optional note (never echo secrets)
+          setAuthNote(String(info.auth).slice(0, 80));
         }
       } catch (_) {
         /* optional endpoint */
@@ -1533,7 +2234,7 @@
     /* ── Refresh ── */
     async function refresh() {
       try {
-        const res = await fetch("/api/status");
+        const res = await apiFetch("/api/status");
         if (!res.ok) throw new Error("status " + res.status);
         const data = await res.json();
         const t = data.totals || {};
