@@ -234,14 +234,22 @@ class Monitor:
         enabled: bool,
         models: list[str],
     ) -> None:
+        """Register or refresh provider metadata. Preserves counters if id already exists."""
         with self._lock:
-            self._providers[provider_id] = ProviderStats(
-                id=provider_id,
-                type=type,
-                base_url=base_url,
-                enabled=enabled,
-                models=models,
-            )
+            stats = self._providers.get(provider_id)
+            if stats is None:
+                self._providers[provider_id] = ProviderStats(
+                    id=provider_id,
+                    type=type,
+                    base_url=base_url,
+                    enabled=enabled,
+                    models=models,
+                )
+                return
+            stats.type = type
+            stats.base_url = base_url
+            stats.enabled = enabled
+            stats.models = models
 
     def begin(
         self,
@@ -432,6 +440,22 @@ class Monitor:
                 "latency": self._latency_series_locked(),
                 "models": models,
                 "providers": [p.snapshot() for p in self._providers.values()],
+            }
+
+    def provider_totals(self, provider_id: str) -> dict[str, Any] | None:
+        """Counter snapshot for one provider, or None if unknown."""
+        with self._lock:
+            stats = self._providers.get(provider_id)
+            if stats is None:
+                return None
+            return {
+                "active": stats.active,
+                "total": stats.total,
+                "errors": stats.errors,
+                "prompt_tokens": stats.prompt_tokens,
+                "completion_tokens": stats.completion_tokens,
+                "last_error": stats.last_error,
+                "last_error_at": stats.last_error_at,
             }
 
     def history(self, limit: int = 50) -> dict[str, Any]:

@@ -1,551 +1,1129 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Unify LLM</title>
+  <title>Unify LLM · Gateway</title>
   <style>
     :root {
-      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-        "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
-      --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
-      --radius: 16px;
-      --radius-sm: 10px;
-      --gap: 16px;
-      --max: 1120px;
+      --font: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+        "PingFang SC", "Noto Sans SC", sans-serif;
+      --mono: ui-monospace, "Cascadia Code", "SF Mono", "Consolas", "JetBrains Mono", monospace;
+      --radius: 6px;
+      --radius-sm: 4px;
+      --gap: 12px;
+      --sidebar-w: 200px;
+      --sysbar-h: 40px;
     }
-    [data-theme="light"] {
-      --bg: #f5f5f7;
-      --bg-elev: #ffffff;
-      --bg-soft: #fafafa;
-      --ink: #1d1d1f;
-      --ink-2: #6e6e73;
-      --ink-3: #aeaeb2;
-      --line: rgba(0, 0, 0, 0.08);
-      --accent: #0071e3;
-      --accent-soft: rgba(0, 113, 227, 0.1);
-      --ok: #34c759;
-      --ok-soft: rgba(52, 199, 89, 0.12);
-      --err: #ff3b30;
-      --err-soft: rgba(255, 59, 48, 0.1);
-      --warn: #ff9f0a;
-      --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.04);
-      --chart-grid: rgba(0,0,0,.06);
-      --chart-p50: #0071e3;
-      --chart-p95: #ff9f0a;
-    }
+
+    /* ── Dark (default) ── */
     [data-theme="dark"] {
-      --bg: #000000;
-      --bg-elev: #1c1c1e;
-      --bg-soft: #2c2c2e;
-      --ink: #f5f5f7;
-      --ink-2: #a1a1a6;
-      --ink-3: #636366;
-      --line: rgba(255, 255, 255, 0.1);
-      --accent: #2997ff;
-      --accent-soft: rgba(41, 151, 255, 0.15);
-      --ok: #30d158;
-      --ok-soft: rgba(48, 209, 88, 0.15);
-      --err: #ff453a;
-      --err-soft: rgba(255, 69, 58, 0.15);
-      --warn: #ffd60a;
-      --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 8px 32px rgba(0,0,0,.45);
-      --chart-grid: rgba(255,255,255,.08);
-      --chart-p50: #2997ff;
-      --chart-p95: #ffd60a;
+      --bg: #0b0c0e;
+      --bg-panel: #0f1114;
+      --bg-elev: #14161a;
+      --bg-soft: #1a1d22;
+      --bg-hover: #1f2329;
+      --ink: #e8eaed;
+      --ink-2: #9aa0a8;
+      --ink-3: #5c6370;
+      --line: #22262d;
+      --line-strong: #2e343d;
+      --accent: #2dd4a8;
+      --accent-2: #14b8a6;
+      --accent-soft: rgba(45, 212, 168, 0.12);
+      --accent-ink: #0b0c0e;
+      --ok: #2dd4a8;
+      --ok-soft: rgba(45, 212, 168, 0.12);
+      --err: #f87171;
+      --err-soft: rgba(248, 113, 113, 0.12);
+      --warn: #fbbf24;
+      --warn-soft: rgba(251, 191, 36, 0.12);
+      --blue: #60a5fa;
+      --blue-soft: rgba(96, 165, 250, 0.12);
+      --purple: #c084fc;
+      --purple-soft: rgba(192, 132, 252, 0.12);
+      --orange: #fb923c;
+      --orange-soft: rgba(251, 146, 60, 0.12);
+      --pink: #f472b6;
+      --pink-soft: rgba(244, 114, 182, 0.12);
+      --chart-grid: #1c2026;
+      --chart-p50: #2dd4a8;
+      --chart-p95: #60a5fa;
+      --chart-raw: #5c6370;
+      --scrollbar: #2a2f38;
     }
+
+    /* ── Light ── */
+    [data-theme="light"] {
+      --bg: #f4f5f7;
+      --bg-panel: #ffffff;
+      --bg-elev: #ffffff;
+      --bg-soft: #f0f1f3;
+      --bg-hover: #e8eaed;
+      --ink: #111318;
+      --ink-2: #5c6370;
+      --ink-3: #9aa0a8;
+      --line: #e2e5ea;
+      --line-strong: #c9ced6;
+      --accent: #0d9488;
+      --accent-2: #0f766e;
+      --accent-soft: rgba(13, 148, 136, 0.1);
+      --accent-ink: #ffffff;
+      --ok: #0d9488;
+      --ok-soft: rgba(13, 148, 136, 0.1);
+      --err: #dc2626;
+      --err-soft: rgba(220, 38, 38, 0.08);
+      --warn: #d97706;
+      --warn-soft: rgba(217, 119, 6, 0.1);
+      --blue: #2563eb;
+      --blue-soft: rgba(37, 99, 235, 0.08);
+      --purple: #9333ea;
+      --purple-soft: rgba(147, 51, 234, 0.08);
+      --orange: #ea580c;
+      --orange-soft: rgba(234, 88, 12, 0.08);
+      --pink: #db2777;
+      --pink-soft: rgba(219, 39, 119, 0.08);
+      --chart-grid: #e8eaed;
+      --chart-p50: #0d9488;
+      --chart-p95: #2563eb;
+      --chart-raw: #9aa0a8;
+      --scrollbar: #c9ced6;
+    }
+
     * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
+    html, body { margin: 0; padding: 0; height: 100%; }
     body {
       font-family: var(--font);
       background: var(--bg);
       color: var(--ink);
-      min-height: 100vh;
+      font-size: 13px;
+      line-height: 1.45;
       -webkit-font-smoothing: antialiased;
-      transition: background .25s ease, color .25s ease;
+      overflow: hidden;
     }
-    .wrap {
-      max-width: var(--max);
-      margin: 0 auto;
-      padding: 28px 20px 64px;
+
+    /* ── App shell ── */
+    .app {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-rows: var(--sysbar-h) 1fr;
+      height: 100vh;
     }
-    header {
+
+    /* ── Sidebar ── */
+    .sidebar {
+      grid-row: 1 / -1;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--line);
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 28px;
+      flex-direction: column;
+      overflow: hidden;
     }
     .brand {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .brand h1 {
-      margin: 0;
-      font-size: 28px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
-    .brand .sub {
-      color: var(--ink-2);
-      font-size: 13px;
-      font-family: var(--mono);
-    }
-    .header-actions {
-      display: flex;
       align-items: center;
       gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      min-height: var(--sysbar-h);
     }
-    .live-dot {
+    .brand-mark {
+      width: 22px; height: 22px;
+      border-radius: var(--radius-sm);
+      background: var(--accent);
+      color: var(--accent-ink);
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .brand-name {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .brand-ver {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
+    .nav {
+      display: flex;
+      flex-direction: column;
+      padding: 10px 8px;
+      gap: 2px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .nav-item {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--ink-2);
+      font: inherit;
+      font-size: 12.5px;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      transition: background .12s, color .12s;
+      position: relative;
+    }
+    .nav-item:hover { background: var(--bg-hover); color: var(--ink); }
+    .nav-item.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .nav-item.active::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 6px; bottom: 6px;
+      width: 2px;
+      background: var(--accent);
+      border-radius: 1px;
+    }
+    .nav-icon {
+      width: 16px; height: 16px;
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 13px;
+      opacity: .9;
+      flex-shrink: 0;
+    }
+    .nav-label { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+    .nav-en { line-height: 1.2; }
+    .nav-zh {
+      font-size: 10px;
+      color: var(--ink-3);
+      line-height: 1.2;
+      font-weight: 400;
+    }
+    .nav-item.active .nav-zh { color: var(--accent); opacity: .7; }
+
+    .sidebar-foot {
+      border-top: 1px solid var(--line);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .side-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-3);
+    }
+    .side-stat b { color: var(--ink-2); font-weight: 500; }
+
+    /* ── System bar ── */
+    .sysbar {
+      grid-column: 2;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 16px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-2);
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .sysbar-spacer { flex: 1; }
+    .sys-item {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 12px;
-      color: var(--ink-2);
-      padding: 6px 10px;
+    }
+    .sys-item .k { color: var(--ink-3); }
+    .sys-item .v { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+    .sys-sep { width: 1px; height: 14px; background: var(--line); flex-shrink: 0; }
+
+    .health-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
       border-radius: 999px;
-      background: var(--bg-elev);
-      border: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+      flex-shrink: 0;
     }
-    .live-dot i {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--ok);
-      box-shadow: 0 0 0 3px var(--ok-soft);
+    .health-pill .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 25%, transparent);
     }
+    .health-pill.ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+      border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+    }
+    .health-pill.err {
+      background: var(--err-soft);
+      color: var(--err);
+      border-color: color-mix(in srgb, var(--err) 30%, transparent);
+    }
+    .health-pill.off {
+      background: var(--bg-soft);
+      color: var(--ink-3);
+      border-color: var(--line);
+    }
+
+    .auth-note {
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--warn-soft);
+      color: var(--warn);
+      border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .theme-btn {
       appearance: none;
       border: 1px solid var(--line);
-      background: var(--bg-elev);
-      color: var(--ink);
-      width: 38px; height: 38px;
-      border-radius: 999px;
+      background: var(--bg-soft);
+      color: var(--ink-2);
+      height: 26px;
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 16px;
-      display: grid;
-      place-items: center;
-      transition: transform .15s ease, background .2s;
+      font-family: var(--mono);
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+      transition: background .12s, color .12s, border-color .12s;
     }
-    .theme-btn:hover { transform: scale(1.05); }
-    .theme-btn:active { transform: scale(0.96); }
+    .theme-btn:hover {
+      background: var(--bg-hover);
+      color: var(--ink);
+      border-color: var(--line-strong);
+    }
 
+    /* ── Main content ── */
+    .main {
+      grid-column: 2;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 20px 22px 48px;
+      scroll-behavior: smooth;
+    }
+    .main::-webkit-scrollbar { width: 8px; }
+    .main::-webkit-scrollbar-track { background: transparent; }
+    .main::-webkit-scrollbar-thumb {
+      background: var(--scrollbar);
+      border-radius: 4px;
+    }
+
+    .panel { display: none; animation: fadeIn .18s ease; }
+    .panel.active { display: block; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .page-title {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--ink);
+    }
+    .page-sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-3);
+      margin-top: 3px;
+    }
+    .page-meta {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    /* ── Cards / KPI ── */
     .kpi-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: var(--gap);
       margin-bottom: var(--gap);
     }
-    @media (max-width: 900px) {
+    .kpi-grid.tokens { grid-template-columns: repeat(3, 1fr); }
+    @media (max-width: 1100px) {
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .kpi-grid.tokens { grid-template-columns: repeat(3, 1fr); }
     }
-    @media (max-width: 520px) {
-      .kpi-grid { grid-template-columns: 1fr; }
-      .brand h1 { font-size: 22px; }
+    @media (max-width: 720px) {
+      .kpi-grid, .kpi-grid.tokens { grid-template-columns: 1fr 1fr; }
     }
+
     .card {
-      background: var(--bg-elev);
+      background: var(--bg-panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 18px 18px 16px;
+      padding: 14px 16px;
     }
+    .card.tight { padding: 0; }
+
+    .kpi {
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--line);
+    }
+    .kpi.accent::after { background: var(--accent); }
+    .kpi.err::after { background: var(--err); }
+    .kpi.ok::after { background: var(--ok); }
+    .kpi.blue::after { background: var(--blue); }
     .kpi .label {
-      font-size: 12px;
-      color: var(--ink-2);
+      font-family: var(--mono);
+      font-size: 10px;
       font-weight: 500;
-      letter-spacing: .01em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       margin-bottom: 8px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .kpi .label .zh {
+      font-size: 10px;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--ink-3);
+      opacity: .8;
     }
     .kpi .value {
-      font-size: 32px;
-      font-weight: 600;
-      letter-spacing: -0.03em;
-      font-variant-numeric: tabular-nums;
-      line-height: 1.1;
-    }
-    .kpi .hint {
-      margin-top: 6px;
-      font-size: 12px;
-      color: var(--ink-3);
       font-family: var(--mono);
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.15;
+      color: var(--ink);
     }
     .kpi .value.accent { color: var(--accent); }
-    .kpi .value.ok { color: var(--ok); }
     .kpi .value.err { color: var(--err); }
+    .kpi .value.ok { color: var(--ok); }
+    .kpi .value.blue { color: var(--blue); }
+    .kpi .hint {
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+    }
+    .tok .value { font-size: 22px; }
 
-    section { margin-top: 22px; }
+    /* ── Section ── */
+    section.block { margin-top: 20px; }
     .sec-head {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 12px;
-      padding: 0 4px;
+      margin-bottom: 10px;
     }
     .sec-head h2 {
       margin: 0;
-      font-size: 17px;
+      font-family: var(--mono);
+      font-size: 12px;
       font-weight: 600;
-      letter-spacing: -0.01em;
+      color: var(--ink-2);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .sec-head h2 .zh {
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--ink-3);
+      margin-left: 8px;
+      font-size: 11px;
     }
     .sec-head .meta {
-      font-size: 12px;
-      color: var(--ink-2);
       font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
     }
 
-    .chart-card { padding: 16px 12px 8px; }
+    /* ── Chart ── */
+    .chart-card { padding: 12px 8px 6px; }
     .chart-legend {
       display: flex;
       gap: 16px;
-      padding: 0 10px 10px;
-      font-size: 12px;
+      padding: 0 12px 8px;
+      font-family: var(--mono);
+      font-size: 10.5px;
       color: var(--ink-2);
+    }
+    .chart-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
     .chart-legend span::before {
       content: "";
       display: inline-block;
-      width: 10px; height: 3px;
-      border-radius: 2px;
-      margin-right: 6px;
-      vertical-align: middle;
+      width: 12px; height: 2px;
+      border-radius: 1px;
     }
     .chart-legend .p50::before { background: var(--chart-p50); }
     .chart-legend .p95::before { background: var(--chart-p95); }
-    .chart-legend .raw::before { background: var(--ink-3); }
+    .chart-legend .raw::before { background: var(--chart-raw); opacity: .6; }
     canvas#latencyChart {
       width: 100%;
-      height: 220px;
+      height: 240px;
       display: block;
     }
 
+    /* ── Split ── */
     .split {
       display: grid;
-      grid-template-columns: 1.2fr 1fr;
+      grid-template-columns: 1.15fr 1fr;
       gap: var(--gap);
     }
-    @media (max-width: 860px) {
+    @media (max-width: 960px) {
       .split { grid-template-columns: 1fr; }
     }
 
-    .model-list { display: flex; flex-direction: column; gap: 10px; }
+    /* ── Models ── */
+    .model-list { display: flex; flex-direction: column; }
     .model-row {
       display: grid;
       grid-template-columns: 1fr auto;
-      gap: 8px 12px;
-      padding: 12px 14px;
-      border-radius: var(--radius-sm);
-      background: var(--bg-soft);
-      border: 1px solid var(--line);
+      gap: 6px 14px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line);
+      align-items: center;
     }
+    .model-row:last-child { border-bottom: none; }
+    .model-row:hover { background: var(--bg-soft); }
     .model-name {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
-      font-weight: 550;
-      font-size: 14px;
-    }
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      font-size: 11px;
+      font-family: var(--mono);
+      font-size: 12.5px;
       font-weight: 500;
-      padding: 2px 8px;
-      border-radius: 999px;
-      letter-spacing: .01em;
+      color: var(--ink);
+      min-width: 0;
     }
-    .chip.provider {
-      background: var(--accent-soft);
-      color: var(--accent);
-      text-transform: capitalize;
-    }
-    .chip.type {
-      background: var(--bg-elev);
+    .model-lat {
+      font-family: var(--mono);
+      font-size: 11px;
       color: var(--ink-2);
-      border: 1px solid var(--line);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
     .model-stats {
       display: flex;
       gap: 14px;
       flex-wrap: wrap;
       font-family: var(--mono);
-      font-size: 12px;
-      color: var(--ink-2);
+      font-size: 11px;
+      color: var(--ink-3);
       grid-column: 1 / -1;
     }
     .model-stats b {
-      color: var(--ink);
+      color: var(--ink-2);
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .model-stats .bad b { color: var(--err); }
+
+    /* ── Chips / badges ── */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.02em;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .chip.provider {
+      text-transform: lowercase;
+    }
+    .chip.type {
+      background: var(--bg-soft);
+      color: var(--ink-3);
+      border: 1px solid var(--line);
+      font-weight: 500;
+      text-transform: lowercase;
+    }
+    .chip.proto {
+      background: var(--blue-soft);
+      color: var(--blue);
+      text-transform: lowercase;
+    }
+    .chip.model {
+      background: var(--bg-soft);
+      color: var(--ink-2);
+      border: 1px solid var(--line);
+      font-weight: 500;
     }
 
+    /* ── Providers ── */
     .provider-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: var(--gap);
     }
     .prov {
-      padding: 14px 14px 12px;
-      border-radius: var(--radius-sm);
-      background: var(--bg-soft);
+      background: var(--bg-panel);
       border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 0;
+      overflow: hidden;
+      transition: border-color .12s;
     }
-    .prov-top {
+    .prov:hover { border-color: var(--line-strong); }
+    .prov-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      margin-bottom: 6px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-soft);
     }
     .prov-name {
+      font-family: var(--mono);
       font-weight: 600;
-      font-size: 14px;
+      font-size: 12.5px;
       display: flex;
       align-items: center;
       gap: 8px;
+      color: var(--ink);
+      min-width: 0;
     }
     .badge {
-      font-size: 10px;
+      font-family: var(--mono);
+      font-size: 9.5px;
       padding: 2px 7px;
       border-radius: 999px;
-      font-weight: 500;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      flex-shrink: 0;
     }
-    .badge.on { background: var(--ok-soft); color: var(--ok); }
-    .badge.off { background: var(--bg-elev); color: var(--ink-3); border: 1px solid var(--line); }
-    .prov-url {
-      font-size: 11px;
+    .badge.on {
+      background: var(--ok-soft);
+      color: var(--ok);
+      border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+    }
+    .badge.off {
+      background: var(--bg-elev);
       color: var(--ink-3);
+      border: 1px solid var(--line);
+    }
+    .prov-body { padding: 10px 14px 12px; }
+    .prov-url {
       font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-3);
       word-break: break-all;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
       line-height: 1.4;
     }
     .prov-stats {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-      text-align: center;
+      gap: 4px;
     }
+    .prov-stats .cell { text-align: center; }
     .prov-stats .n {
       font-family: var(--mono);
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      line-height: 1.2;
     }
     .prov-stats .t {
-      font-size: 10px;
+      font-family: var(--mono);
+      font-size: 9px;
       color: var(--ink-3);
       margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
     .prov-stats .n.live { color: var(--accent); }
     .prov-stats .n.bad { color: var(--err); }
 
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 12px;
     }
     th, td {
-      padding: 10px 12px;
+      padding: 9px 12px;
       text-align: left;
       border-bottom: 1px solid var(--line);
       vertical-align: middle;
     }
     th {
-      color: var(--ink-2);
+      font-family: var(--mono);
+      color: var(--ink-3);
       font-weight: 500;
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: .04em;
+      letter-spacing: 0.05em;
+      background: var(--bg-soft);
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
-    tr:last-child td { border-bottom: none; }
-    td.mono, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--bg-soft); }
+    td.mono, .mono {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 11.5px;
+    }
     .pill {
       display: inline-block;
       padding: 2px 8px;
       border-radius: 999px;
-      font-size: 11px;
-      font-weight: 500;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
     }
-    .pill.ok { background: var(--ok-soft); color: var(--ok); }
-    .pill.err { background: var(--err-soft); color: var(--err); }
+    .pill.ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+    }
+    .pill.err {
+      background: var(--err-soft);
+      color: var(--err);
+    }
     .pill.proto {
-      background: var(--accent-soft);
-      color: var(--accent);
-      text-transform: capitalize;
+      background: var(--blue-soft);
+      color: var(--blue);
+      text-transform: lowercase;
     }
     .empty {
       color: var(--ink-3);
       text-align: center;
-      padding: 28px 12px;
-      font-size: 13px;
+      padding: 32px 16px;
+      font-family: var(--mono);
+      font-size: 12px;
     }
-    .err-text { color: var(--err); font-size: 12px; max-width: 220px; }
-    .table-wrap { overflow-x: auto; }
+    .err-text {
+      color: var(--err);
+      font-size: 11px;
+      max-width: 240px;
+      font-family: var(--mono);
+      word-break: break-all;
+    }
+
     footer {
       margin-top: 28px;
-      text-align: center;
-      color: var(--ink-3);
-      font-size: 12px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 12px;
       font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--ink-3);
     }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .tokens-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: var(--gap);
-      margin-top: var(--gap);
+    footer a {
+      color: var(--ink-2);
+      text-decoration: none;
     }
-    @media (max-width: 700px) {
-      .tokens-row { grid-template-columns: 1fr; }
+    footer a:hover { color: var(--accent); }
+    footer .sep { opacity: .4; }
+
+    /* ── Mobile ── */
+    @media (max-width: 800px) {
+      body { overflow: auto; }
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr;
+        height: auto;
+        min-height: 100vh;
+      }
+      .sidebar {
+        grid-row: 1;
+        grid-column: 1;
+        flex-direction: row;
+        align-items: stretch;
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+        overflow-x: auto;
+      }
+      .brand {
+        border-bottom: none;
+        border-right: 1px solid var(--line);
+        padding: 10px 12px;
+      }
+      .brand-text { display: none; }
+      .nav {
+        flex-direction: row;
+        padding: 8px;
+        gap: 4px;
+        overflow-x: auto;
+      }
+      .nav-item {
+        flex-direction: column;
+        gap: 2px;
+        padding: 6px 10px;
+        text-align: center;
+        white-space: nowrap;
+      }
+      .nav-item.active::before { display: none; }
+      .nav-zh { display: none; }
+      .sidebar-foot { display: none; }
+      .sysbar {
+        grid-column: 1;
+        grid-row: 2;
+        flex-wrap: wrap;
+        height: auto;
+        padding: 8px 12px;
+        gap: 10px;
+      }
+      .main {
+        grid-column: 1;
+        grid-row: 3;
+        padding: 16px 12px 40px;
+        overflow: visible;
+      }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+      .kpi-grid.tokens { grid-template-columns: 1fr; }
     }
-    .tok .value { font-size: 24px; }
+
+    /* ── Focus ── */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
       <div class="brand">
-        <h1>Unify LLM</h1>
-        <div class="sub" id="subline">loading…</div>
+        <div class="brand-mark">UL</div>
+        <div class="brand-text">
+          <div class="brand-name">unify_llm</div>
+          <div class="brand-ver" id="brandVer">v—</div>
+        </div>
       </div>
-      <div class="header-actions">
-        <div class="live-dot"><i></i><span id="liveLabel">live</span></div>
-        <button class="theme-btn" id="themeBtn" title="切换主题" aria-label="切换主题">◐</button>
+      <nav class="nav" id="mainNav" role="tablist">
+        <button class="nav-item active" data-panel="overview" role="tab" aria-selected="true">
+          <span class="nav-icon">◉</span>
+          <span class="nav-label">
+            <span class="nav-en">Overview</span>
+            <span class="nav-zh">总览</span>
+          </span>
+        </button>
+        <button class="nav-item" data-panel="providers" role="tab" aria-selected="false">
+          <span class="nav-icon">⬡</span>
+          <span class="nav-label">
+            <span class="nav-en">Providers</span>
+            <span class="nav-zh">供应商</span>
+          </span>
+        </button>
+        <button class="nav-item" data-panel="traffic" role="tab" aria-selected="false">
+          <span class="nav-icon">⇄</span>
+          <span class="nav-label">
+            <span class="nav-en">Traffic</span>
+            <span class="nav-zh">流量</span>
+          </span>
+        </button>
+        <button class="nav-item" data-panel="logs" role="tab" aria-selected="false">
+          <span class="nav-icon">☰</span>
+          <span class="nav-label">
+            <span class="nav-en">Logs</span>
+            <span class="nav-zh">日志</span>
+          </span>
+        </button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="side-stat">
+          <span>providers</span>
+          <b id="sideProvCount">—</b>
+        </div>
+        <div class="side-stat">
+          <span>models</span>
+          <b id="sideModelCount">—</b>
+        </div>
+        <div class="side-stat">
+          <span>poll</span>
+          <b>2s</b>
+        </div>
       </div>
-    </header>
+    </aside>
 
-    <div class="kpi-grid">
-      <div class="card kpi">
-        <div class="label">Active</div>
-        <div class="value accent" id="kpiActive">0</div>
-        <div class="hint">in-flight now</div>
-      </div>
-      <div class="card kpi">
-        <div class="label">Requests</div>
-        <div class="value" id="kpiTotal">0</div>
-        <div class="hint" id="kpiRps">—</div>
-      </div>
-      <div class="card kpi">
-        <div class="label">Errors</div>
-        <div class="value err" id="kpiErrors">0</div>
-        <div class="hint" id="kpiErrRate">0%</div>
-      </div>
-      <div class="card kpi">
-        <div class="label">Total tokens</div>
-        <div class="value ok" id="kpiTokens">0</div>
-        <div class="hint" id="kpiTokSplit">in 0 · out 0</div>
-      </div>
+    <!-- System bar -->
+    <div class="sysbar">
+      <span class="health-pill ok" id="healthPill">
+        <i class="dot"></i>
+        <span id="healthLabel">OK</span>
+      </span>
+      <span class="sys-sep"></span>
+      <span class="sys-item">
+        <span class="k">up</span>
+        <span class="v" id="sysUptime">—</span>
+      </span>
+      <span class="sys-item">
+        <span class="k">rps</span>
+        <span class="v" id="sysRps">—</span>
+      </span>
+      <span class="sys-item">
+        <span class="k">live</span>
+        <span class="v" id="sysLive">0</span>
+      </span>
+      <span class="sys-item" id="sysAuthWrap" hidden>
+        <span class="auth-note" id="sysAuth"></span>
+      </span>
+      <span class="sysbar-spacer"></span>
+      <span class="sys-item">
+        <span class="k" id="sysUpdated">—</span>
+      </span>
+      <button class="theme-btn" id="themeBtn" title="Toggle theme / 切换主题" aria-label="Toggle theme">
+        <span id="themeIcon">◐</span>
+        <span id="themeLabel">light</span>
+      </button>
     </div>
 
-    <section>
-      <div class="sec-head">
-        <h2>Latency</h2>
-        <div class="meta" id="latMeta">rolling p50 / p95</div>
-      </div>
-      <div class="card chart-card">
-        <div class="chart-legend">
-          <span class="p50">p50</span>
-          <span class="p95">p95</span>
-          <span class="raw">raw</span>
+    <!-- Main -->
+    <main class="main">
+
+      <!-- ══ OVERVIEW ══ -->
+      <div class="panel active" id="panel-overview" role="tabpanel">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Overview</h1>
+            <div class="page-sub">Gateway metrics · 网关指标</div>
+          </div>
+          <div class="page-meta" id="overviewMeta">—</div>
         </div>
-        <canvas id="latencyChart" width="1080" height="220"></canvas>
-      </div>
-    </section>
 
-    <section>
-      <div class="sec-head">
-        <h2>Tokens</h2>
-        <div class="meta">prompt / completion</div>
-      </div>
-      <div class="tokens-row">
-        <div class="card kpi tok">
-          <div class="label">Prompt tokens</div>
-          <div class="value" id="tokIn">0</div>
-          <div class="hint">input</div>
+        <div class="kpi-grid">
+          <div class="card kpi accent">
+            <div class="label"><span>Active</span><span class="zh">进行中</span></div>
+            <div class="value accent" id="kpiActive">0</div>
+            <div class="hint">in-flight now</div>
+          </div>
+          <div class="card kpi">
+            <div class="label"><span>Requests</span><span class="zh">请求</span></div>
+            <div class="value" id="kpiTotal">0</div>
+            <div class="hint" id="kpiRps">—</div>
+          </div>
+          <div class="card kpi err">
+            <div class="label"><span>Errors</span><span class="zh">错误</span></div>
+            <div class="value err" id="kpiErrors">0</div>
+            <div class="hint" id="kpiErrRate">0%</div>
+          </div>
+          <div class="card kpi ok">
+            <div class="label"><span>Total tokens</span><span class="zh">总 tokens</span></div>
+            <div class="value ok" id="kpiTokens">0</div>
+            <div class="hint" id="kpiTokSplit">in 0 · out 0</div>
+          </div>
         </div>
-        <div class="card kpi tok">
-          <div class="label">Completion tokens</div>
-          <div class="value" id="tokOut">0</div>
-          <div class="hint">output</div>
+
+        <section class="block">
+          <div class="sec-head">
+            <h2>Latency<span class="zh">延迟</span></h2>
+            <div class="meta" id="latMeta">rolling p50 / p95</div>
+          </div>
+          <div class="card chart-card">
+            <div class="chart-legend">
+              <span class="p50">p50</span>
+              <span class="p95">p95</span>
+              <span class="raw">raw</span>
+            </div>
+            <canvas id="latencyChart" width="1000" height="240"></canvas>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="sec-head">
+            <h2>Tokens<span class="zh">用量</span></h2>
+            <div class="meta">prompt / completion</div>
+          </div>
+          <div class="kpi-grid tokens">
+            <div class="card kpi tok">
+              <div class="label"><span>Prompt</span><span class="zh">输入</span></div>
+              <div class="value" id="tokIn">0</div>
+              <div class="hint">input tokens</div>
+            </div>
+            <div class="card kpi tok">
+              <div class="label"><span>Completion</span><span class="zh">输出</span></div>
+              <div class="value" id="tokOut">0</div>
+              <div class="hint">output tokens</div>
+            </div>
+            <div class="card kpi tok blue">
+              <div class="label"><span>Avg / req</span><span class="zh">均次</span></div>
+              <div class="value blue" id="tokAvg">0</div>
+              <div class="hint">total ÷ requests</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="sec-head">
+            <h2>Models<span class="zh">模型</span></h2>
+            <div class="meta">from recent history</div>
+          </div>
+          <div class="card tight">
+            <div class="model-list" id="modelList">
+              <div class="empty">No traffic yet · 暂无流量</div>
+            </div>
+          </div>
+        </section>
+
+        <footer>
+          <a href="/api/status">status.json</a>
+          <span class="sep">·</span>
+          <a href="/docs">docs</a>
+          <span class="sep">·</span>
+          <span>poll 2s</span>
+          <span class="sep">·</span>
+          <span>self-contained</span>
+        </footer>
+      </div>
+
+      <!-- ══ PROVIDERS ══ -->
+      <div class="panel" id="panel-providers" role="tabpanel">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Providers</h1>
+            <div class="page-sub">Concurrency &amp; health · 并发与状态</div>
+          </div>
+          <div class="page-meta" id="providersMeta">—</div>
         </div>
-        <div class="card kpi tok">
-          <div class="label">Avg tokens / req</div>
-          <div class="value" id="tokAvg">0</div>
-          <div class="hint">total / requests</div>
+        <div class="provider-grid" id="providerGrid"></div>
+      </div>
+
+      <!-- ══ TRAFFIC ══ -->
+      <div class="panel" id="panel-traffic" role="tabpanel">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Traffic</h1>
+            <div class="page-sub">In-flight requests · 进行中请求</div>
+          </div>
+          <div class="page-meta" id="inflightCount">0 active</div>
+        </div>
+        <div class="card tight table-wrap" id="inflightWrap">
+          <div class="empty">Idle · 空闲</div>
         </div>
       </div>
-    </section>
 
-    <section>
-      <div class="sec-head">
-        <h2>Models</h2>
-        <div class="meta">from recent history</div>
-      </div>
-      <div class="card">
-        <div class="model-list" id="modelList">
-          <div class="empty">No traffic yet</div>
+      <!-- ══ LOGS ══ -->
+      <div class="panel" id="panel-logs" role="tabpanel">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Logs</h1>
+            <div class="page-sub">Recent history · 最近记录</div>
+          </div>
+          <div class="page-meta">last 20</div>
+        </div>
+        <div class="card tight table-wrap" id="historyWrap">
+          <div class="empty">No completed requests · 暂无完成请求</div>
         </div>
       </div>
-    </section>
 
-    <section>
-      <div class="sec-head">
-        <h2>Providers</h2>
-        <div class="meta">concurrency</div>
-      </div>
-      <div class="provider-grid" id="providerGrid"></div>
-    </section>
-
-    <section>
-      <div class="sec-head">
-        <h2>In-flight</h2>
-        <div class="meta" id="inflightCount">0</div>
-      </div>
-      <div class="card table-wrap" id="inflightWrap">
-        <div class="empty">Idle</div>
-      </div>
-    </section>
-
-    <section>
-      <div class="sec-head">
-        <h2>Recent</h2>
-        <div class="meta">last 20</div>
-      </div>
-      <div class="card table-wrap" id="historyWrap">
-        <div class="empty">No completed requests</div>
-      </div>
-    </section>
-
-    <footer>
-      <a href="/api/status">status.json</a>
-      ·
-      <a href="/docs">docs</a>
-      · poll 2s
-    </footer>
+    </main>
   </div>
 
   <script>
+    "use strict";
     const $ = (id) => document.getElementById(id);
     const THEME_KEY = "cp-theme";
 
+    /* ── Theme ── */
     function applyTheme(t) {
       document.documentElement.setAttribute("data-theme", t);
       localStorage.setItem(THEME_KEY, t);
-      $("themeBtn").textContent = t === "dark" ? "☀" : "◐";
+      $("themeIcon").textContent = t === "dark" ? "☀" : "◐";
+      $("themeLabel").textContent = t === "dark" ? "light" : "dark";
     }
     (function initTheme() {
       const saved = localStorage.getItem(THEME_KEY);
-      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-      applyTheme(saved || (prefersDark ? "dark" : "light"));
+      const prefersDark = window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+      applyTheme(saved || (prefersDark ? "dark" : "dark")); // dark-first
     })();
     $("themeBtn").addEventListener("click", () => {
       const cur = document.documentElement.getAttribute("data-theme");
       applyTheme(cur === "dark" ? "light" : "dark");
       drawChart(lastLatency);
+      renderModels(lastModels);
     });
 
+    /* ── Nav ── */
+    document.querySelectorAll(".nav-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const target = btn.dataset.panel;
+        document.querySelectorAll(".nav-item").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+          b.setAttribute("aria-selected", b === btn ? "true" : "false");
+        });
+        document.querySelectorAll(".panel").forEach((p) => {
+          p.classList.toggle("active", p.id === "panel-" + target);
+        });
+      });
+    });
+
+    /* ── Utils ── */
     function esc(s) {
       return String(s ?? "").replace(/[&<>"']/g, (c) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -558,7 +1136,7 @@
       return String(Math.round(n));
     }
     function fmtMs(ms) {
-      if (ms == null) return "—";
+      if (ms == null || ms === undefined) return "—";
       if (ms < 1000) return Math.round(ms) + "ms";
       return (ms / 1000).toFixed(2) + "s";
     }
@@ -567,24 +1145,42 @@
       const h = Math.floor(sec / 3600);
       const m = Math.floor((sec % 3600) / 60);
       const s = sec % 60;
-      if (h) return `${h}h ${m}m`;
-      if (m) return `${m}m ${s}s`;
-      return `${s}s`;
+      if (h) return h + "h " + m + "m";
+      if (m) return m + "m " + s + "s";
+      return s + "s";
     }
     function hashHue(str) {
       let h = 0;
       for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
       return h % 360;
     }
-
-    let lastLatency = { series: [], points: [] };
-    let lastTotal = 0;
-    let lastTs = 0;
-
     function cssVar(name, fallback) {
       const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
       return v || fallback;
     }
+
+    /* ── Provider color palette ── */
+    const PROV_COLORS = [
+      { bg: "var(--accent-soft)", fg: "var(--accent)" },
+      { bg: "var(--blue-soft)",   fg: "var(--blue)" },
+      { bg: "var(--purple-soft)", fg: "var(--purple)" },
+      { bg: "var(--orange-soft)", fg: "var(--orange)" },
+      { bg: "var(--pink-soft)",   fg: "var(--pink)" },
+      { bg: "var(--ok-soft)",     fg: "var(--ok)" },
+      { bg: "var(--warn-soft)",   fg: "var(--warn)" },
+      { bg: "var(--err-soft)",    fg: "var(--err)" },
+    ];
+    function provColor(provider) {
+      const idx = hashHue(String(provider || "?")) % PROV_COLORS.length;
+      return PROV_COLORS[idx];
+    }
+
+    /* ── Chart ── */
+    let lastLatency = { series: [], points: [] };
+    let lastModels = [];
+    let lastTotal = 0;
+    let lastTs = 0;
+    let lastRps = 0;
 
     function strokePath(ctx, xs, ys, color, width) {
       if (!xs.length) return;
@@ -601,9 +1197,13 @@
     function drawChart(latency) {
       lastLatency = latency || { series: [], points: [] };
       const canvas = $("latencyChart");
+      if (!canvas) return;
       const dpr = window.devicePixelRatio || 1;
-      const cssW = Math.max(canvas.clientWidth || canvas.parentElement.clientWidth || 1000, 320);
-      const cssH = 220;
+      const cssW = Math.max(
+        canvas.clientWidth || canvas.parentElement.clientWidth || 1000,
+        320
+      );
+      const cssH = 240;
       canvas.style.width = "100%";
       canvas.style.height = cssH + "px";
       canvas.width = Math.floor(cssW * dpr);
@@ -612,29 +1212,36 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);
 
-      const grid = cssVar("--chart-grid", "rgba(0,0,0,.08)");
-      const c50 = cssVar("--chart-p50", "#0071e3");
-      const c95 = cssVar("--chart-p95", "#ff9f0a");
-      const cRaw = cssVar("--ink-3", "#aeaeb2");
-      const ink3 = cssVar("--ink-3", "#aeaeb2");
-      const bgElev = cssVar("--bg-elev", "#fff");
+      const grid = cssVar("--chart-grid", "#1c2026");
+      const c50 = cssVar("--chart-p50", "#2dd4a8");
+      const c95 = cssVar("--chart-p95", "#60a5fa");
+      const cRaw = cssVar("--chart-raw", "#5c6370");
+      const ink3 = cssVar("--ink-3", "#5c6370");
+      const bgElev = cssVar("--bg-panel", "#0f1114");
+      const mono = '10px ui-monospace, "Cascadia Code", Consolas, monospace';
 
-      const pad = { l: 48, r: 16, t: 12, b: 28 };
+      const pad = { l: 50, r: 18, t: 14, b: 30 };
       const w = cssW - pad.l - pad.r;
       const h = cssH - pad.t - pad.b;
 
       const series = lastLatency.series || [];
       if (!series.length) {
         ctx.fillStyle = ink3;
-        ctx.font = "13px -apple-system, sans-serif";
+        ctx.font = mono;
         ctx.textAlign = "center";
-        ctx.fillText("No successful requests yet — send traffic to draw the curve", cssW / 2, cssH / 2);
+        ctx.fillText("no successful requests yet · 暂无成功请求", cssW / 2, cssH / 2);
         ctx.textAlign = "left";
         return;
       }
 
       const n = series.length;
-      const maxV = Math.max(20, ...series.map((p) => Math.max(Number(p.p50) || 0, Number(p.p95) || 0, Number(p.ms) || 0))) * 1.2;
+      const maxV =
+        Math.max(
+          20,
+          ...series.map((p) =>
+            Math.max(Number(p.p50) || 0, Number(p.p95) || 0, Number(p.ms) || 0)
+          )
+        ) * 1.25;
       const xAt = (i) => (n === 1 ? pad.l + w / 2 : pad.l + (w * i) / (n - 1));
       const yAt = (v) => pad.t + h - (Math.max(0, v) / maxV) * h;
 
@@ -642,7 +1249,7 @@
       ctx.strokeStyle = grid;
       ctx.lineWidth = 1;
       ctx.fillStyle = ink3;
-      ctx.font = "10px ui-monospace, monospace";
+      ctx.font = mono;
       for (let i = 0; i <= 4; i++) {
         const y = pad.t + (h * i) / 4;
         ctx.beginPath();
@@ -652,14 +1259,20 @@
         ctx.fillText(Math.round(maxV * (1 - i / 4)) + "ms", 4, y + 3);
       }
 
-      // x labels (first / mid / last time)
+      // x labels
       const t0 = series[0].t || 0;
       const t1 = series[n - 1].t || 0;
       const tf = (t) => new Date(t * 1000).toLocaleTimeString();
       ctx.fillStyle = ink3;
+      ctx.textAlign = "left";
       ctx.fillText(tf(t0), pad.l, cssH - 8);
-      if (n > 2) ctx.fillText(tf(series[Math.floor(n / 2)].t), pad.l + w / 2 - 20, cssH - 8);
-      ctx.fillText(tf(t1), Math.max(pad.l, pad.l + w - 52), cssH - 8);
+      if (n > 2) {
+        ctx.textAlign = "center";
+        ctx.fillText(tf(series[Math.floor(n / 2)].t), pad.l + w / 2, cssH - 8);
+      }
+      ctx.textAlign = "right";
+      ctx.fillText(tf(t1), pad.l + w, cssH - 8);
+      ctx.textAlign = "left";
 
       // raw latency thin line
       const rawX = [], rawY = [];
@@ -668,8 +1281,8 @@
         rawY.push(yAt(series[i].ms || 0));
       }
       ctx.save();
-      ctx.globalAlpha = 0.35;
-      strokePath(ctx, rawX, rawY, cRaw, 1.25);
+      ctx.globalAlpha = 0.4;
+      strokePath(ctx, rawX, rawY, cRaw, 1.2);
       ctx.restore();
 
       // area under p50
@@ -687,106 +1300,124 @@
         ctx.lineTo(xs[0], pad.t + h);
         ctx.closePath();
         const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + h);
-        grad.addColorStop(0, "rgba(0,113,227,0.22)");
-        grad.addColorStop(1, "rgba(0,113,227,0.02)");
+        grad.addColorStop(0, "rgba(45,212,168,0.18)");
+        grad.addColorStop(1, "rgba(45,212,168,0.01)");
         ctx.fillStyle = grad;
         ctx.fill();
       }
 
       // p95 then p50 — thick visible lines
-      strokePath(ctx, xs, y95, c95, 2.5);
-      strokePath(ctx, xs, y50, c50, 2.75);
+      strokePath(ctx, xs, y95, c95, 2.2);
+      strokePath(ctx, xs, y50, c50, 2.4);
 
-      // vertex dots (every point if few, else every few)
-      const step = n <= 30 ? 1 : Math.ceil(n / 20);
+      // vertex dots — always draw for 1-2 points
+      const step = n <= 40 ? 1 : Math.ceil(n / 24);
       for (let i = 0; i < n; i += step) {
         for (const [ys, col] of [[y95, c95], [y50, c50]]) {
           ctx.beginPath();
-          ctx.arc(xs[i], ys[i], 2.6, 0, Math.PI * 2);
+          ctx.arc(xs[i], ys[i], n === 1 ? 5 : 2.4, 0, Math.PI * 2);
           ctx.fillStyle = col;
           ctx.fill();
           ctx.beginPath();
-          ctx.arc(xs[i], ys[i], 4.2, 0, Math.PI * 2);
+          ctx.arc(xs[i], ys[i], n === 1 ? 7.5 : 4, 0, Math.PI * 2);
           ctx.strokeStyle = bgElev;
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.4;
           ctx.stroke();
         }
       }
-      // always highlight the latest point
+      // highlight latest
       const li = n - 1;
-      for (const [ys, col] of [[y95, c95], [y50, c50]]) {
-        ctx.beginPath();
-        ctx.arc(xs[li], ys[li], 4, 0, Math.PI * 2);
-        ctx.fillStyle = col;
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(xs[li], ys[li], 6.5, 0, Math.PI * 2);
-        ctx.strokeStyle = bgElev;
-        ctx.lineWidth = 2;
-        ctx.stroke();
+      if (n > 1) {
+        for (const [ys, col] of [[y95, c95], [y50, c50]]) {
+          ctx.beginPath();
+          ctx.arc(xs[li], ys[li], 3.8, 0, Math.PI * 2);
+          ctx.fillStyle = col;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(xs[li], ys[li], 6, 0, Math.PI * 2);
+          ctx.strokeStyle = bgElev;
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+        }
       }
     }
 
+    /* ── Models ── */
     function renderModels(models) {
+      lastModels = models || [];
       const el = $("modelList");
       if (!models || !models.length) {
-        el.innerHTML = '<div class="empty">No traffic yet</div>';
+        el.innerHTML = '<div class="empty">No traffic yet · 暂无流量</div>';
+        $("sideModelCount").textContent = "0";
         return;
       }
-      el.innerHTML = models.slice(0, 12).map((m) => {
-        const hue = hashHue(m.model || "");
+      $("sideModelCount").textContent = String(models.length);
+      el.innerHTML = models.slice(0, 16).map((m) => {
+        const pc = provColor(m.provider);
+        const errCls = m.errors ? "bad" : "";
         return `
           <div class="model-row">
             <div class="model-name">
               <span>${esc(m.model)}</span>
-              <span class="chip provider" style="background:hsla(${hue},80%,50%,.14);color:hsl(${hue},70%,${document.documentElement.getAttribute("data-theme")==="dark"?70:35}%)">${esc(m.provider)}</span>
+              <span class="chip provider" style="background:${pc.bg};color:${pc.fg}">${esc(m.provider)}</span>
             </div>
-            <div class="mono" style="font-size:12px;color:var(--ink-2)">${fmtMs(m.p50)} p50 · ${fmtMs(m.p95)} p95</div>
+            <div class="model-lat">${fmtMs(m.p50)} p50 · ${fmtMs(m.p95)} p95</div>
             <div class="model-stats">
               <span>req <b>${m.total}</b></span>
-              <span>err <b>${m.errors}</b></span>
-              <span>tok in <b>${fmtN(m.prompt_tokens)}</b></span>
-              <span>tok out <b>${fmtN(m.completion_tokens)}</b></span>
+              <span class="${errCls}">err <b>${m.errors}</b></span>
+              <span>in <b>${fmtN(m.prompt_tokens)}</b></span>
+              <span>out <b>${fmtN(m.completion_tokens)}</b></span>
             </div>
           </div>`;
       }).join("");
     }
 
+    /* ── Providers ── */
     function renderProviders(providers) {
       const el = $("providerGrid");
       if (!providers || !providers.length) {
-        el.innerHTML = '<div class="empty">No providers</div>';
+        el.innerHTML = '<div class="empty">No providers · 无供应商</div>';
+        $("sideProvCount").textContent = "0";
+        $("providersMeta").textContent = "0 configured";
         return;
       }
-      el.innerHTML = providers.map((p) => `
-        <div class="prov">
-          <div class="prov-top">
-            <div class="prov-name">
-              ${esc(p.id)}
-              <span class="chip type">${esc(p.type)}</span>
+      const enabled = providers.filter((p) => p.enabled).length;
+      $("sideProvCount").textContent = enabled + "/" + providers.length;
+      $("providersMeta").textContent = enabled + " on · " + providers.length + " total";
+      el.innerHTML = providers.map((p) => {
+        const pc = provColor(p.id);
+        return `
+          <div class="prov">
+            <div class="prov-head">
+              <div class="prov-name">
+                <span>${esc(p.id)}</span>
+                <span class="chip type">${esc(p.type)}</span>
+              </div>
+              <span class="badge ${p.enabled ? "on" : "off"}">${p.enabled ? "on" : "off"}</span>
             </div>
-            <span class="badge ${p.enabled ? "on" : "off"}">${p.enabled ? "on" : "off"}</span>
-          </div>
-          <div class="prov-url">${esc(p.base_url)}</div>
-          <div class="prov-stats">
-            <div><div class="n live">${p.active}</div><div class="t">active</div></div>
-            <div><div class="n">${p.total}</div><div class="t">total</div></div>
-            <div><div class="n ${p.errors ? "bad" : ""}">${p.errors}</div><div class="t">err</div></div>
-            <div><div class="n">${fmtN((p.prompt_tokens||0)+(p.completion_tokens||0))}</div><div class="t">tokens</div></div>
-          </div>
-        </div>
-      `).join("");
+            <div class="prov-body">
+              <div class="prov-url">${esc(p.base_url)}</div>
+              <div class="prov-stats">
+                <div class="cell"><div class="n live">${p.active ?? 0}</div><div class="t">active</div></div>
+                <div class="cell"><div class="n">${p.total ?? 0}</div><div class="t">total</div></div>
+                <div class="cell"><div class="n ${p.errors ? "bad" : ""}">${p.errors ?? 0}</div><div class="t">err</div></div>
+                <div class="cell"><div class="n">${fmtN((p.prompt_tokens || 0) + (p.completion_tokens || 0))}</div><div class="t">tokens</div></div>
+              </div>
+            </div>
+          </div>`;
+      }).join("");
     }
 
+    /* ── In-flight ── */
     function renderInFlight(providers) {
       const rows = [];
       for (const p of providers || []) {
         for (const r of p.in_flight || []) rows.push(r);
       }
-      $("inflightCount").textContent = String(rows.length);
+      $("inflightCount").textContent = rows.length + " active";
       const wrap = $("inflightWrap");
       if (!rows.length) {
-        wrap.innerHTML = '<div class="empty">Idle</div>';
+        wrap.innerHTML = '<div class="empty">Idle · 空闲</div>';
         return;
       }
       wrap.innerHTML = `
@@ -798,19 +1429,23 @@
             </tr>
           </thead>
           <tbody>
-            ${rows.map((r) => `
+            ${rows.map((r) => {
+              const pc = provColor(r.provider_id);
+              return `
               <tr>
                 <td class="mono">${esc(r.id)}</td>
-                <td>${esc(r.provider_id)}</td>
-                <td><span class="chip type">${esc(r.model)}</span></td>
+                <td><span class="chip provider" style="background:${pc.bg};color:${pc.fg}">${esc(r.provider_id)}</span></td>
+                <td><span class="chip model">${esc(r.model)}</span></td>
                 <td><span class="pill proto">${esc(r.protocol)}</span></td>
                 <td class="mono">${esc(r.path)}</td>
                 <td class="mono">${fmtMs(r.elapsed_ms)}</td>
-              </tr>`).join("")}
+              </tr>`;
+            }).join("")}
           </tbody>
         </table>`;
     }
 
+    /* ── History ── */
     function renderHistory(providers) {
       const rows = [];
       for (const p of providers || []) {
@@ -820,7 +1455,7 @@
       const top = rows.slice(0, 20);
       const wrap = $("historyWrap");
       if (!top.length) {
-        wrap.innerHTML = '<div class="empty">No completed requests</div>';
+        wrap.innerHTML = '<div class="empty">No completed requests · 暂无完成请求</div>';
         return;
       }
       wrap.innerHTML = `
@@ -840,14 +1475,18 @@
                 ? '<span class="pill ok">ok</span>'
                 : '<span class="pill err">error</span>';
               const tokens = (r.prompt_tokens || r.completion_tokens)
-                ? `${fmtN(r.prompt_tokens)}+${fmtN(r.completion_tokens)}`
+                ? fmtN(r.prompt_tokens) + "+" + fmtN(r.completion_tokens)
                 : "—";
+              const pc = provColor(r.provider_id);
               return `
                 <tr>
                   <td class="mono">${esc(t)}</td>
                   <td>
-                    <div>${esc(r.model || r.requested_model)}</div>
-                    <div style="font-size:11px;color:var(--ink-3)">${esc(r.provider_id)} · ${esc(r.protocol)}</div>
+                    <div class="mono" style="font-size:12px;color:var(--ink)">${esc(r.model || r.requested_model)}</div>
+                    <div style="margin-top:3px;display:flex;gap:6px;align-items:center">
+                      <span class="chip provider" style="background:${pc.bg};color:${pc.fg}">${esc(r.provider_id)}</span>
+                      <span class="chip type">${esc(r.protocol)}</span>
+                    </div>
                   </td>
                   <td>${pill}</td>
                   <td class="mono">${fmtMs(r.latency_ms)}</td>
@@ -859,6 +1498,39 @@
         </table>`;
     }
 
+    /* ── Health / system bar ── */
+    function setHealth(ok, offline) {
+      const pill = $("healthPill");
+      const label = $("healthLabel");
+      pill.classList.remove("ok", "err", "off");
+      if (offline) {
+        pill.classList.add("err");
+        label.textContent = "OFFLINE";
+      } else if (ok) {
+        pill.classList.add("ok");
+        label.textContent = "OK";
+      } else {
+        pill.classList.add("err");
+        label.textContent = "ERR";
+      }
+    }
+
+    /* ── Optional /api/info ── */
+    async function fetchInfo() {
+      try {
+        const res = await fetch("/api/info");
+        if (!res.ok) return;
+        const info = await res.json();
+        if (info && info.auth) {
+          $("sysAuthWrap").hidden = false;
+          $("sysAuth").textContent = String(info.auth).slice(0, 80);
+        }
+      } catch (_) {
+        /* optional endpoint */
+      }
+    }
+
+    /* ── Refresh ── */
     async function refresh() {
       try {
         const res = await fetch("/api/status");
@@ -868,46 +1540,66 @@
         const providers = data.providers || [];
         const now = Date.now();
 
+        setHealth(data.ok !== false, false);
+
         $("kpiActive").textContent = t.active ?? 0;
         $("kpiTotal").textContent = fmtN(t.requests ?? 0);
         $("kpiErrors").textContent = fmtN(t.errors ?? 0);
         $("kpiTokens").textContent = fmtN(t.total_tokens ?? 0);
-        $("kpiTokSplit").textContent = `in ${fmtN(t.prompt_tokens||0)} · out ${fmtN(t.completion_tokens||0)}`;
+        $("kpiTokSplit").textContent =
+          "in " + fmtN(t.prompt_tokens || 0) + " · out " + fmtN(t.completion_tokens || 0);
         $("tokIn").textContent = fmtN(t.prompt_tokens || 0);
         $("tokOut").textContent = fmtN(t.completion_tokens || 0);
-        const avgTok = (t.requests > 0) ? Math.round((t.total_tokens || 0) / t.requests) : 0;
+        const avgTok = t.requests > 0
+          ? Math.round((t.total_tokens || 0) / t.requests)
+          : 0;
         $("tokAvg").textContent = fmtN(avgTok);
-        const errRate = t.requests ? ((t.errors / t.requests) * 100).toFixed(1) + "%" : "0%";
+        const errRate = t.requests
+          ? ((t.errors / t.requests) * 100).toFixed(1) + "%"
+          : "0%";
         $("kpiErrRate").textContent = errRate;
 
         if (lastTs && now > lastTs) {
           const dt = (now - lastTs) / 1000;
           const dReq = (t.requests || 0) - lastTotal;
-          if (dReq >= 0) $("kpiRps").textContent = (dReq / dt).toFixed(2) + " rps window";
+          if (dReq >= 0) {
+            lastRps = dReq / dt;
+            $("kpiRps").textContent = lastRps.toFixed(2) + " rps window";
+            $("sysRps").textContent = lastRps.toFixed(2);
+          }
         }
         lastTotal = t.requests || 0;
         lastTs = now;
 
-        $("subline").textContent =
-          `v${data.version} · up ${fmtUptime(data.uptime_seconds)} · ${providers.filter(p=>p.enabled).length} providers`;
+        const up = fmtUptime(data.uptime_seconds);
+        $("sysUptime").textContent = up;
+        $("sysLive").textContent = t.active ?? 0;
+        $("sysUpdated").textContent = new Date().toLocaleTimeString();
+        $("brandVer").textContent = "v" + (data.version || "—");
+        $("overviewMeta").textContent =
+          "v" + data.version + " · up " + up;
 
         const latency = data.latency || { series: [], points: [], window: 10 };
         const series = latency.series || [];
         $("latMeta").textContent =
-          `rolling n=${latency.window || 10} · ${series.length} pts`;
+          "rolling n=" + (latency.window || 10) + " · " + series.length + " pts";
         drawChart(latency);
         renderModels(data.models || []);
         renderProviders(providers);
         renderInFlight(providers);
         renderHistory(providers);
       } catch (e) {
-        $("liveLabel").textContent = "offline";
+        setHealth(false, true);
+        $("sysUptime").textContent = "—";
+        $("sysUpdated").textContent = "offline";
       }
     }
 
     window.addEventListener("resize", () => drawChart(lastLatency));
+    fetchInfo();
     refresh();
     setInterval(refresh, 2000);
+    setInterval(fetchInfo, 30000);
   </script>
 </body>
 </html>

@@ -2,9 +2,16 @@
 # Primary local stack: DeepSeek + Kimi + GLM (fill keys later).
 
 server:
-  host: "127.0.0.1"
+  host: "127.0.0.1"   # set to "0.0.0.0" to accept LAN clients
   port: 8787
   dashboard: true
+
+# Optional gateway auth for LAN access.
+# If api_key is non-empty (or env UNIFY_GATEWAY_KEY is set),
+# /v1/* and /api/* require Authorization: Bearer <key> or x-api-key: <key>.
+# /healthz and /dashboard stay open.
+# auth:
+#   api_key: "${UNIFY_GATEWAY_KEY}"
 
 defaults:
   timeout_seconds: 120

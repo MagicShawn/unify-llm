@@ -3,13 +3,13 @@ from __future__ import annotations
 """Smoke checks that do not require real API keys.
 
 Verifies config load, model routing, OpenAPI surface, and monitor bookkeeping
-against a local dummy upstream.
+against a local dummy upstream. Also checks optional gateway auth.
 """
 
 import asyncio
+import os
 import sys
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -51,7 +51,7 @@ def start_dummy() -> tuple[HTTPServer, int]:
 async def run_checks(port: int) -> None:
     from fastapi.testclient import TestClient  # noqa: PLC0415
     from unify_llm.app import create_app
-    from unify_llm.config import AppConfig, DefaultsConfig, ProviderConfig
+    from unify_llm.config import AppConfig, AuthConfig, ProviderConfig
     from unify_llm.registry import Registry
     from unify_llm.monitor import Monitor
 
@@ -99,11 +99,18 @@ async def run_checks(port: int) -> None:
     assert st["totals"]["active"] == 0
     assert st["totals"]["requests"] == 1
 
-    # --- HTTP surface ---
+    # --- HTTP surface (no gateway auth) ---
     app = create_app(config=cfg)
     with TestClient(app) as client:
         r = client.get("/healthz")
         assert r.status_code == 200 and r.json()["ok"] is True
+
+        r = client.get("/api/info")
+        assert r.status_code == 200
+        info = r.json()
+        assert info["service"] == "unify_llm"
+        assert info["auth_required"] is False
+        assert "lan_ready" in info
 
         r = client.get("/v1/models")
         assert r.status_code == 200
@@ -141,6 +148,175 @@ async def run_checks(port: int) -> None:
 
         r = client.get("/dashboard")
         assert r.status_code == 200 and b"Unify LLM" in r.content
+
+    # --- gateway auth ---
+    secret = "smoke-gateway-key"
+    auth_cfg = AppConfig(
+        providers=cfg.providers,
+        aliases=cfg.aliases,
+        auth=AuthConfig(api_key=secret),
+    )
+    auth_app = create_app(config=auth_cfg)
+    with TestClient(auth_app) as client:
+        # healthz and dashboard stay open
+        r = client.get("/healthz")
+        assert r.status_code == 200 and r.json()["ok"] is True
+
+        r = client.get("/dashboard")
+        assert r.status_code == 200
+
+        # 401 without token
+        for path in ("/v1/models", "/api/status", "/api/info", "/api/history", "/api/config"):
+            r = client.get(path)
+            assert r.status_code == 401, (path, r.status_code, r.text)
+            assert "error" in r.json()
+
+        # 401 with wrong token
+        r = client.get("/v1/models", headers={"Authorization": "Bearer wrong"})
+        assert r.status_code == 401
+        r = client.get("/v1/models", headers={"x-api-key": "wrong"})
+        assert r.status_code == 401
+
+        # 200 with Bearer token
+        r = client.get("/v1/models", headers={"Authorization": f"Bearer {secret}"})
+        assert r.status_code == 200, r.text
+
+        # 200 with x-api-key
+        r = client.get("/v1/models", headers={"x-api-key": secret})
+        assert r.status_code == 200, r.text
+
+        r = client.get("/api/info", headers={"x-api-key": secret})
+        assert r.status_code == 200
+        info = r.json()
+        assert info["auth_required"] is True
+        assert secret not in r.text
+
+        r = client.post(
+            "/v1/chat/completions",
+            json={"model": "chat", "messages": [{"role": "user", "content": "ping"}]},
+            headers={"Authorization": f"Bearer {secret}"},
+        )
+        assert r.status_code == 200, r.text
+
+    # --- env UNIFY_GATEWAY_KEY ---
+    env_secret = "env-gateway-key"
+    os.environ["UNIFY_GATEWAY_KEY"] = env_secret
+    try:
+        env_app = create_app(config=cfg)
+        with TestClient(env_app) as client:
+            r = client.get("/healthz")
+            assert r.status_code == 200
+
+            r = client.get("/v1/models")
+            assert r.status_code == 401
+
+            r = client.get("/v1/models", headers={"x-api-key": env_secret})
+            assert r.status_code == 200
+
+            r = client.get("/api/info", headers={"Authorization": f"Bearer {env_secret}"})
+            assert r.status_code == 200
+            assert r.json()["auth_required"] is True
+    finally:
+        os.environ.pop("UNIFY_GATEWAY_KEY", None)
+
+    # --- provider admin: list / patch / test / reload (with on-disk config) ---
+    import tempfile
+
+    import yaml
+
+    dummy_base = f"http://127.0.0.1:{port}/v1"
+    secret_key = "smoke-secret-key-do-not-leak"
+    raw_cfg = {
+        "server": {"host": "127.0.0.1", "port": 8787},
+        "providers": {
+            "dummy": {
+                "type": "openai",
+                "base_url": dummy_base,
+                "api_key": secret_key,
+                "enabled": True,
+                "models": ["dummy-chat"],
+            },
+            "off": {
+                "type": "openai",
+                "base_url": "https://example.com/v1",
+                "api_key": "x",
+                "enabled": False,
+                "models": ["nope"],
+            },
+        },
+        "aliases": {"chat": "dummy-chat"},
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg_path = Path(tmp) / "config.yaml"
+        cfg_path.write_text(yaml.safe_dump(raw_cfg, sort_keys=False), encoding="utf-8")
+        admin_app = create_app(config_path=cfg_path)
+        with TestClient(admin_app) as client:
+            # GET /api/providers — redacted keys + monitor totals
+            r = client.get("/api/providers")
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body["total"] == 2 and body["enabled"] == 1
+            by_id = {p["id"]: p for p in body["providers"]}
+            assert by_id["dummy"]["api_key"] == "***"
+            assert by_id["off"]["api_key"] == "***"
+            assert secret_key not in r.text
+            assert "totals" in by_id["dummy"]
+
+            # POST /api/providers/{id}/test — openai GET {base}/models
+            r = client.post("/api/providers/dummy/test")
+            assert r.status_code == 200, r.text
+            t = r.json()
+            assert t["ok"] is True and t["status_code"] == 200
+            assert t["latency_ms"] >= 0
+            assert secret_key not in r.text
+
+            # POST test on missing provider
+            r = client.post("/api/providers/nope/test")
+            assert r.status_code == 404
+
+            # PATCH disable — YAML write-back + in-memory
+            r = client.patch("/api/providers/dummy", json={"enabled": False})
+            assert r.status_code == 200, r.text
+            p = r.json()
+            assert p["ok"] is True and p["enabled"] is False and p["written"] is True
+
+            disk = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+            assert disk["providers"]["dummy"]["enabled"] is False
+            assert disk["providers"]["dummy"]["api_key"] == secret_key
+
+            r = client.get("/api/providers")
+            assert r.json()["enabled"] == 0
+
+            r = client.get("/v1/models")
+            ids = {m["id"] for m in r.json()["data"]}
+            assert "dummy-chat" not in ids
+
+            # PATCH re-enable
+            r = client.patch("/api/providers/dummy", json={"enabled": True})
+            assert r.status_code == 200 and r.json()["written"] is True
+
+            # POST /api/admin/reload — picks up on-disk changes
+            disk = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+            disk["providers"]["off"]["enabled"] = True
+            cfg_path.write_text(yaml.safe_dump(disk, sort_keys=False), encoding="utf-8")
+            r = client.post("/api/admin/reload")
+            assert r.status_code == 200, r.text
+            rel = r.json()
+            assert rel["ok"] is True
+            assert rel["providers"] == 2 and rel["enabled"] == 2
+
+            r = client.get("/api/providers")
+            assert r.json()["enabled"] == 2
+
+            # reload with no config_path
+            bare = create_app(config=cfg)
+            with TestClient(bare) as c2:
+                r = c2.post("/api/admin/reload")
+                assert r.status_code == 400
+                r = c2.patch("/api/providers/dummy", json={"enabled": False})
+                assert r.status_code == 200
+                assert r.json()["written"] is False
+                assert r.json()["warning"]
 
     print("SMOKE OK")
 

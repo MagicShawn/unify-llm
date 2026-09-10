@@ -338,7 +338,7 @@ Base：
 | OpenAI 兼容 | `http://127.0.0.1:8787/v1` |
 | Anthropic | `http://127.0.0.1:8787` |
 
-本地中转**不校验**客户端带来的 Authorization（v1 无鉴权）；SDK 仍要求非空 api_key，可填占位符如 `local`。
+本地中转默认**不校验**客户端 Authorization；若设置了网关 Key（`UNIFY_GATEWAY_KEY` 或 `auth.api_key`），`/v1/*` 与 `/api/*` 需带正确 Key。SDK 仍要求非空 api_key，本机无鉴权时可填占位符如 `local`。
 
 ### 6.1 OpenAI Python SDK
 
@@ -449,6 +449,10 @@ http://127.0.0.1:8787/dashboard
 | `GET /api/status` | 并发与在飞快照 |
 | `GET /api/history?limit=50` | 全局最近完成请求 |
 | `GET /api/config` | 配置视图（**API Key 已脱敏为 `***` 或空**） |
+| `GET /api/providers` | Provider 列表（脱敏）+ 监控计数 |
+| `PATCH /api/providers/{id}` | 仅改 `enabled`；写回 YAML，失败则仅改内存并返回 warning |
+| `POST /api/providers/{id}/test` | 上游轻量探测，返回 `status_code` / `latency_ms` |
+| `POST /api/admin/reload` | 按启动路径热加载配置，返回 provider 启用数 |
 
 示例：
 
@@ -456,6 +460,13 @@ http://127.0.0.1:8787/dashboard
 $s = Invoke-RestMethod http://127.0.0.1:8787/api/status
 $s.totals
 $s.providers | Format-Table id, active, total, errors
+
+# LAN ops
+Invoke-RestMethod http://127.0.0.1:8787/api/providers
+Invoke-RestMethod -Method Patch http://127.0.0.1:8787/api/providers/deepseek `
+  -ContentType "application/json" -Body '{"enabled":false}'
+Invoke-RestMethod -Method Post http://127.0.0.1:8787/api/providers/deepseek/test
+Invoke-RestMethod -Method Post http://127.0.0.1:8787/api/admin/reload
 ```
 
 ### 7.3 指标含义
@@ -545,22 +556,89 @@ journalctl -u unify-llm -f
 
 | 变更类型 | 操作 |
 |----------|------|
-| 改模型列表 / 新增 Provider / 改 Key | 编辑 `config.yaml` 后**重启**进程 |
+| 改模型列表 / 新增 Provider / 改 Key | 编辑 `config.yaml` 后 `POST /api/admin/reload`，或**重启**进程 |
+| 开关某个 Provider | `PATCH /api/providers/{id}` body `{"enabled": false}`（写回 YAML + 内存） |
 | 升级依赖 | 激活 venv → `pip install -r requirements.txt` → 重启 |
 | 升级代码 | 备份 `config.yaml` → 覆盖代码 → 重启 → 看 healthz |
 | 换端口 | 改 `server.port` 或 `python main.py --port xxxx` |
 
-配置**不会热加载**；改完必须重启。
+配置支持热加载：改完 `config.yaml` 后调用 `POST /api/admin/reload`（用启动时的路径重建路由，无需重启）。监听端口/host 仍须重启生效。
 
 ---
 
 ## 9. 安全建议
 
 1. **保持 `host: 127.0.0.1`**，除非明确要在局域网内共用。  
-2. **不要把 8787 直接暴露公网**；v1 无客户端鉴权，任何人能打到该端口即可花你的上游额度。  
+2. **不要把 8787 直接暴露公网**；未设置网关 Key 时，任何人能打到该端口即可花你的上游额度。  
 3. API Key 优先用环境变量；`config.yaml` 不要提交到 Git。  
 4. `/api/status` 不回显 Key，但 `/api/config` 会展示 base_url 与模型名，仍属敏感拓扑信息，勿对不可信方开放。  
-5. 若必须局域网共享：先在系统防火墙限制来源 IP，后续版本可加网关 API Key。
+5. 局域网共享见下节「LAN access」；务必设置 `UNIFY_GATEWAY_KEY` 并限制防火墙来源。
+
+---
+
+## 9.1 LAN access（局域网共享）
+
+默认只监听 `127.0.0.1`。要让同一局域网内其他机器访问：
+
+1. 绑定所有网卡：
+
+   ```powershell
+   python main.py --host 0.0.0.0
+   # 或 config.yaml: server.host: "0.0.0.0"
+   ```
+
+2. 设置网关共享密钥（推荐，绑定 0.0.0.0 时务必设置）：
+
+   ```powershell
+   $env:UNIFY_GATEWAY_KEY = "change-me-long-random"
+   ```
+
+   或在 `config.yaml`：
+
+   ```yaml
+   auth:
+     api_key: "${UNIFY_GATEWAY_KEY}"
+   ```
+
+   设置后，`/v1/*` 与 `/api/*` 需带 `Authorization: Bearer <key>` 或 `x-api-key: <key>`；`/healthz` 与 `/dashboard` 不鉴权。
+
+3. 本机防火墙仅对局域网网段放行 TCP 8787（Windows 示例）：
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Unify LLM LAN" -Direction Inbound `
+     -Protocol TCP -LocalPort 8787 -RemoteAddress 192.168.0.0/16 -Action Allow
+   ```
+
+4. 其他机器指向 `http://<host-ip>:8787`：
+
+   | 协议 | Base URL |
+   |------|----------|
+   | OpenAI 兼容 | `http://<host-ip>:8787/v1` |
+   | Anthropic | `http://<host-ip>:8787` |
+
+   示例（OpenAI SDK）：
+
+   ```python
+   client = OpenAI(
+       base_url="http://192.168.1.10:8787/v1",
+       api_key="change-me-long-random",  # 或任意占位 + 客户端自定义 header
+   )
+   ```
+
+   注意：OpenAI/Anthropic SDK 会把 `api_key` 发成 `Authorization: Bearer ...`，可直接把网关 Key 填进 SDK 的 `api_key`。
+
+5. 自检：`GET http://<host-ip>:8787/api/info` 应返回 `lan_ready` 与 `auth_required`（不泄露密钥本身）。
+
+6. 局域网运维：带网关 Key 调用管理接口（响应不回显上游 Key）：
+
+   ```powershell
+   $h = @{ "x-api-key" = $env:UNIFY_GATEWAY_KEY }
+   Invoke-RestMethod http://<host-ip>:8787/api/providers -Headers $h
+   Invoke-RestMethod -Method Post http://<host-ip>:8787/api/providers/deepseek/test -Headers $h
+   Invoke-RestMethod -Method Post http://<host-ip>:8787/api/admin/reload -Headers $h
+   ```
+
+**不要**把 8787 端口映射到公网。
 
 ---
 
@@ -619,9 +697,14 @@ Invoke-RestMethod http://127.0.0.1:8787/v1/chat/completions `
 |------|------|------|
 | `/healthz` | GET | 存活 |
 | `/dashboard` | GET | 监控页 |
+| `/api/info` | GET | 服务名/版本/监听地址/是否需要鉴权 |
 | `/api/status` | GET | 并发 JSON |
 | `/api/history` | GET | 历史 |
 | `/api/config` | GET | 配置（脱敏） |
+| `/api/providers` | GET | Provider 列表（脱敏 + 计数） |
+| `/api/providers/{id}` | PATCH | 开关 enabled（写回 YAML） |
+| `/api/providers/{id}/test` | POST | 上游探测 |
+| `/api/admin/reload` | POST | 配置热加载 |
 | `/docs` | GET | FastAPI 交互文档 |
 | `/v1/models` | GET | 模型列表 |
 | `/v1/chat/completions` | POST | OpenAI Chat |
