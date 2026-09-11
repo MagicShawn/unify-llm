@@ -200,6 +200,18 @@ Status JSON is available at `/api/status` for scripts or other tools.
 
 Token totals for streaming requests are recovered from SSE `usage` fields when the upstream emits them. OpenAI-compatible streams request `stream_options.include_usage`. If a vendor omits usage, those counters stay at zero for that request.
 
+### Persistent token totals
+
+Lifetime totals (requests, errors, prompt/completion tokens, estimated cost) are saved to SQLite:
+
+```text
+data/unify_stats.db
+```
+
+Override the path with `UNIFY_STATS_DB`. Restarting the gateway reloads these counters. Dashboard **Clear stats** (or `POST /api/admin/clear-stats`) zeros them. **Clear logs** (`POST /api/admin/clear-logs`) only clears the live log buffer.
+
+The `data/` directory is gitignored.
+
 ### Token cost estimation (optional)
 
 Unify LLM does **not** pull balances from vendor consoles. It only estimates:

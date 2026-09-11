@@ -1885,6 +1885,13 @@
               title="Download /api/status as JSON"
               aria-label="Export gateway status as JSON"
             >Export JSON</button>
+            <button
+              type="button"
+              class="btn-ops"
+              id="clearStatsBtn"
+              title="Clear token/cost totals and history"
+              aria-label="Clear statistics"
+            >Clear stats</button>
             <div class="page-meta" id="overviewMeta">—</div>
           </div>
         </div>
@@ -2056,6 +2063,13 @@
               title="Export recent history as CSV"
               aria-label="Export recent history as CSV"
             >Export CSV</button>
+            <button
+              type="button"
+              class="btn-ops"
+              id="clearLogsBtn"
+              title="Clear live log stream"
+              aria-label="Clear live logs"
+            >Clear logs</button>
             <div class="page-meta" id="logsMeta">last 20</div>
           </div>
         </div>
@@ -3381,6 +3395,29 @@
     if (exportStatusBtn) exportStatusBtn.addEventListener("click", exportStatusJson);
     const exportCsvBtn = $("exportCsvBtn");
     if (exportCsvBtn) exportCsvBtn.addEventListener("click", exportHistoryCsv);
+    async function clearVia(path, okMsg) {
+      if (!confirm(okMsg + "？")) return;
+      try {
+        const res = await apiFetch(path, { method: "POST" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        showToast("ok", okMsg);
+        refresh();
+      } catch (e) {
+        showToast("err", String(e.message || e));
+      }
+    }
+    const clearLogsBtn = $("clearLogsBtn");
+    if (clearLogsBtn) {
+      clearLogsBtn.addEventListener("click", () =>
+        clearVia("/api/admin/clear-logs", "Logs cleared · 日志已清空")
+      );
+    }
+    const clearStatsBtn = $("clearStatsBtn");
+    if (clearStatsBtn) {
+      clearStatsBtn.addEventListener("click", () =>
+        clearVia("/api/admin/clear-stats", "Stats cleared · 统计已清空")
+      );
+    }
 
     /* ── Shortcuts popover + keyboard ── */
     let shortcutsPopOpen = false;

@@ -80,6 +80,10 @@ class LogBuffer:
         with self._lock:
             return list(self._items)[-limit:]
 
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+
 
 class StreamUsageSniffer:
     """Parse SSE bytes in-flight and recover token usage without breaking passthrough."""
@@ -270,6 +274,7 @@ class Monitor:
         bucket_seconds: float = 5.0,
         series_buckets: int = 60,
         pricing: PricingConfig | None = None,
+        store: Any | None = None,
     ):
         self._lock = threading.Lock()
         self.started_at = time.time()
@@ -285,6 +290,62 @@ class Monitor:
         self._series_buckets = series_buckets
         self._pricing = pricing
         self.logs = LogBuffer(size=200)
+        self._store = store
+        if store is not None:
+            self._load_persisted()
+
+    def _load_persisted(self) -> None:
+        if self._store is None:
+            return
+        try:
+            t = self._store.load_totals()
+        except Exception:  # noqa: BLE001
+            return
+        with self._lock:
+            self._global_total = int(t.get("requests") or 0)
+            self._global_errors = int(t.get("errors") or 0)
+            self._prompt_tokens = int(t.get("prompt_tokens") or 0)
+            self._completion_tokens = int(t.get("completion_tokens") or 0)
+            self._cost_usd = float(t.get("cost_usd") or 0.0)
+
+    def _persist_locked(self) -> None:
+        if self._store is None:
+            return
+        try:
+            self._store.save_totals(
+                {
+                    "requests": self._global_total,
+                    "errors": self._global_errors,
+                    "prompt_tokens": self._prompt_tokens,
+                    "completion_tokens": self._completion_tokens,
+                    "cost_usd": self._cost_usd,
+                }
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    def clear_stats(self) -> None:
+        """Zero lifetime totals (tokens/cost/errors) and per-provider counters."""
+        with self._lock:
+            self._global_total = 0
+            self._global_errors = 0
+            self._prompt_tokens = 0
+            self._completion_tokens = 0
+            self._cost_usd = 0.0
+            self._global_recent.clear()
+            for s in self._providers.values():
+                s.total = 0
+                s.errors = 0
+                s.prompt_tokens = 0
+                s.completion_tokens = 0
+                s.cost_usd = 0.0
+                s.recent.clear()
+                s.last_error = None
+                s.last_error_at = None
+            self._persist_locked()
+
+    def clear_logs(self) -> None:
+        self.logs.clear()
 
     def log(self, level: str, msg: str, **fields: Any) -> None:
         self.logs.add(level, msg, **fields)
@@ -439,6 +500,7 @@ class Monitor:
             stats.recent.append(completed)
             self._global_recent.append(completed)
             self._global_active = max(0, self._global_active - 1)
+            self._persist_locked()
         level = "error" if status == "error" else "info"
         self.logs.add(
             level,
@@ -548,6 +610,7 @@ class Monitor:
                     "completion_tokens": self._completion_tokens,
                     "total_tokens": self._prompt_tokens + self._completion_tokens,
                     "cost_usd": self._cost_usd,
+                    "persisted": self._store is not None,
                 },
                 "latency": self._latency_series_locked(),
                 "models": models,

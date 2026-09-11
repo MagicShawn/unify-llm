@@ -400,11 +400,20 @@ async def run_checks(port: int) -> None:
 
 
 def main() -> None:
+    # Isolate from production stats DB so lifetime totals start at zero.
+    os.environ.setdefault("UNIFY_STATS_DB", str(ROOT / "data" / "smoke_stats.db"))
+    Path(os.environ["UNIFY_STATS_DB"]).parent.mkdir(parents=True, exist_ok=True)
+    if Path(os.environ["UNIFY_STATS_DB"]).exists():
+        Path(os.environ["UNIFY_STATS_DB"]).unlink()
     server, port = start_dummy()
     try:
         asyncio.run(run_checks(port))
     finally:
         server.shutdown()
+        try:
+            Path(os.environ["UNIFY_STATS_DB"]).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":

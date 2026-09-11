@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,8 +20,10 @@ from .convert import DEFAULT_MAX_TOKENS, apply_max_tokens_policy, stream_error_f
 from .monitor import Monitor, StreamUsageSniffer, extract_usage
 from .rate_limit import RateLimiter
 from .registry import Registry, ResolvedRoute
+from .store import StatsStore
 
 STATIC_DIR = Path(__file__).parent / "static"
+DEFAULT_STATS_DB = Path("data") / "unify_stats.db"
 
 PROBE_TIMEOUT_SECONDS = 10.0
 
@@ -67,11 +70,24 @@ async def probe_provider(
 
 
 class AppState:
-    def __init__(self, config: AppConfig, config_path: str | Path | None = None):
+    def __init__(
+        self,
+        config: AppConfig,
+        config_path: str | Path | None = None,
+        stats_db: Path | None = None,
+    ):
         self.config = config
         self.config_path: Path | None = Path(config_path) if config_path is not None else None
         self.registry = Registry(config)
-        self.monitor = Monitor(pricing=config.pricing)
+        db_path = Path(stats_db) if stats_db is not None else None
+        if db_path is None:
+            env_db = os.environ.get("UNIFY_STATS_DB") or ""
+            db_path = Path(env_db) if env_db else DEFAULT_STATS_DB
+        try:
+            self.store = StatsStore(db_path)
+        except Exception:  # noqa: BLE001
+            self.store = None
+        self.monitor = Monitor(pricing=config.pricing, store=self.store)
         self.limiter = RateLimiter(
             requests_per_minute=config.limits.requests_per_minute,
             max_concurrent=config.limits.max_concurrent,
@@ -423,6 +439,18 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
             f"{counts.get('enabled', 0)} enabled)",
         )
         return JSONResponse({"ok": True, "config_path": str(path), **counts})
+
+    @app.post("/api/admin/clear-logs")
+    async def clear_logs() -> dict[str, Any]:
+        state.monitor.clear_logs()
+        state.monitor.log("info", "logs cleared")
+        return {"ok": True, "cleared": "logs"}
+
+    @app.post("/api/admin/clear-stats")
+    async def clear_stats() -> dict[str, Any]:
+        state.monitor.clear_stats()
+        state.monitor.log("info", "stats cleared (tokens/cost/history)")
+        return {"ok": True, "cleared": "stats"}
 
     @app.get("/api/providers")
     async def list_providers() -> dict[str, Any]:
