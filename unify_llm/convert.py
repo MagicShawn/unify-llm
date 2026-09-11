@@ -34,6 +34,57 @@ def _resolve_max_tokens(
     return DEFAULT_MAX_TOKENS
 
 
+def apply_max_tokens_policy(
+    payload: dict[str, Any],
+    *,
+    model_limit: int | None,
+    raise_to_model_limit: bool,
+) -> tuple[dict[str, Any], int | None]:
+    """Return (payload, effective_max_tokens).
+
+    - Client value is kept unless raise_to_model_limit and it is smaller than model_limit.
+    - Missing value is filled from model_limit, then DEFAULT_MAX_TOKENS is left to callers
+      that must always send the field (Anthropic).
+    """
+    body = dict(payload)
+    client_raw = body.get("max_tokens")
+    if client_raw is None:
+        client_raw = body.get("max_completion_tokens")
+    client_n: int | None = None
+    if client_raw is not None:
+        try:
+            client_n = max(int(client_raw), 1)
+        except (TypeError, ValueError):
+            client_n = None
+
+    effective = client_n
+    if effective is None and model_limit:
+        effective = int(model_limit)
+        body["max_tokens"] = effective
+    elif (
+        effective is not None
+        and raise_to_model_limit
+        and model_limit
+        and effective < int(model_limit)
+    ):
+        # Clients (IDEs) often send 4k/8k; raise to vendor model cap.
+        effective = int(model_limit)
+        body["max_tokens"] = effective
+    return body, effective
+
+
+def stream_error_frame(protocol: str, message: str) -> bytes:
+    """Tell the client the stream failed instead of dying silently mid-reply."""
+    payload = {
+        "type": "error",
+        "error": {"type": "upstream_error", "message": message},
+    }
+    if protocol == "anthropic":
+        return f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
+    body = {"error": {"message": message, "type": "upstream_error"}}
+    return f"data: {json.dumps(body, ensure_ascii=False)}\n\ndata: [DONE]\n\n".encode()
+
+
 def openai_chat_to_anthropic_messages(
     payload: dict[str, Any],
     *,
@@ -298,7 +349,9 @@ async def openai_sse_to_anthropic_sse(
             try:
                 obj = json.loads(payload)
             except json.JSONDecodeError:
-                continue
+                # Incomplete JSON split across TCP chunks — keep it for next read.
+                buffer = f"data: {payload}\n".encode() + buffer
+                break
             if not isinstance(obj, dict):
                 continue
             if obj.get("id") and str(obj["id"]).startswith(("chatcmpl", "req")):

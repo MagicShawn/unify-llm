@@ -63,7 +63,12 @@ class OpenAICompatAdapter(BaseAdapter):
         stream: bool,
     ) -> tuple[int, dict[str, Any] | None, AsyncIterator[bytes] | None]:
         """Anthropic client → OpenAI-compatible upstream (cross-protocol)."""
-        chat = anthropic_messages_to_openai_chat(payload)
+        chat = anthropic_messages_to_openai_chat(
+            payload,
+        )
+        # If convert used a default, overlay adapter model limit when client omitted max_tokens
+        if self.model_max_output_tokens and "max_tokens" not in payload:
+            chat["max_tokens"] = int(self.model_max_output_tokens)
         model = str(chat.get("model") or payload.get("model") or "")
         status, data, byte_iter = await self.chat_completions(chat, stream=stream)
         if status >= 400:
