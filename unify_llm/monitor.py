@@ -194,6 +194,9 @@ class InFlightRequest:
     path: str
     started_at: float
     client: str = ""
+    user_agent: str = ""
+    app: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self, now: float | None = None) -> dict[str, Any]:
         now = now or time.time()
@@ -216,6 +219,9 @@ class CompletedRequest:
     error: str | None
     finished_at: float
     client: str = ""
+    user_agent: str = ""
+    app: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
     prompt_tokens: int = 0
     completion_tokens: int = 0
     estimated_cost_usd: float = 0.0
@@ -389,6 +395,9 @@ class Monitor:
         protocol: str,
         path: str,
         client: str = "",
+        user_agent: str = "",
+        app: str = "",
+        headers: dict[str, str] | None = None,
     ) -> str:
         rid = uuid.uuid4().hex[:12]
         rec = InFlightRequest(
@@ -400,6 +409,9 @@ class Monitor:
             path=path,
             started_at=time.time(),
             client=client,
+            user_agent=user_agent or "",
+            app=app or "",
+            headers=dict(headers or {}),
         )
         with self._lock:
             stats = self._providers.get(provider_id)
@@ -416,14 +428,19 @@ class Monitor:
             stats.in_flight[rid] = rec
             self._global_active += 1
             self._global_total += 1
+        src = app or (user_agent[:48] if user_agent else client or "?")
         self.logs.add(
             "info",
-            f"→ {path} {protocol} model={requested_model} via {provider_id}",
+            f"→ {path} {protocol} model={requested_model} via {provider_id} from {src}",
             rid=rid,
             provider=provider_id,
             model=model,
             protocol=protocol,
             path=path,
+            client=client,
+            user_agent=user_agent,
+            app=app,
+            headers=headers or {},
         )
         return rid
 
@@ -454,8 +471,13 @@ class Monitor:
                 protocol = rec.protocol
                 path = rec.path
                 client = rec.client
+                user_agent = rec.user_agent
+                app = rec.app
+                headers = rec.headers
             else:
                 model = requested = protocol = path = client = ""
+                user_agent = app = ""
+                headers = {}
             status = "error" if error or http_status >= 400 else "ok"
             prompt_tokens = int(prompt_tokens or 0)
             completion_tokens = int(completion_tokens or 0)
@@ -480,6 +502,9 @@ class Monitor:
                 error=error,
                 finished_at=now,
                 client=client,
+                user_agent=user_agent,
+                app=app,
+                headers=headers,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 estimated_cost_usd=cost,
@@ -502,11 +527,12 @@ class Monitor:
             self._global_active = max(0, self._global_active - 1)
             self._persist_locked()
         level = "error" if status == "error" else "info"
+        src = app or (user_agent[:48] if user_agent else client or "?")
         self.logs.add(
             level,
             (
                 f"← {path} {http_status} {latency_ms}ms model={model or requested} "
-                f"tok={prompt_tokens}+{completion_tokens}"
+                f"from {src} tok={prompt_tokens}+{completion_tokens}"
                 + (f" err={error}" if error else "")
             ),
             rid=request_id,
@@ -518,6 +544,10 @@ class Monitor:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             error=error,
+            client=client,
+            user_agent=user_agent,
+            app=app,
+            headers=headers,
         )
 
     def _latency_series_locked(self) -> dict[str, Any]:

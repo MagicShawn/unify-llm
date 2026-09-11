@@ -221,6 +221,77 @@ def _client_ip(request: Request) -> str:
     return ""
 
 
+# Headers safe to log (never full secrets).
+_SAFE_HEADER_KEYS = {
+    "user-agent",
+    "content-type",
+    "content-length",
+    "accept",
+    "accept-language",
+    "origin",
+    "referer",
+    "x-request-id",
+    "x-correlation-id",
+    "anthropic-version",
+    "anthropic-beta",
+    "openai-organization",
+    "openai-project",
+}
+_SECRET_HEADERS = {"authorization", "x-api-key", "proxy-authorization", "cookie"}
+
+
+def _mask_secret(value: str) -> str:
+    v = (value or "").strip()
+    if not v:
+        return ""
+    if len(v) <= 8:
+        return "***"
+    return v[:3] + "…" + "***"
+
+
+def _sanitize_headers(request: Request) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for k, v in request.headers.items():
+        lk = k.lower()
+        if lk in _SECRET_HEADERS:
+            scheme = ""
+            raw = v or ""
+            if lk == "authorization" and raw.lower().startswith("bearer "):
+                scheme = "Bearer"
+                raw = raw[7:].strip()
+            out[k] = f"{scheme} { _mask_secret(raw) }".strip() if scheme else _mask_secret(raw)
+            continue
+        if lk in _SAFE_HEADER_KEYS:
+            out[k] = (v or "")[:200]
+    return out
+
+
+def _guess_client_app(user_agent: str) -> str:
+    ua = (user_agent or "").lower()
+    table = [
+        ("opencode", "OpenCode"),
+        ("claude-code", "Claude Code"),
+        ("anthropic", "Anthropic SDK"),
+        ("openai", "OpenAI SDK"),
+        ("curl", "curl"),
+        ("python-httpx", "httpx"),
+        ("python-requests", "requests"),
+        ("node", "Node"),
+        ("go-http-client", "Go"),
+        ("java", "Java"),
+        ("postman", "Postman"),
+        ("insomnia", "Insomnia"),
+        ("vscode", "VS Code"),
+        ("cursor", "Cursor"),
+    ]
+    for key, name in table:
+        if key in ua:
+            return name
+    if not ua:
+        return "unknown"
+    return ua.split("/")[0][:32]
+
+
 def _error_payload(exc: ProxyError) -> dict[str, Any]:
     return {"error": {"message": exc.message, "type": exc.__class__.__name__}}
 
@@ -593,6 +664,9 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 pass
 
         last_err: ProxyError | None = None
+        user_agent = request.headers.get("user-agent", "")
+        client_app = _guess_client_app(user_agent)
+        hdrs = _sanitize_headers(request)
         for idx, rt in enumerate(attempts):
             rid = state.monitor.begin(
                 provider_id=rt.provider_id,
@@ -601,6 +675,9 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 protocol=protocol,
                 path=path,
                 client=_client_ip(request),
+                user_agent=user_agent,
+                app=client_app,
+                headers=hdrs,
             )
             started = time.time()
             model_limit = state.config.resolve_max_output_tokens(rt.model, rt.requested_model)
