@@ -22,7 +22,10 @@ server:
 #   max_concurrent: 4
 
 defaults:
-  timeout_seconds: 120
+  # Idle gap allowed between upstream response chunks (seconds).
+  # Long thinking models may pause >120s; 600s avoids mid-stream aborts.
+  # Note: the live httpx client uses read=600s; raise this if you fork the client.
+  timeout_seconds: 600
   connect_timeout_seconds: 10
   max_retries: 2
   retry_backoff_seconds: 0.8
@@ -31,30 +34,21 @@ defaults:
   # Set to 0 to disable background health tasks. Manual POST /api/providers/{id}/test still works.
   health_interval_seconds: 60
 
-# Optional token cost estimation (USD). Unify LLM does NOT call vendor billing APIs.
-# It estimates cost as: (prompt_tokens * input_rate + completion_tokens * output_rate) / 1e6
-# Rates are USD per 1,000,000 tokens. Leave at 0 to disable cost (tokens still count).
-# After editing, reload: POST /api/admin/reload (or restart).
+# Optional token cost estimation (USD). Not vendor billing — local estimate only:
+#   cost = (prompt_tokens * input_rate + completion_tokens * output_rate) / 1e6
+# DeepSeek rates are official USD. Kimi/GLM official prices are CNY; convert at
+# ~7.2 CNY/USD before putting numbers here. Free models stay 0.
 pricing:
-  # Global fallback for any model without an override.
   per_million_input: 0
   per_million_output: 0
-  # Per-model overrides (key = model id or alias). Replace rates with values from
-  # each vendor's public pricing page — do not copy these numbers blindly.
   models: {}
+  # Example (verify against vendor pages; CNY vendors converted ~7.2):
   # models:
-  #   deepseek-flash:
-  #     input: 0   # USD / 1M prompt tokens
-  #     output: 0  # USD / 1M completion tokens
-  #   deepseek-v4-pro:
-  #     input: 0
-  #     output: 0
-  #   kimi-k3:
-  #     input: 0
-  #     output: 0
-  #   glm-5.3-flash:
-  #     input: 0
-  #     output: 0
+  #   deepseek-flash: { input: 0.3, output: 1.2 }          # USD peak, cache-miss
+  #   deepseek-v4-pro: { input: 1.32, output: 3.96 }
+  #   kimi-k3: { input: 2.78, output: 13.89 }              # was ¥20 / ¥100
+  #   glm-5.3: { input: 1.11, output: 3.89 }               # was ¥8 / ¥28
+  #   glm-4.7-flash: { input: 0, output: 0 }               # free tier
 
 providers:
   # DeepSeek — OpenAI-compatible

@@ -11,6 +11,23 @@ import json
 import time
 from typing import Any, AsyncIterator
 
+# Anthropic requires max_tokens. Do not use a small default — clients that omit
+# it would otherwise get silently truncated replies (common Claude Code / IDE case).
+DEFAULT_MAX_TOKENS = 65536
+
+
+def _resolve_max_tokens(payload: dict[str, Any]) -> int:
+    raw = payload.get("max_tokens")
+    if raw is None:
+        raw = payload.get("max_completion_tokens")
+    if raw is None:
+        return DEFAULT_MAX_TOKENS
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_TOKENS
+    return max(n, 1)
+
 
 def openai_chat_to_anthropic_messages(payload: dict[str, Any]) -> dict[str, Any]:
     system_parts: list[str] = []
@@ -48,7 +65,7 @@ def openai_chat_to_anthropic_messages(payload: dict[str, Any]) -> dict[str, Any]
     out: dict[str, Any] = {
         "model": payload.get("model"),
         "messages": merged,
-        "max_tokens": int(payload.get("max_tokens") or payload.get("max_completion_tokens") or 4096),
+        "max_tokens": _resolve_max_tokens(payload),
     }
     if system_parts:
         out["system"] = "\n\n".join(system_parts)
@@ -78,8 +95,11 @@ def anthropic_messages_to_openai_chat(payload: dict[str, Any]) -> dict[str, Any]
         "model": payload.get("model"),
         "messages": messages,
     }
+    # Pass through client max_tokens unchanged when present; never invent a low cap.
     if payload.get("max_tokens") is not None:
         out["max_tokens"] = payload["max_tokens"]
+    elif payload.get("max_completion_tokens") is not None:
+        out["max_tokens"] = payload["max_completion_tokens"]
     if payload.get("temperature") is not None:
         out["temperature"] = payload["temperature"]
     if payload.get("top_p") is not None:
