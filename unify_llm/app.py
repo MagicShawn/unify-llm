@@ -349,6 +349,13 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
     async def api_status() -> dict[str, Any]:
         body = state.monitor.status()
         body["limits"] = state.limiter.status()
+        pricing = state.config.pricing
+        body["pricing"] = {
+            "configured": pricing.has_any_rate(),
+            "per_million_input": pricing.per_million_input,
+            "per_million_output": pricing.per_million_output,
+            "models": list(pricing.models.keys()),
+        }
         return body
 
     @app.get("/api/history")

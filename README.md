@@ -185,27 +185,44 @@ Token totals for streaming requests are recovered from SSE `usage` fields when t
 
 ### Token cost estimation (optional)
 
-Cost is **not** enabled by default. The gateway never invents vendor prices — `pricing` rates default to `0` and estimated cost stays `$0.00` until you fill them in.
-
-Copy rates (USD per **1,000,000** tokens) from each vendor’s public pricing page into `config.yaml`:
-
-```yaml
-pricing:
-  # Global fallback for any model without an override below.
-  per_million_input: 0.0    # set to your rates, e.g. 0.27
-  per_million_output: 0.0
-  # Optional per-model overrides (model id or alias). Fully replaces defaults.
-  models:
-    # deepseek-flash:
-    #   input: 0.27
-    #   output: 1.10
-```
-
-When rates are set and usage is known (non-stream body or stream SSE), the gateway estimates:
+Unify LLM does **not** pull balances from vendor consoles. It only estimates:
 
 `cost_usd = (prompt_tokens * input_rate + completion_tokens * output_rate) / 1_000_000`
 
-Results appear on `/api/status` (`totals.cost_usd`, each provider’s `cost_usd`, and per-model breakdown) and on the dashboard **Est. cost** KPI (formatted like `$0.00123`).
+By default all rates are `0`, so **Est. cost** stays `—` even when tokens accumulate. That is expected.
+
+1. Open each vendor’s public pricing page and copy **USD per 1M tokens**.
+2. Put rates in `config.yaml` (do not commit this file):
+
+```yaml
+pricing:
+  per_million_input: 0        # global fallback
+  per_million_output: 0
+  models:
+    deepseek-flash:
+      input: 0                # replace with real USD / 1M prompt tokens
+      output: 0               # replace with real USD / 1M completion tokens
+    kimi-k3:
+      input: 0
+      output: 0
+    glm-5.3-flash:
+      input: 0
+      output: 0
+```
+
+3. Reload without restarting:
+
+```bash
+curl -X POST http://127.0.0.1:8787/api/admin/reload
+```
+
+4. Send at least one chat request, then check:
+
+- Dashboard **Est. cost**
+- `GET /api/status` → `totals.cost_usd`, `pricing.configured`
+- Per provider / per model `cost_usd`
+
+If tokens increase but cost stays `—`, rates are still zero. Stream requests only get tokens when the upstream emits `usage`.
 
 ## Develop and test
 

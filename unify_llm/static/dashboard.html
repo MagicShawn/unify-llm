@@ -3386,10 +3386,17 @@
         $("kpiTokSplit").textContent =
           "in " + fmtN(t.prompt_tokens || 0) + " · out " + fmtN(t.completion_tokens || 0);
         const costUsd = Number(t.cost_usd) || 0;
-        $("kpiCost").textContent = fmtUSD(costUsd);
-        $("kpiCostHint").textContent = costUsd > 0
-          ? "est. · set pricing in config"
-          : "set pricing rates";
+        const pricing = data.pricing || {};
+        const pricingOn = pricing.configured === true || costUsd > 0;
+        if (pricingOn) {
+          $("kpiCost").textContent = fmtUSD(costUsd);
+          $("kpiCost").title = "Estimated from tokens × configured rates (not vendor billing)";
+          $("kpiCostHint").textContent = "est. from token rates";
+        } else {
+          $("kpiCost").textContent = "—";
+          $("kpiCost").title = "Set pricing.per_million_input / output in config.yaml, then POST /api/admin/reload";
+          $("kpiCostHint").textContent = "pricing not configured";
+        }
         $("tokIn").textContent = fmtN(t.prompt_tokens || 0);
         $("tokOut").textContent = fmtN(t.completion_tokens || 0);
         const avgTok = t.requests > 0
