@@ -2041,7 +2041,7 @@
         <div class="page-head">
           <div>
             <h1 class="page-title">Traffic</h1>
-            <div class="page-sub">In-flight requests · 进行中请求</div>
+            <div class="page-sub">In-flight + just finished · 进行中与刚完成</div>
           </div>
           <div class="page-meta" id="inflightCount">connecting…</div>
         </div>
@@ -2050,6 +2050,12 @@
             <span class="pulse" aria-hidden="true"></span>
             <span>Connecting to gateway…</span>
           </div>
+        </div>
+        <h2 class="page-sub" style="margin: 16px 0 8px; font-size: 12px; color: var(--ink-3)">
+          Just finished · 最近完成
+        </h2>
+        <div class="card tight table-wrap" id="trafficRecentWrap">
+          <div class="empty">No completed requests yet</div>
         </div>
       </div>
 
@@ -2917,17 +2923,20 @@
     let lastInFlightRows = [];
     function renderInFlight(providers) {
       const rows = [];
+      const finished = [];
       for (const p of providers || []) {
         for (const r of p.in_flight || []) rows.push(r);
+        for (const r of p.recent || []) finished.push(r);
       }
       lastInFlightRows = rows;
-      $("inflightCount").textContent = rows.length ? rows.length + " active" : "idle";
+      finished.sort((a, b) => (b.finished_at || 0) - (a.finished_at || 0));
+      $("inflightCount").textContent =
+        rows.length + " active · " + finished.length + " recent";
       const wrap = $("inflightWrap");
       if (!rows.length) {
         wrap.innerHTML = EMPTY_INFLIGHT();
-        return;
-      }
-      wrap.innerHTML = `
+      } else {
+        wrap.innerHTML = `
         <table>
           <thead>
             <tr>
@@ -2950,6 +2959,47 @@
                   </div>
                 </td>
                 <td class="mono">${fmtMs(r.elapsed_ms)}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>`;
+      }
+
+      const recentWrap = $("trafficRecentWrap");
+      if (!recentWrap) return;
+      const top = finished.slice(0, 15);
+      if (!top.length) {
+        recentWrap.innerHTML =
+          '<div class="empty">No completed requests yet · 发一次对话就会出现在这里</div>';
+        return;
+      }
+      recentWrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th><th>Provider</th><th>Model</th>
+              <th>Status</th><th>Latency</th><th>Tokens</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${top.map((r) => {
+              const t = r.finished_at ? new Date(r.finished_at * 1000).toLocaleTimeString() : "";
+              const pill =
+                r.status === "ok"
+                  ? '<span class="pill ok">ok</span>'
+                  : '<span class="pill err">error</span>';
+              const tok =
+                r.prompt_tokens || r.completion_tokens
+                  ? fmtN(r.prompt_tokens) + "+" + fmtN(r.completion_tokens)
+                  : "—";
+              return `
+              <tr>
+                <td class="mono">${esc(t)}</td>
+                <td>${esc(r.provider_id)}</td>
+                <td><span class="chip model">${esc(r.model || r.requested_model)}</span></td>
+                <td>${pill}</td>
+                <td class="mono">${fmtMs(r.latency_ms)}</td>
+                <td class="mono">${esc(tok)}</td>
               </tr>`;
             }).join("")}
           </tbody>
