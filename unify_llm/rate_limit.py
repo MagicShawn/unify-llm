@@ -33,15 +33,20 @@ class RateLimiter:
         self,
         requests_per_minute: int = 0,
         max_concurrent: int = 0,
+        max_queue: int = 0,
+        queue_timeout_seconds: float = 30.0,
         clock: Callable[[], float] | None = None,
     ):
         self._lock = threading.Lock()
         self._clock: Callable[[], float] = clock or time.monotonic
         self.requests_per_minute = self._norm(requests_per_minute)
         self.max_concurrent = self._norm(max_concurrent)
+        self.max_queue = self._norm(max_queue)
+        self.queue_timeout_seconds = max(0.0, float(queue_timeout_seconds or 0.0))
         # client -> (tokens, last_updated)
         self._buckets: dict[str, tuple[float, float]] = {}
         self._active = 0
+        self._queued = 0
 
     @staticmethod
     def _norm(value: int | None) -> int:
@@ -55,14 +60,32 @@ class RateLimiter:
 
     @property
     def enabled(self) -> bool:
-        return self.requests_per_minute > 0 or self.max_concurrent > 0
+        return (
+            self.requests_per_minute > 0
+            or self.max_concurrent > 0
+            or self.max_queue > 0
+        )
 
-    def update_config(self, requests_per_minute: int | None, max_concurrent: int | None) -> None:
+    @property
+    def queued(self) -> int:
+        with self._lock:
+            return self._queued
+
+    def update_config(
+        self,
+        requests_per_minute: int | None,
+        max_concurrent: int | None,
+        max_queue: int | None = None,
+        queue_timeout_seconds: float | None = None,
+    ) -> None:
         """Apply new limits (e.g. after config reload). Does not clear active count."""
         with self._lock:
             self.requests_per_minute = self._norm(requests_per_minute)
             self.max_concurrent = self._norm(max_concurrent)
-            # Drop stale buckets so a tightened limit takes effect immediately for new clients.
+            if max_queue is not None:
+                self.max_queue = self._norm(max_queue)
+            if queue_timeout_seconds is not None:
+                self.queue_timeout_seconds = max(0.0, float(queue_timeout_seconds or 0.0))
             if self.requests_per_minute <= 0:
                 self._buckets.clear()
 
@@ -93,7 +116,7 @@ class RateLimiter:
                 del self._buckets[k]
 
     def check(self, client: str) -> RateLimitDecision:
-        """Admit one request. On success the concurrency slot is held until :meth:`release`."""
+        """Admit one request (no queue). On success concurrency slot held until :meth:`release`."""
         client = client or "unknown"
         now = self._clock()
         with self._lock:
@@ -124,6 +147,56 @@ class RateLimiter:
                 remaining = int(math.floor(tokens))
 
             self._active += 1
+            return RateLimitDecision(
+                allowed=True,
+                retry_after=0,
+                reason=None,
+                remaining=remaining,
+                active=self._active,
+            )
+
+    def try_reserve_concurrency(self) -> bool:
+        """Take one concurrency slot if under cap (or cap disabled)."""
+        with self._lock:
+            if self.max_concurrent <= 0 or self._active < self.max_concurrent:
+                self._active += 1
+                return True
+            return False
+
+    def enter_queue(self) -> bool:
+        """Register a waiter. False if queue is full."""
+        with self._lock:
+            if self.max_queue > 0 and self._queued >= self.max_queue:
+                return False
+            self._queued += 1
+            return True
+
+    def leave_queue(self) -> None:
+        with self._lock:
+            if self._queued > 0:
+                self._queued -= 1
+
+    def check_rpm_only(self, client: str) -> RateLimitDecision:
+        """Apply RPM (if on) without touching concurrency. Used after a queue slot opens."""
+        client = client or "unknown"
+        now = self._clock()
+        with self._lock:
+            remaining: int | None = None
+            if self.requests_per_minute > 0:
+                tokens = self._refill_locked(client, now)
+                if tokens < 1.0:
+                    need = 1.0 - tokens
+                    retry = max(1, int(math.ceil(need * 60.0 / self.requests_per_minute)))
+                    return RateLimitDecision(
+                        allowed=False,
+                        retry_after=retry,
+                        reason="requests_per_minute",
+                        remaining=0,
+                        active=self._active,
+                    )
+                tokens -= 1.0
+                self._buckets[client] = (tokens, now)
+                remaining = int(math.floor(tokens))
             return RateLimitDecision(
                 allowed=True,
                 retry_after=0,
@@ -166,7 +239,10 @@ class RateLimiter:
                 "enabled": self.enabled,
                 "requests_per_minute": self.requests_per_minute,
                 "max_concurrent": self.max_concurrent,
+                "max_queue": self.max_queue,
+                "queue_timeout_seconds": self.queue_timeout_seconds,
                 "active": self._active,
+                "queued": self._queued,
                 "remaining": remaining,
                 "tracked_clients": len(self._buckets),
             }

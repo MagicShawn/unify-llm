@@ -491,7 +491,7 @@
     /* ── Cards / KPI ── */
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: var(--gap);
       margin-bottom: var(--gap);
     }
@@ -1901,6 +1901,11 @@
             <div class="label"><span>Active</span><span class="zh">进行中</span></div>
             <div class="value accent" id="kpiActive">0</div>
             <div class="hint">in-flight now</div>
+          </div>
+          <div class="card kpi">
+            <div class="label"><span>Queued</span><span class="zh">排队</span></div>
+            <div class="value" id="kpiQueued">0</div>
+            <div class="hint">waiting · max <span id="kpiMaxConc">∞</span> concurrent</div>
           </div>
           <div class="card kpi">
             <div class="label"><span>Requests</span><span class="zh">请求</span></div>
@@ -3661,20 +3666,35 @@
 
         // Optional rate-limit line (hidden when both limits are off)
         const lim = data.limits;
-        if (lim && lim.enabled) {
+        if (lim && (lim.enabled || lim.max_concurrent > 0 || lim.max_queue > 0)) {
           $("sysLimitsWrap").hidden = false;
           const parts = [];
+          if (lim.max_concurrent > 0) {
+            parts.push("c " + (lim.active ?? 0) + "/" + lim.max_concurrent);
+          } else {
+            parts.push("c " + (lim.active ?? 0));
+          }
+          if (lim.max_queue > 0) {
+            parts.push("q " + (lim.queued ?? 0) + "/" + lim.max_queue);
+          } else if (lim.queued) {
+            parts.push("q " + lim.queued);
+          }
           if (lim.requests_per_minute > 0) {
             parts.push(
               (lim.remaining != null ? lim.remaining : "—") + "/" + lim.requests_per_minute + "/m"
             );
           }
-          if (lim.max_concurrent > 0) {
-            parts.push("c " + (lim.active ?? 0) + "/" + lim.max_concurrent);
-          }
           $("sysLimits").textContent = parts.join(" · ") || "on";
+          const qEl = $("kpiQueued");
+          if (qEl) qEl.textContent = lim.queued ?? 0;
+          const maxEl = $("kpiMaxConc");
+          if (maxEl) maxEl.textContent = lim.max_concurrent > 0 ? lim.max_concurrent : "∞";
         } else {
           $("sysLimitsWrap").hidden = true;
+          const qEl = $("kpiQueued");
+          if (qEl) qEl.textContent = "0";
+          const maxEl = $("kpiMaxConc");
+          if (maxEl) maxEl.textContent = "∞";
         }
 
         const latency = data.latency || { series: [], points: [], window: 10 };

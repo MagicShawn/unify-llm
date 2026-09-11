@@ -18,8 +18,12 @@ server:
 # limits:
 #   # Per client IP, token-bucket over a 60s window. Exceed → HTTP 429 + Retry-After.
 #   requests_per_minute: 60
-#   # Global concurrent in-flight /v1/* requests. At cap → HTTP 429 (no queue).
-#   max_concurrent: 4
+#   # Global concurrent in-flight /v1/* requests. At cap → queue or 429.
+#   max_concurrent: 8
+#   # How many may wait in queue when at max_concurrent. 0 = reject immediately.
+#   max_queue: 32
+#   # Max seconds a request may wait in queue before 429.
+#   queue_timeout_seconds: 60
 
 defaults:
   # Idle gap allowed between upstream response chunks (seconds).

@@ -40,28 +40,38 @@ class AuthConfig(BaseModel):
 class LimitsConfig(BaseModel):
     """Optional gateway rate limits for /v1/* only.
 
-    Both fields: 0 (or omitted / None) disables the corresponding check.
-    Env expansion is not required for these ints.
+    0 (or omitted / None) disables the corresponding check.
     """
 
     # Per client IP token bucket. 0 disables RPM limiting.
     requests_per_minute: int = 0
     # Global concurrent in-flight /v1/* requests. 0 disables the concurrency cap.
     max_concurrent: int = 0
+    # How many requests may wait when at max_concurrent. 0 = reject immediately (429).
+    max_queue: int = 0
+    # Max seconds a request may wait in queue before 429.
+    queue_timeout_seconds: float = 30.0
 
-    @field_validator("requests_per_minute", "max_concurrent", mode="before")
+    @field_validator(
+        "requests_per_minute", "max_concurrent", "max_queue", mode="before"
+    )
     @classmethod
     def _none_is_disabled(cls, v: Any) -> Any:
         if v is None:
             return 0
         return v
 
-    @field_validator("requests_per_minute", "max_concurrent")
+    @field_validator("requests_per_minute", "max_concurrent", "max_queue")
     @classmethod
     def _non_negative(cls, v: int) -> int:
         if v < 0:
             raise ValueError("must be >= 0 (0 disables)")
         return int(v)
+
+    @field_validator("queue_timeout_seconds")
+    @classmethod
+    def _timeout_non_negative(cls, v: float) -> float:
+        return max(0.0, float(v or 0.0))
 
 
 class DefaultsConfig(BaseModel):

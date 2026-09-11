@@ -1216,7 +1216,10 @@ def test_api_status_includes_limits_when_disabled():
         assert lim["remaining"] is None
 
         r2 = client.get("/api/config")
-        assert r2.json()["limits"] == {"requests_per_minute": 0, "max_concurrent": 0}
+        lim2 = r2.json()["limits"]
+        assert lim2["requests_per_minute"] == 0
+        assert lim2["max_concurrent"] == 0
+        assert "max_queue" in lim2
 
 
 def test_v1_rate_limit_returns_429_with_retry_after():

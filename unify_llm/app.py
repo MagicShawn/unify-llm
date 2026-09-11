@@ -91,6 +91,8 @@ class AppState:
         self.limiter = RateLimiter(
             requests_per_minute=config.limits.requests_per_minute,
             max_concurrent=config.limits.max_concurrent,
+            max_queue=config.limits.max_queue,
+            queue_timeout_seconds=config.limits.queue_timeout_seconds,
         )
         self._register_all(config)
         self.http: httpx.AsyncClient | None = None
@@ -114,6 +116,8 @@ class AppState:
         self.limiter.update_config(
             config.limits.requests_per_minute,
             config.limits.max_concurrent,
+            config.limits.max_queue,
+            config.limits.queue_timeout_seconds,
         )
         self._register_all(config)
         enabled = sum(1 for p in config.providers.values() if p.enabled)
@@ -371,30 +375,68 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
         if not state.limiter.enabled:
             return await call_next(request)
 
-        decision = state.limiter.check(_client_ip(request))
-        if not decision.allowed:
-            if decision.reason == "max_concurrent":
-                message = (
-                    f"Too many concurrent requests (max {state.limiter.max_concurrent}). "
-                    "Retry shortly."
-                )
-            else:
-                rpm = state.limiter.requests_per_minute
-                message = (
-                    f"Rate limit exceeded: {rpm} requests per minute. "
-                    f"Retry after {decision.retry_after}s."
-                )
+        client = _client_ip(request)
+
+        async def _reject(reason: str, retry_after: int, message: str) -> Response:
             return JSONResponse(
                 status_code=429,
                 content={
                     "error": {
                         "message": message,
                         "type": "RateLimitError",
-                        "retry_after": decision.retry_after,
+                        "reason": reason,
+                        "retry_after": retry_after,
+                        "active": state.limiter.status().get("active"),
+                        "queued": state.limiter.status().get("queued"),
                     }
                 },
-                headers={"Retry-After": str(decision.retry_after)},
+                headers={"Retry-After": str(retry_after)},
             )
+
+        # RPM first (cheap reject).
+        rpm_decision = state.limiter.check_rpm_only(client)
+        if not rpm_decision.allowed and rpm_decision.reason == "requests_per_minute":
+            return await _reject(
+                "requests_per_minute",
+                rpm_decision.retry_after,
+                f"Rate limit exceeded: {state.limiter.requests_per_minute} requests per minute. "
+                f"Retry after {rpm_decision.retry_after}s.",
+            )
+
+        # Concurrency + optional queue.
+        if not state.limiter.try_reserve_concurrency():
+            if state.limiter.max_queue <= 0:
+                return await _reject(
+                    "max_concurrent",
+                    1,
+                    f"Too many concurrent requests (max {state.limiter.max_concurrent}). "
+                    "Queue disabled; retry shortly.",
+                )
+            if not state.limiter.enter_queue():
+                return await _reject(
+                    "queue_full",
+                    1,
+                    f"Queue full (max {state.limiter.max_queue} waiting, "
+                    f"active {state.limiter.status().get('active')}). Retry shortly.",
+                )
+            timeout = max(1.0, float(state.limiter.queue_timeout_seconds or 30.0))
+            deadline = time.monotonic() + timeout
+            reserved = False
+            try:
+                while time.monotonic() < deadline:
+                    if state.limiter.try_reserve_concurrency():
+                        reserved = True
+                        break
+                    await asyncio.sleep(0.05)
+            finally:
+                state.limiter.leave_queue()
+            if not reserved:
+                return await _reject(
+                    "queue_timeout",
+                    1,
+                    f"Timed out waiting in queue ({int(timeout)}s) at concurrency "
+                    f"{state.limiter.max_concurrent}.",
+                )
 
         released = False
 
