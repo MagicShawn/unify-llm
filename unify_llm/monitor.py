@@ -41,29 +41,22 @@ class StreamUsageSniffer:
             self._buf += chunk.decode("utf-8", errors="replace")
         except Exception:  # noqa: BLE001
             return
-        # keep buffer bounded
         if len(self._buf) > 512_000:
             self._buf = self._buf[-64_000:]
 
+        # Process only complete lines; keep the incomplete tail for the next chunk.
         while True:
-            # SSE events separated by blank line; also handle line-wise data:
-            idx = self._buf.find("\n\n")
-            if idx < 0:
-                # try line-based for data: ...\n
+            nl = self._buf.find("\n")
+            if nl < 0:
                 break
-            block, self._buf = self._buf[:idx], self._buf[idx + 2 :]
-            self._handle_block(block)
-
-        # also drain any complete data lines left without trailing blank yet
-        lines = self._buf.split("\n")
-        keep = []
-        for line in lines:
+            line, self._buf = self._buf[:nl], self._buf[nl + 1 :]
+            line = line.rstrip("\r")
+            if not line:
+                continue
             if line.startswith("data:"):
                 self._handle_data_line(line[5:].strip())
-            else:
-                keep.append(line)
-        # only keep trailing incomplete structure
-        self._buf = "\n".join(keep[-5:])
+            elif line.startswith("event:"):
+                continue
 
     def _handle_block(self, block: str) -> None:
         for line in block.splitlines():
@@ -186,6 +179,7 @@ class ProviderStats:
     completion_tokens: int = 0
     last_error: str | None = None
     last_error_at: float | None = None
+    last_health: dict[str, Any] | None = None
     in_flight: dict[str, InFlightRequest] = field(default_factory=dict)
     recent: deque[CompletedRequest] = field(default_factory=lambda: deque(maxlen=80))
 
@@ -204,6 +198,7 @@ class ProviderStats:
             "completion_tokens": self.completion_tokens,
             "last_error": self.last_error,
             "last_error_at": self.last_error_at,
+            "last_health": dict(self.last_health) if self.last_health else None,
             "in_flight": [r.to_dict(now) for r in self.in_flight.values()],
             "recent": [r.to_dict() for r in list(self.recent)[-25:]],
         }
@@ -456,7 +451,29 @@ class Monitor:
                 "completion_tokens": stats.completion_tokens,
                 "last_error": stats.last_error,
                 "last_error_at": stats.last_error_at,
+                "last_health": dict(stats.last_health) if stats.last_health else None,
             }
+
+    def set_health(self, provider_id: str, health: dict[str, Any]) -> None:
+        """Store the latest lightweight probe result for a provider.
+
+        Accepts {ok, status_code, latency_ms} (optional error class name).
+        Never store raw response bodies or API keys.
+        """
+        record: dict[str, Any] = {
+            "ok": bool(health.get("ok")),
+            "status_code": int(health.get("status_code") or 0),
+            "latency_ms": int(health.get("latency_ms") or 0),
+            "checked_at": time.time(),
+        }
+        err = health.get("error")
+        if isinstance(err, str) and err:
+            record["error"] = err[:80]
+        with self._lock:
+            stats = self._providers.get(provider_id)
+            if stats is None:
+                return
+            stats.last_health = record
 
     def history(self, limit: int = 50) -> dict[str, Any]:
         with self._lock:
