@@ -13,6 +13,14 @@ server:
 # auth:
 #   api_key: "${UNIFY_GATEWAY_KEY}"
 
+# Optional gateway rate limits (applies to /v1/* only; /api/* and /healthz are unrestricted).
+# 0 or omitted disables the corresponding check.
+# limits:
+#   # Per client IP, token-bucket over a 60s window. Exceed → HTTP 429 + Retry-After.
+#   requests_per_minute: 60
+#   # Global concurrent in-flight /v1/* requests. At cap → HTTP 429 (no queue).
+#   max_concurrent: 4
+
 defaults:
   timeout_seconds: 120
   connect_timeout_seconds: 10
@@ -22,6 +30,19 @@ defaults:
   # Background probe of each enabled provider (openai GET /models, anthropic GET base).
   # Set to 0 to disable background health tasks. Manual POST /api/providers/{id}/test still works.
   health_interval_seconds: 60
+
+# Optional token cost estimation (USD). Defaults are 0 — never invent vendor prices.
+# Fill rates from each vendor's public pricing page (USD per 1_000_000 tokens).
+# When left at 0, /api/status and the dashboard still report tokens; cost stays $0.00.
+# pricing:
+#   # Global fallback rates applied to any model without an override below.
+#   per_million_input: 0
+#   per_million_output: 0
+#   # Optional per-model overrides (key = model id or alias). Fully replaces defaults.
+#   models:
+#     # deepseek-flash:
+#     #   input: 0.27
+#     #   output: 1.10
 
 providers:
   # DeepSeek — OpenAI-compatible

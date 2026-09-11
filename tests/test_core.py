@@ -7,10 +7,12 @@ Run from repo root:
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 
 import pytest
 import yaml
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from unify_llm.app import create_app, probe_provider
@@ -18,6 +20,9 @@ from unify_llm.config import (
     AppConfig,
     AuthConfig,
     DefaultsConfig,
+    LimitsConfig,
+    ModelPricing,
+    PricingConfig,
     ProviderConfig,
     expand_env,
     load_config,
@@ -29,7 +34,13 @@ from unify_llm.convert import (
     openai_response_to_anthropic_message,
 )
 from unify_llm.errors import ModelNotFoundError
-from unify_llm.monitor import Monitor, StreamUsageSniffer, extract_usage
+from unify_llm.monitor import (
+    Monitor,
+    StreamUsageSniffer,
+    estimate_cost_usd,
+    extract_usage,
+)
+from unify_llm.rate_limit import RateLimiter
 from unify_llm.registry import Registry
 
 
@@ -641,3 +652,453 @@ def test_health_tasks_restart_on_admin_reload_and_patch(tmp_path: Path):
         r = client.post("/api/admin/reload")
         assert r.status_code == 200
         assert len(state._health_tasks) == 2
+
+
+# ---------------------------------------------------------------------------
+# pricing / cost estimation
+# ---------------------------------------------------------------------------
+
+
+def test_pricing_defaults_are_zero_not_invented():
+    p = PricingConfig()
+    assert p.per_million_input == 0.0
+    assert p.per_million_output == 0.0
+    assert p.models == {}
+    assert p.has_any_rate() is False
+    assert estimate_cost_usd(p, model="m", prompt_tokens=1000, completion_tokens=1000) == 0.0
+    assert estimate_cost_usd(None, model="m", prompt_tokens=10, completion_tokens=10) == 0.0
+
+
+def test_estimate_cost_global_rates():
+    p = PricingConfig(per_million_input=1.0, per_million_output=2.0)
+    # 1M input * $1 + 1M output * $2 = $3
+    assert estimate_cost_usd(p, model="m", prompt_tokens=1_000_000, completion_tokens=1_000_000) == 3.0
+    # 500k in * $0.5/M + 250k out * $2/M
+    p2 = PricingConfig(per_million_input=0.5, per_million_output=2.0)
+    assert estimate_cost_usd(p2, model="m", prompt_tokens=500_000, completion_tokens=250_000) == 0.75
+
+
+def test_estimate_cost_model_override_replaces_default():
+    p = PricingConfig(
+        per_million_input=10.0,
+        per_million_output=10.0,
+        models={"cheap": ModelPricing(input=0.25, output=0.5)},
+    )
+    # override wins
+    assert estimate_cost_usd(p, model="cheap", prompt_tokens=1_000_000, completion_tokens=0) == 0.25
+    assert estimate_cost_usd(p, model="cheap", prompt_tokens=0, completion_tokens=1_000_000) == 0.5
+    # non-overridden model uses defaults
+    assert estimate_cost_usd(p, model="other", prompt_tokens=1_000_000, completion_tokens=0) == 10.0
+
+
+def test_estimate_cost_requested_model_alias_fallback():
+    p = PricingConfig(
+        per_million_input=99.0,
+        per_million_output=99.0,
+        models={"fast": ModelPricing(input=1.0, output=1.0)},
+    )
+    # resolved model has no override; alias does
+    cost = estimate_cost_usd(
+        p,
+        model="deepseek-flash",
+        requested_model="fast",
+        prompt_tokens=1_000_000,
+        completion_tokens=0,
+    )
+    assert cost == 1.0
+
+
+def test_estimate_cost_zero_tokens_or_zero_rates():
+    p = PricingConfig(per_million_input=5.0, per_million_output=5.0)
+    assert estimate_cost_usd(p, model="m", prompt_tokens=0, completion_tokens=0) == 0.0
+    empty = PricingConfig()
+    assert estimate_cost_usd(empty, model="m", prompt_tokens=1_000_000, completion_tokens=1_000_000) == 0.0
+
+
+def test_monitor_accumulates_cost_global_provider_and_request():
+    pricing = PricingConfig(per_million_input=1.0, per_million_output=2.0)
+    mon = Monitor(pricing=pricing)
+    mon.register_provider(
+        "p1",
+        type="openai",
+        base_url="http://127.0.0.1:9",
+        enabled=True,
+        models=["m1"],
+    )
+    rid = mon.begin(
+        provider_id="p1",
+        model="m1",
+        requested_model="m1",
+        protocol="openai",
+        path="/v1/chat/completions",
+    )
+    mon.end(
+        rid,
+        provider_id="p1",
+        http_status=200,
+        prompt_tokens=1_000_000,
+        completion_tokens=500_000,
+    )
+    # 1*1.0 + 0.5*2.0 = 2.0
+    st = mon.status()
+    assert st["totals"]["cost_usd"] == 2.0
+    assert st["totals"]["prompt_tokens"] == 1_000_000
+    assert st["totals"]["completion_tokens"] == 500_000
+    prov = next(p for p in st["providers"] if p["id"] == "p1")
+    assert prov["cost_usd"] == 2.0
+    assert mon.provider_totals("p1")["cost_usd"] == 2.0
+    assert len(st["models"]) == 1
+    assert st["models"][0]["cost_usd"] == 2.0
+    recent = mon.history(10)["items"]
+    assert recent[-1]["estimated_cost_usd"] == 2.0
+
+
+def test_monitor_cost_zero_without_pricing():
+    mon = Monitor()
+    mon.register_provider(
+        "p1",
+        type="openai",
+        base_url="http://127.0.0.1:9",
+        enabled=True,
+        models=["m1"],
+    )
+    rid = mon.begin(
+        provider_id="p1",
+        model="m1",
+        requested_model="m1",
+        protocol="openai",
+        path="/v1/chat/completions",
+    )
+    mon.end(rid, provider_id="p1", http_status=200, prompt_tokens=100, completion_tokens=50)
+    st = mon.status()
+    assert st["totals"]["cost_usd"] == 0.0
+    assert st["models"][0]["cost_usd"] == 0.0
+    assert mon.history(1)["items"][-1]["estimated_cost_usd"] == 0.0
+
+
+def test_load_config_pricing_section(tmp_path: Path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "providers": {
+                    "p": {
+                        "type": "openai",
+                        "base_url": "http://127.0.0.1:9",
+                        "enabled": True,
+                        "models": ["m-x"],
+                    }
+                },
+                "pricing": {
+                    "per_million_input": 0.25,
+                    "per_million_output": 1.0,
+                    "models": {
+                        "m-x": {"input": 0.1, "output": 0.2},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    assert cfg.pricing.per_million_input == 0.25
+    assert cfg.pricing.per_million_output == 1.0
+    assert cfg.pricing.models["m-x"].input == 0.1
+    assert cfg.pricing.models["m-x"].output == 0.2
+    assert cfg.pricing.has_any_rate() is True
+
+
+def test_api_status_includes_cost_usd():
+    pricing = PricingConfig(per_million_input=2.0, per_million_output=0.0)
+    cfg = AppConfig(
+        defaults=DefaultsConfig(health_interval_seconds=0),
+        pricing=pricing,
+        providers={
+            "p1": ProviderConfig(
+                type="openai",
+                base_url="http://127.0.0.1:9",
+                api_key="k",
+                enabled=True,
+                models=["m-x"],
+            )
+        },
+    )
+    app = create_app(config=cfg)
+    with TestClient(app) as client:
+        state = app.state.proxy
+        rid = state.monitor.begin(
+            provider_id="p1",
+            model="m-x",
+            requested_model="m-x",
+            protocol="openai",
+            path="/v1/chat/completions",
+        )
+        state.monitor.end(rid, provider_id="p1", http_status=200, prompt_tokens=500_000, completion_tokens=0)
+
+        r = client.get("/api/status")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["totals"]["cost_usd"] == 1.0
+        assert body["models"][0]["cost_usd"] == 1.0
+        prov = next(p for p in body["providers"] if p["id"] == "p1")
+        assert prov["cost_usd"] == 1.0
+
+        r2 = client.get("/api/config")
+        assert r2.status_code == 200
+        assert r2.json()["pricing"]["per_million_input"] == 2.0
+
+
+# ---------------------------------------------------------------------------
+# rate limits (optional gateway limits)
+# ---------------------------------------------------------------------------
+
+
+class _FakeClock:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def _limits_app(rpm: int = 0, max_concurrent: int = 0) -> FastAPI:
+    return create_app(
+        config=AppConfig(
+            defaults=DefaultsConfig(health_interval_seconds=0),
+            limits=LimitsConfig(
+                requests_per_minute=rpm,
+                max_concurrent=max_concurrent,
+            ),
+            providers={
+                "p1": ProviderConfig(
+                    type="openai",
+                    base_url="http://127.0.0.1:9",
+                    api_key="k",
+                    enabled=True,
+                    models=["m-x"],
+                )
+            },
+            aliases={"alias-x": "m-x"},
+        )
+    )
+
+
+def test_limits_config_defaults_none_and_validation():
+    assert LimitsConfig().requests_per_minute == 0
+    assert LimitsConfig().max_concurrent == 0
+    # None is treated as disabled
+    assert LimitsConfig(requests_per_minute=None, max_concurrent=None).requests_per_minute == 0  # type: ignore[arg-type]
+    assert LimitsConfig(requests_per_minute=30, max_concurrent=4).requests_per_minute == 30
+    with pytest.raises(Exception):
+        LimitsConfig(requests_per_minute=-1)
+    with pytest.raises(Exception):
+        LimitsConfig(max_concurrent=-5)
+
+
+def test_rate_limiter_disabled_allows_unlimited():
+    rl = RateLimiter(0, 0)
+    assert rl.enabled is False
+    for _ in range(50):
+        d = rl.check("10.0.0.1")
+        assert d.allowed is True
+        rl.release()
+    st = rl.status()
+    assert st["enabled"] is False
+    assert st["requests_per_minute"] == 0
+    assert st["max_concurrent"] == 0
+
+
+def test_rate_limiter_rpm_token_bucket_and_refill():
+    clock = _FakeClock()
+    rl = RateLimiter(requests_per_minute=5, max_concurrent=0, clock=clock)
+    assert rl.enabled is True
+    for i in range(5):
+        d = rl.check("10.0.0.1")
+        assert d.allowed is True, i
+        assert d.remaining == 4 - i
+        rl.release()
+
+    denied = rl.check("10.0.0.1")
+    assert denied.allowed is False
+    assert denied.reason == "requests_per_minute"
+    assert denied.retry_after >= 1
+    assert denied.remaining == 0
+
+    # different client still has its own bucket
+    other = rl.check("10.0.0.2")
+    assert other.allowed is True
+    rl.release()
+
+    # after 12s one token should have refilled at 5/min
+    clock.t = 12.0
+    again = rl.check("10.0.0.1")
+    assert again.allowed is True
+    rl.release()
+
+
+def test_rate_limiter_max_concurrent():
+    clock = _FakeClock()
+    rl = RateLimiter(requests_per_minute=0, max_concurrent=2, clock=clock)
+    assert rl.check("a").allowed is True
+    assert rl.check("b").allowed is True
+    blocked = rl.check("c")
+    assert blocked.allowed is False
+    assert blocked.reason == "max_concurrent"
+    assert blocked.retry_after == 1
+    assert blocked.active == 2
+    rl.release()
+    assert rl.check("c").allowed is True
+    rl.release()
+    rl.release()
+    # extra release does not go negative
+    rl.release()
+    assert rl.status()["active"] == 0
+
+
+def test_rate_limiter_status_and_update_config():
+    clock = _FakeClock()
+    rl = RateLimiter(requests_per_minute=10, max_concurrent=3, clock=clock)
+    rl.check("10.0.0.1")
+    st = rl.status()
+    assert st["enabled"] is True
+    assert st["requests_per_minute"] == 10
+    assert st["max_concurrent"] == 3
+    assert st["active"] == 1
+    assert st["remaining"] == 9
+    assert st["tracked_clients"] == 1
+    assert "api_key" not in st
+
+    rl.update_config(0, 0)
+    assert rl.enabled is False
+    assert rl.status()["requests_per_minute"] == 0
+    # active count is preserved across config update
+    assert rl.status()["active"] == 1
+    rl.release()
+
+
+def test_load_config_limits_section(tmp_path: Path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "providers": {
+                    "p": {
+                        "type": "openai",
+                        "base_url": "http://127.0.0.1:9",
+                        "enabled": True,
+                        "models": ["m-x"],
+                    }
+                },
+                "limits": {"requests_per_minute": 30, "max_concurrent": 2},
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    assert cfg.limits.requests_per_minute == 30
+    assert cfg.limits.max_concurrent == 2
+
+
+def test_api_status_includes_limits_when_disabled():
+    app = _limits_app(0, 0)
+    with TestClient(app) as client:
+        r = client.get("/api/status")
+        assert r.status_code == 200
+        lim = r.json()["limits"]
+        assert lim["enabled"] is False
+        assert lim["requests_per_minute"] == 0
+        assert lim["max_concurrent"] == 0
+        assert lim["active"] == 0
+        assert lim["remaining"] is None
+
+        r2 = client.get("/api/config")
+        assert r2.json()["limits"] == {"requests_per_minute": 0, "max_concurrent": 0}
+
+
+def test_v1_rate_limit_returns_429_with_retry_after():
+    app = _limits_app(rpm=2, max_concurrent=0)
+    with TestClient(app) as client:
+        r1 = client.get("/v1/models")
+        assert r1.status_code == 200
+        r2 = client.get("/v1/models")
+        assert r2.status_code == 200
+        r3 = client.get("/v1/models")
+        assert r3.status_code == 429, r3.text
+        body = r3.json()
+        assert body["error"]["type"] == "RateLimitError"
+        assert "Rate limit exceeded" in body["error"]["message"]
+        assert "Retry-After" in r3.headers
+        assert int(r3.headers["Retry-After"]) >= 1
+
+        # non-/v1 endpoints are not rate limited
+        assert client.get("/healthz").status_code == 200
+        assert client.get("/api/status").status_code == 200
+        lim = client.get("/api/status").json()["limits"]
+        assert lim["enabled"] is True
+        assert lim["requests_per_minute"] == 2
+        assert lim["remaining"] == 0
+
+
+def test_v1_max_concurrent_returns_429():
+    app = _limits_app(rpm=0, max_concurrent=1)
+    with TestClient(app) as client:
+        # occupy the single slot via the live limiter
+        decision = app.state.proxy.limiter.check("manual")
+        assert decision.allowed is True
+
+        r = client.get("/v1/models")
+        assert r.status_code == 429, r.text
+        body = r.json()
+        assert body["error"]["type"] == "RateLimitError"
+        assert "concurrent" in body["error"]["message"].lower()
+        assert "Retry-After" in r.headers
+
+        # free the slot → request succeeds
+        app.state.proxy.limiter.release()
+        r2 = client.get("/v1/models")
+        assert r2.status_code == 200
+
+
+def test_rate_limit_releases_slot_after_request():
+    app = _limits_app(rpm=0, max_concurrent=2)
+    with TestClient(app) as client:
+        for _ in range(5):
+            assert client.get("/v1/models").status_code == 200
+        # slots must not leak
+        assert app.state.proxy.limiter.status()["active"] == 0
+
+
+def test_admin_reload_updates_limits():
+    import yaml as _yaml
+
+    raw = {
+        "defaults": {"health_interval_seconds": 0},
+        "providers": {
+            "dummy": {
+                "type": "openai",
+                "base_url": "http://127.0.0.1:9",
+                "api_key": "k",
+                "enabled": True,
+                "models": ["m-x"],
+            }
+        },
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "config.yaml"
+        path.write_text(_yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+        app = create_app(config_path=path)
+        with TestClient(app) as client:
+            assert client.get("/api/status").json()["limits"]["enabled"] is False
+
+            disk = _yaml.safe_load(path.read_text(encoding="utf-8"))
+            disk["limits"] = {"requests_per_minute": 1, "max_concurrent": 1}
+            path.write_text(_yaml.safe_dump(disk, sort_keys=False), encoding="utf-8")
+            r = client.post("/api/admin/reload")
+            assert r.status_code == 200
+
+            lim = client.get("/api/status").json()["limits"]
+            assert lim["enabled"] is True
+            assert lim["requests_per_minute"] == 1
+
+            assert client.get("/v1/models").status_code == 200
+            assert client.get("/v1/models").status_code == 429

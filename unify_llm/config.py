@@ -37,6 +37,33 @@ class AuthConfig(BaseModel):
     api_key: str = ""
 
 
+class LimitsConfig(BaseModel):
+    """Optional gateway rate limits for /v1/* only.
+
+    Both fields: 0 (or omitted / None) disables the corresponding check.
+    Env expansion is not required for these ints.
+    """
+
+    # Per client IP token bucket. 0 disables RPM limiting.
+    requests_per_minute: int = 0
+    # Global concurrent in-flight /v1/* requests. 0 disables the concurrency cap.
+    max_concurrent: int = 0
+
+    @field_validator("requests_per_minute", "max_concurrent", mode="before")
+    @classmethod
+    def _none_is_disabled(cls, v: Any) -> Any:
+        if v is None:
+            return 0
+        return v
+
+    @field_validator("requests_per_minute", "max_concurrent")
+    @classmethod
+    def _non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("must be >= 0 (0 disables)")
+        return int(v)
+
+
 class DefaultsConfig(BaseModel):
     timeout_seconds: float = 120.0
     connect_timeout_seconds: float = 10.0
@@ -66,12 +93,61 @@ class ProviderConfig(BaseModel):
         return bool(self.base_url) and (bool(self.api_key) or self.type == "openai")
 
 
+class ModelPricing(BaseModel):
+    """Per-model USD rates per 1M tokens. Used as a pricing.models override."""
+
+    input: float = 0.0
+    output: float = 0.0
+
+
+class PricingConfig(BaseModel):
+    """Optional token cost estimation.
+
+    Defaults are 0 — never invent vendor prices. Set real rates in config.yaml:
+
+        pricing:
+          per_million_input: 0.27
+          per_million_output: 1.10
+          models:
+            deepseek-flash:
+              input: 0.27
+              output: 1.10
+    """
+
+    # USD per 1M input/prompt tokens. 0 disables default-based estimates.
+    per_million_input: float = 0.0
+    # USD per 1M output/completion tokens.
+    per_million_output: float = 0.0
+    # Optional overrides keyed by model id or alias. Fully replaces defaults.
+    models: dict[str, ModelPricing] = Field(default_factory=dict)
+
+    def rate_for(self, *model_ids: str) -> tuple[float, float]:
+        """Return (input, output) USD per 1M tokens for the first matching override."""
+        for mid in model_ids:
+            if not mid:
+                continue
+            ov = self.models.get(mid)
+            if ov is not None:
+                return float(ov.input or 0.0), float(ov.output or 0.0)
+        return float(self.per_million_input or 0.0), float(self.per_million_output or 0.0)
+
+    def has_any_rate(self) -> bool:
+        if float(self.per_million_input or 0.0) > 0 or float(self.per_million_output or 0.0) > 0:
+            return True
+        return any(
+            float(ov.input or 0.0) > 0 or float(ov.output or 0.0) > 0
+            for ov in self.models.values()
+        )
+
+
 class AppConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
+    limits: LimitsConfig = Field(default_factory=LimitsConfig)
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     aliases: dict[str, str] = Field(default_factory=dict)
+    pricing: PricingConfig = Field(default_factory=PricingConfig)
 
     def gateway_api_key(self) -> str:
         """Effective gateway key: config auth.api_key, else UNIFY_GATEWAY_KEY."""

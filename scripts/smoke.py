@@ -3,7 +3,7 @@ from __future__ import annotations
 """Smoke checks that do not require real API keys.
 
 Verifies config load, model routing, OpenAPI surface, and monitor bookkeeping
-against a local dummy upstream. Also checks optional gateway auth.
+against a local dummy upstream. Also checks optional gateway auth and rate limits.
 """
 
 import asyncio
@@ -51,9 +51,10 @@ def start_dummy() -> tuple[HTTPServer, int]:
 async def run_checks(port: int) -> None:
     from fastapi.testclient import TestClient  # noqa: PLC0415
     from unify_llm.app import create_app
-    from unify_llm.config import AppConfig, AuthConfig, ProviderConfig
+    from unify_llm.config import AppConfig, AuthConfig, LimitsConfig, PricingConfig, ProviderConfig
     from unify_llm.registry import Registry
-    from unify_llm.monitor import Monitor
+    from unify_llm.monitor import Monitor, estimate_cost_usd
+    from unify_llm.rate_limit import RateLimiter
 
     # --- unit-ish ---
     cfg = AppConfig(
@@ -98,6 +99,12 @@ async def run_checks(port: int) -> None:
     st = mon.status()
     assert st["totals"]["active"] == 0
     assert st["totals"]["requests"] == 1
+    assert st["totals"].get("cost_usd", 0.0) == 0.0
+
+    # pricing estimate helper: default rates stay 0
+    assert estimate_cost_usd(PricingConfig(), model="dummy-chat", prompt_tokens=10, completion_tokens=10) == 0.0
+    priced = PricingConfig(per_million_input=1.0, per_million_output=2.0)
+    assert estimate_cost_usd(priced, model="dummy-chat", prompt_tokens=1_000_000, completion_tokens=0) == 1.0
 
     # --- HTTP surface (no gateway auth) ---
     app = create_app(config=cfg)
@@ -145,9 +152,13 @@ async def run_checks(port: int) -> None:
         assert r.status_code == 200
         body = r.json()
         assert body["totals"]["requests"] >= 1
+        assert "cost_usd" in body["totals"]
+        # default pricing is zero — no invented vendor rates
+        assert body["totals"]["cost_usd"] == 0.0
 
         r = client.get("/dashboard")
         assert r.status_code == 200 and b"Unify LLM" in r.content
+        assert b"kpiCost" in r.content
 
     # --- gateway auth ---
     secret = "smoke-gateway-key"
@@ -330,6 +341,60 @@ async def run_checks(port: int) -> None:
                 assert r.status_code == 200
                 assert r.json()["written"] is False
                 assert r.json()["warning"]
+
+    # --- optional rate limits ---
+    rl = RateLimiter(requests_per_minute=2, max_concurrent=1)
+    assert rl.enabled is True
+    assert rl.check("smoke").allowed is True
+    rl.release()
+
+    limits_cfg = AppConfig(
+        providers=cfg.providers,
+        aliases=cfg.aliases,
+        limits=LimitsConfig(requests_per_minute=2, max_concurrent=1),
+    )
+    limits_app = create_app(config=limits_cfg)
+    with TestClient(limits_app) as client:
+        r = client.get("/api/status")
+        assert r.status_code == 200
+        lim = r.json()["limits"]
+        assert lim["enabled"] is True
+        assert lim["requests_per_minute"] == 2
+        assert lim["max_concurrent"] == 1
+        assert lim["active"] == 0
+
+        assert client.get("/v1/models").status_code == 200
+        assert client.get("/v1/models").status_code == 200
+        r = client.get("/v1/models")
+        assert r.status_code == 429, r.text
+        assert r.json()["error"]["type"] == "RateLimitError"
+        assert "Retry-After" in r.headers
+        # /api and /healthz are not rate limited
+        assert client.get("/healthz").status_code == 200
+        assert client.get("/api/status").status_code == 200
+
+    # concurrency cap → 429
+    conc_cfg = AppConfig(
+        providers=cfg.providers,
+        aliases=cfg.aliases,
+        limits=LimitsConfig(requests_per_minute=0, max_concurrent=1),
+    )
+    conc_app = create_app(config=conc_cfg)
+    with TestClient(conc_app) as client:
+        assert conc_app.state.proxy.limiter.check("held").allowed is True
+        r = client.get("/v1/models")
+        assert r.status_code == 429, r.text
+        assert "concurrent" in r.json()["error"]["message"].lower()
+        conc_app.state.proxy.limiter.release()
+        assert client.get("/v1/models").status_code == 200
+
+    # disabled limits stay open
+    open_app = create_app(config=cfg)
+    with TestClient(open_app) as client:
+        lim = client.get("/api/status").json()["limits"]
+        assert lim["enabled"] is False
+        for _ in range(5):
+            assert client.get("/v1/models").status_code == 200
 
     print("SMOKE OK")
 
