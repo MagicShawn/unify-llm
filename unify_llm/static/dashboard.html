@@ -98,6 +98,7 @@
     }
 
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html, body { margin: 0; padding: 0; height: 100%; }
     body {
       font-family: var(--font);
@@ -253,8 +254,8 @@
       grid-column: 2;
       display: flex;
       align-items: center;
-      gap: 14px;
-      padding: 0 16px;
+      gap: 12px;
+      padding: 0 14px;
       background: var(--bg-panel);
       border-bottom: 1px solid var(--line);
       font-family: var(--mono);
@@ -273,6 +274,47 @@
     .sys-item .v { color: var(--ink-2); font-variant-numeric: tabular-nums; }
     .sys-sep { width: 1px; height: 14px; background: var(--line); flex-shrink: 0; }
 
+    /* Rate-limit chip in system bar */
+    .sys-limits {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink-2);
+      flex-shrink: 0;
+      white-space: nowrap;
+      cursor: help;
+      font-variant-numeric: tabular-nums;
+      transition: background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease);
+    }
+    .sys-limits .k {
+      color: var(--ink-3);
+      font-weight: 500;
+      text-transform: uppercase;
+      font-size: 9.5px;
+      letter-spacing: 0.04em;
+    }
+    .sys-limits .v { color: inherit; font-variant-numeric: tabular-nums; }
+    .sys-limits.near {
+      background: var(--warn-soft);
+      color: var(--warn);
+      border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+    }
+    .sys-limits.near .k { color: var(--warn); opacity: 0.85; }
+    .sys-limits.hot {
+      background: var(--err-soft);
+      color: var(--err);
+      border-color: color-mix(in srgb, var(--err) 40%, transparent);
+    }
+    .sys-limits.hot .k { color: var(--err); opacity: 0.85; }
+
     .health-pill {
       display: inline-flex;
       align-items: center;
@@ -286,6 +328,8 @@
       text-transform: uppercase;
       border: 1px solid transparent;
       flex-shrink: 0;
+      cursor: help;
+      white-space: nowrap;
     }
     .health-pill .dot {
       width: 6px; height: 6px;
@@ -425,7 +469,9 @@
     .kpi {
       position: relative;
       overflow: hidden;
-      min-height: 96px;
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
     }
     .kpi::after {
       content: "";
@@ -467,12 +513,25 @@
     .kpi .value.err { color: var(--err); }
     .kpi .value.ok { color: var(--ok); }
     .kpi .value.blue { color: var(--blue); }
+    .kpi .value.is-muted,
+    .kpi .value.accent.is-muted,
+    .kpi .value.err.is-muted,
+    .kpi .value.ok.is-muted,
+    .kpi .value.blue.is-muted {
+      color: var(--ink-3);
+      font-weight: 500;
+      letter-spacing: 0;
+    }
     .kpi .hint {
-      margin-top: var(--sp-2);
+      margin-top: auto;
+      padding-top: var(--sp-2);
       font-family: var(--mono);
       font-size: 11px;
       color: var(--ink-3);
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .tok .value { font-size: 22px; }
 
@@ -665,6 +724,7 @@
       flex-wrap: wrap;
     }
     .model-detail .dd.sub { color: var(--ink-2); font-size: 11.5px; }
+    .model-detail .dd.sub.is-muted { color: var(--ink-3); }
     .model-spark-row {
       display: flex;
       align-items: center;
@@ -784,17 +844,24 @@
     }
     .prov-stats {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 4px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 4px 2px;
     }
-    .prov-stats .cell { text-align: center; }
+    .prov-stats .cell { text-align: center; min-width: 0; }
     .prov-stats .n {
       font-family: var(--mono);
-      font-size: 14px;
+      font-size: 12.5px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       color: var(--ink);
       line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .prov-stats .n.muted {
+      color: var(--ink-3);
+      font-weight: 500;
     }
     .prov-stats .t {
       font-family: var(--mono);
@@ -816,6 +883,7 @@
       background: var(--ink-3);
       opacity: 0.45;
       box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+      cursor: help;
     }
     .prov-health.ok {
       background: var(--ok);
@@ -1661,7 +1729,7 @@
 
     <!-- System bar -->
     <div class="sysbar">
-      <span class="health-pill off" id="healthPill" aria-live="polite">
+      <span class="health-pill off" id="healthPill" aria-live="polite" title="waiting for first status check">
         <i class="dot"></i>
         <span id="healthLabel">…</span>
       </span>
@@ -1681,7 +1749,7 @@
       <span class="sys-item" id="sysAuthWrap" hidden>
         <span class="auth-note" id="sysAuth"></span>
       </span>
-      <span class="sys-item" id="sysLimitsWrap" hidden>
+      <span class="sys-limits" id="sysLimitsWrap" hidden title="Rate limits">
         <span class="k">lim</span>
         <span class="v" id="sysLimits">—</span>
       </span>
@@ -1763,8 +1831,8 @@
           </div>
           <div class="card kpi accent">
             <div class="label"><span>Est. cost</span><span class="zh">预估费用</span></div>
-            <div class="value accent" id="kpiCost">$0.00</div>
-            <div class="hint" id="kpiCostHint">set pricing rates</div>
+            <div class="value accent is-muted" id="kpiCost" title="set pricing in config">—</div>
+            <div class="hint" id="kpiCostHint">set pricing in config</div>
           </div>
         </div>
 
@@ -2042,6 +2110,48 @@
       if (h) return h + "h " + m + "m";
       if (m) return m + "m " + s + "s";
       return s + "s";
+    }
+    function fmtClock(ts) {
+      if (ts == null || ts === undefined) return "—";
+      const d = new Date(Number(ts) * 1000);
+      if (Number.isNaN(d.getTime())) return "—";
+      return d.toLocaleTimeString();
+    }
+    function fmtAgo(ts) {
+      if (ts == null || ts === undefined) return "—";
+      const sec = Math.max(0, Math.floor(Date.now() / 1000 - Number(ts)));
+      if (sec < 5) return "just now";
+      if (sec < 60) return sec + "s ago";
+      if (sec < 3600) return Math.floor(sec / 60) + "m ago";
+      return Math.floor(sec / 3600) + "h ago";
+    }
+    /* Cost display: show $ when pricing configured (or cost already > 0); else muted — */
+    let pricingConfigured = null; // null=unknown, true/false once /api/config known
+    function hasAnyPricingRate(pricing) {
+      if (!pricing || typeof pricing !== "object") return false;
+      if ((Number(pricing.per_million_input) || 0) > 0) return true;
+      if ((Number(pricing.per_million_output) || 0) > 0) return true;
+      const models = pricing.models || {};
+      return Object.values(models).some((m) => {
+        if (!m || typeof m !== "object") return false;
+        return (Number(m.input) || 0) > 0 || (Number(m.output) || 0) > 0;
+      });
+    }
+    function costDisplay(usd) {
+      const v = Number(usd) || 0;
+      if (v > 0) return { text: fmtUSD(v), muted: false, title: "estimated USD from token rates" };
+      if (pricingConfigured === true) return { text: "$0.00", muted: false, title: "no cost yet · rates configured" };
+      return { text: "—", muted: true, title: "set pricing in config" };
+    }
+    async function fetchPricingFlag() {
+      try {
+        const res = await apiFetch("/api/config");
+        if (!res.ok) return;
+        const cfg = await res.json();
+        pricingConfigured = hasAnyPricingRate(cfg && cfg.pricing);
+      } catch (_) {
+        /* optional endpoint — leave unknown */
+      }
     }
     function hashHue(str) {
       let h = 0;
@@ -2401,6 +2511,7 @@
       const tokIn = fmtN(m.prompt_tokens);
       const tokOut = fmtN(m.completion_tokens);
       const tokTotal = fmtN((m.prompt_tokens || 0) + (m.completion_tokens || 0));
+      const costInfo = costDisplay(m.cost_usd);
       return `
         <div class="model-row${open ? " is-open" : ""}"
              data-model-key="${esc(key)}"
@@ -2439,7 +2550,7 @@
               </div>
               <div>
                 <div class="dt">est. cost</div>
-                <div class="dd sub">${fmtUSD(m.cost_usd)}</div>
+                <div class="dd sub${costInfo.muted ? " is-muted" : ""}" title="${esc(costInfo.title)}">${costInfo.text}</div>
               </div>
               <div>
                 <div class="dt">recent latency</div>
@@ -2557,13 +2668,22 @@
         const isTesting = testingProviders.has(p.id);
         const h = p.last_health || null;
         const hCls = !shownEnabled ? "off" : (h == null ? "off" : (h.ok ? "ok" : "err"));
-        const hTitle = !shownEnabled
-          ? "health: disabled"
-          : (h == null
-            ? "health: unknown"
-            : "health: " + (h.ok ? "ok" : "fail") +
-              " · " + (h.status_code ?? "—") +
-              " · " + (h.latency_ms ?? "—") + "ms");
+        let hTitle;
+        if (!shownEnabled) {
+          hTitle = "health: disabled";
+        } else if (h == null) {
+          hTitle = "health: not checked yet";
+        } else {
+          const statusBit = h.ok ? "ok" : "fail";
+          const codeBit = " · HTTP " + (h.status_code ?? "—");
+          const latBit = " · " + (h.latency_ms ?? "—") + "ms";
+          const checkedBit = h.checked_at != null
+            ? " · checked " + fmtClock(h.checked_at) + " (" + fmtAgo(h.checked_at) + ")"
+            : "";
+          const errBit = h.error ? " · " + h.error : "";
+          hTitle = "health: " + statusBit + codeBit + latBit + checkedBit + errBit;
+        }
+        const costInfo = costDisplay(p.cost_usd);
         return `
           <div class="prov" data-provider-card="${esc(p.id)}">
             <div class="prov-head">
@@ -2592,7 +2712,7 @@
                 <div class="cell"><div class="n">${p.total ?? 0}</div><div class="t">total</div></div>
                 <div class="cell"><div class="n ${p.errors ? "bad" : ""}">${p.errors ?? 0}</div><div class="t">err</div></div>
                 <div class="cell"><div class="n">${fmtN((p.prompt_tokens || 0) + (p.completion_tokens || 0))}</div><div class="t">tokens</div></div>
-                <div class="cell"><div class="n">${fmtUSD(p.cost_usd)}</div><div class="t">cost</div></div>
+                <div class="cell"><div class="n ${costInfo.muted ? "muted" : ""}" title="${esc(costInfo.title)}">${costInfo.text}</div><div class="t">cost</div></div>
               </div>
               <div class="prov-test-result" data-test-result="${esc(p.id)}" hidden></div>
             </div>
@@ -2702,6 +2822,7 @@
             (data.providers != null ? data.providers : "?") + " providers · " +
               (data.enabled != null ? data.enabled : "?") + " enabled"
           );
+          await fetchPricingFlag();
           refresh();
         }
       } catch (e) {
@@ -3312,20 +3433,28 @@
     });
 
     /* ── Health / system bar ── */
-    function setHealth(ok, offline) {
+    function setHealth(ok, offline, detail) {
       const pill = $("healthPill");
       const label = $("healthLabel");
       pill.classList.remove("ok", "err", "off");
+      let state;
       if (offline) {
         pill.classList.add("err");
         label.textContent = "OFFLINE";
+        state = "offline · cannot reach /api/status";
       } else if (ok) {
         pill.classList.add("ok");
         label.textContent = "OK";
+        state = "gateway ok";
       } else {
         pill.classList.add("err");
         label.textContent = "ERR";
+        state = "gateway error";
       }
+      const when = new Date().toLocaleTimeString();
+      const tip = state + " · last check " + when + (detail ? " · " + detail : "");
+      pill.title = tip;
+      pill.setAttribute("aria-label", tip);
     }
 
     /* ── Optional /api/info ── */
@@ -3377,7 +3506,7 @@
         const providers = data.providers || [];
         const now = Date.now();
 
-        setHealth(data.ok !== false, false);
+        setHealth(data.ok !== false, false, "v" + (data.version || "—"));
 
         $("kpiActive").textContent = t.active ?? 0;
         $("kpiTotal").textContent = fmtN(t.requests ?? 0);
@@ -3386,10 +3515,15 @@
         $("kpiTokSplit").textContent =
           "in " + fmtN(t.prompt_tokens || 0) + " · out " + fmtN(t.completion_tokens || 0);
         const costUsd = Number(t.cost_usd) || 0;
-        $("kpiCost").textContent = fmtUSD(costUsd);
-        $("kpiCostHint").textContent = costUsd > 0
-          ? "est. · set pricing in config"
-          : "set pricing rates";
+        const costEl = $("kpiCost");
+        const costHint = $("kpiCostHint");
+        const kpiCost = costDisplay(costUsd);
+        costEl.textContent = kpiCost.text;
+        costEl.classList.toggle("is-muted", kpiCost.muted);
+        costEl.title = kpiCost.title;
+        costHint.textContent = kpiCost.muted
+          ? "set pricing in config"
+          : (pricingConfigured === true ? "from configured rates" : "estimated");
         $("tokIn").textContent = fmtN(t.prompt_tokens || 0);
         $("tokOut").textContent = fmtN(t.completion_tokens || 0);
         const avgTok = t.requests > 0
@@ -3421,22 +3555,47 @@
         $("overviewMeta").textContent =
           "v" + data.version + " · up " + up;
 
-        // Optional rate-limit line (hidden when both limits are off)
+        // Optional rate-limit chip (hidden when both limits are off)
         const lim = data.limits;
+        const limWrap = $("sysLimitsWrap");
         if (lim && lim.enabled) {
-          $("sysLimitsWrap").hidden = false;
+          limWrap.hidden = false;
           const parts = [];
+          const titleBits = [];
+          let severity = 0; // 0 ok · 1 near · 2 hot
+
           if (lim.requests_per_minute > 0) {
-            parts.push(
-              (lim.remaining != null ? lim.remaining : "—") + "/" + lim.requests_per_minute + "/m"
-            );
+            const rem = lim.remaining != null ? Number(lim.remaining) : null;
+            const rpm = Number(lim.requests_per_minute) || 0;
+            parts.push((rem != null ? rem : "—") + "/" + rpm + "/m");
+            if (rem != null && rpm > 0) {
+              titleBits.push("remaining " + rem + " of " + rpm + " req/min");
+              const ratio = rem / rpm;
+              if (ratio <= 0.05) severity = Math.max(severity, 2);
+              else if (ratio <= 0.2) severity = Math.max(severity, 1);
+            } else {
+              titleBits.push("req/min limit " + rpm);
+            }
           }
           if (lim.max_concurrent > 0) {
-            parts.push("c " + (lim.active ?? 0) + "/" + lim.max_concurrent);
+            const active = Number(lim.active ?? 0);
+            const maxC = Number(lim.max_concurrent) || 0;
+            parts.push("c " + active + "/" + maxC);
+            titleBits.push("active " + active + " of " + maxC + " concurrent");
+            if (maxC > 0) {
+              const ratio = active / maxC;
+              if (ratio >= 1) severity = Math.max(severity, 2);
+              else if (ratio >= 0.8) severity = Math.max(severity, 1);
+            }
           }
           $("sysLimits").textContent = parts.join(" · ") || "on";
+          limWrap.classList.toggle("near", severity === 1);
+          limWrap.classList.toggle("hot", severity === 2);
+          limWrap.title = titleBits.length ? titleBits.join(" · ") : "rate limits active";
         } else {
-          $("sysLimitsWrap").hidden = true;
+          limWrap.hidden = true;
+          limWrap.classList.remove("near", "hot");
+          limWrap.title = "Rate limits";
         }
 
         const latency = data.latency || { series: [], points: [], window: 10 };
@@ -3450,7 +3609,7 @@
         renderHistory(providers);
         renderModels(data.models || []);
       } catch (e) {
-        setHealth(false, true);
+        setHealth(false, true, (e && e.message) || String(e));
         $("sysUptime").textContent = "—";
         $("sysUpdated").textContent = "offline";
       }
@@ -3458,9 +3617,11 @@
 
     window.addEventListener("resize", () => drawChart(lastLatency));
     fetchInfo();
+    fetchPricingFlag();
     refresh();
     setInterval(refresh, 2000);
     setInterval(fetchInfo, 30000);
+    setInterval(fetchPricingFlag, 60000);
   </script>
 </body>
 </html>
