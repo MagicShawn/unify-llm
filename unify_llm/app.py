@@ -168,8 +168,16 @@ class AppState:
             await asyncio.sleep(interval)
 
     async def startup(self) -> None:
+        # read=600: idle gap between SSE chunks (long "thinking" pauses).
+        # Do not use the small defaults.timeout_seconds here — that was unused
+        # and a 120s idle cut would abort long streams.
         self.http = httpx.AsyncClient(
-            timeout=httpx.Timeout(300.0, connect=10.0),
+            timeout=httpx.Timeout(
+                connect=10.0,
+                read=600.0,
+                write=60.0,
+                pool=10.0,
+            ),
             follow_redirects=True,
             limits=httpx.Limits(max_connections=256, max_keepalive_connections=64),
         )
@@ -619,6 +627,38 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 )
                 return JSONResponse(json_body, status_code=status)
 
+            if status >= 400:
+                # Stream request failed before any body: surface JSON, do not
+                # wrap an error page as SSE (clients see a truncated "reply").
+                detail = None
+                if byte_iter is not None:
+                    try:
+                        chunks = []
+                        async for c in byte_iter:
+                            chunks.append(c)
+                            if sum(len(x) for x in chunks) > 64_000:
+                                break
+                        detail = b"".join(chunks)
+                    except Exception:  # noqa: BLE001
+                        detail = None
+                state.monitor.end(
+                    rid,
+                    provider_id=rt.provider_id,
+                    http_status=status,
+                    error=f"HTTP {status}",
+                    started_at=started,
+                )
+                last_err = UpstreamError(
+                    f"HTTP {status} from {rt.provider_id}",
+                    status_code=status,
+                    detail=(detail.decode("utf-8", errors="replace")[:2000] if detail else None),
+                )
+                if status < 500 and status not in (408, 429):
+                    if detail:
+                        return Response(content=detail, status_code=status, media_type="application/json")
+                    return _error_response(last_err)
+                continue
+
             sniffer = StreamUsageSniffer(protocol)
 
             async def event_gen(
@@ -708,9 +748,13 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
         model = payload.get("model")
         if not model:
             return JSONResponse({"error": {"message": "Field 'model' is required"}}, status_code=400)
-        if "max_tokens" not in payload:
+        if "max_tokens" not in payload and "max_completion_tokens" not in payload:
             payload = dict(payload)
-            payload["max_tokens"] = 4096
+            # Anthropic API requires max_tokens. Use a high default so long
+            # generations are not truncated when the client omits the field.
+            from .convert import DEFAULT_MAX_TOKENS
+
+            payload["max_tokens"] = DEFAULT_MAX_TOKENS
 
         async def call(adapter, body, stream):
             return await adapter.messages(body, stream=stream)

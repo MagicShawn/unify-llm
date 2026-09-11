@@ -28,6 +28,7 @@ from unify_llm.config import (
     load_config,
 )
 from unify_llm.convert import (
+    DEFAULT_MAX_TOKENS,
     anthropic_messages_to_openai_chat,
     anthropic_response_to_openai_chat,
     openai_chat_to_anthropic_messages,
@@ -47,6 +48,42 @@ from unify_llm.registry import Registry
 # ---------------------------------------------------------------------------
 # convert
 # ---------------------------------------------------------------------------
+
+
+def test_max_tokens_not_capped_at_4096():
+    """Cross-protocol convert must not silently truncate to 4096."""
+    out = openai_chat_to_anthropic_messages(
+        {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
+    )
+    assert out["max_tokens"] == DEFAULT_MAX_TOKENS
+    assert DEFAULT_MAX_TOKENS >= 32768
+
+    out2 = openai_chat_to_anthropic_messages(
+        {
+            "model": "m",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 128000,
+        }
+    )
+    assert out2["max_tokens"] == 128000
+
+    out3 = openai_chat_to_anthropic_messages(
+        {
+            "model": "m",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_completion_tokens": 20000,
+        }
+    )
+    assert out3["max_tokens"] == 20000
+
+    chat = anthropic_messages_to_openai_chat(
+        {
+            "model": "m",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 65536,
+        }
+    )
+    assert chat["max_tokens"] == 65536
 
 
 def test_openai_chat_to_anthropic_messages_system_and_roles():
@@ -87,7 +124,7 @@ def test_openai_chat_to_anthropic_messages_merges_and_defaults():
             ]
         }
     )
-    assert out["max_tokens"] == 4096
+    assert out["max_tokens"] == DEFAULT_MAX_TOKENS
     assert len(out["messages"]) == 1
     assert out["messages"][0]["content"] == "a\n\nb"
     empty = openai_chat_to_anthropic_messages({"messages": []})
