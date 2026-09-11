@@ -50,6 +50,62 @@ pricing:
   #   glm-5.3: { input: 1.11, output: 3.89 }               # was ¥8 / ¥28
   #   glm-4.7-flash: { input: 0, output: 0 }               # free tier
 
+# Per-model token ceilings (from vendor docs).
+# max_output_tokens fills max_tokens when a client omits it on /v1/messages.
+# Client-supplied max_tokens always wins. max_context_tokens is informational.
+model_limits:
+  deepseek-flash:
+    max_output_tokens: 384000
+    max_context_tokens: 1000000
+  deepseek-v4-pro:
+    max_output_tokens: 384000
+    max_context_tokens: 1000000
+  kimi-k3:
+    max_output_tokens: 65536
+    max_context_tokens: 1048576
+  kimi-k2.7-code:
+    max_output_tokens: 32768
+    max_context_tokens: 262144
+  kimi-k2.7-code-highspeed:
+    max_output_tokens: 32768
+    max_context_tokens: 262144
+  kimi-k2.6:
+    max_output_tokens: 32768
+    max_context_tokens: 262144
+  glm-5.3:
+    max_output_tokens: 131072
+    max_context_tokens: 1000000
+  glm-5.3-flash:
+    max_output_tokens: 131072
+    max_context_tokens: 1000000
+  glm-5.2:
+    max_output_tokens: 131072
+    max_context_tokens: 1000000
+  glm-5.1:
+    max_output_tokens: 131072
+    max_context_tokens: 200000
+  glm-5:
+    max_output_tokens: 131072
+    max_context_tokens: 200000
+  glm-5-turbo:
+    max_output_tokens: 131072
+    max_context_tokens: 200000
+  glm-5V-Turbo:
+    max_output_tokens: 131072
+    max_context_tokens: 200000
+  glm-4.7:
+    max_output_tokens: 131072
+    max_context_tokens: 200000
+  glm-4.7-flash:
+    max_output_tokens: 131072
+    max_context_tokens: 200000
+  glm-4.6:
+    max_output_tokens: 131072
+    max_context_tokens: 200000
+  glm-4.6V:
+    max_output_tokens: 32768
+    max_context_tokens: 131072
+
 providers:
   # DeepSeek — OpenAI-compatible
   # Anthropic-compatible base (optional): https://api.deepseek.com/anthropic

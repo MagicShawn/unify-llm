@@ -20,7 +20,12 @@ def create_adapter(
     provider: ProviderConfig,
     defaults: DefaultsConfig,
     client,
+    model_max_output_tokens: int | None = None,
 ) -> BaseAdapter:
     if provider.type == "anthropic":
-        return AnthropicAdapter(provider_id, provider, defaults, client)
-    return OpenAICompatAdapter(provider_id, provider, defaults, client)
+        return AnthropicAdapter(
+            provider_id, provider, defaults, client, model_max_output_tokens
+        )
+    return OpenAICompatAdapter(
+        provider_id, provider, defaults, client, model_max_output_tokens
+    )

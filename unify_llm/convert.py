@@ -11,25 +11,34 @@ import json
 import time
 from typing import Any, AsyncIterator
 
-# Anthropic requires max_tokens. Do not use a small default — clients that omit
-# it would otherwise get silently truncated replies (common Claude Code / IDE case).
-DEFAULT_MAX_TOKENS = 65536
+# Fallback when neither the client nor model_limits provides a value.
+# max_tokens is the completion budget, not the context window.
+DEFAULT_MAX_TOKENS = 128_000
 
 
-def _resolve_max_tokens(payload: dict[str, Any]) -> int:
+def _resolve_max_tokens(
+    payload: dict[str, Any],
+    *,
+    model_default: int | None = None,
+) -> int:
     raw = payload.get("max_tokens")
     if raw is None:
         raw = payload.get("max_completion_tokens")
-    if raw is None:
-        return DEFAULT_MAX_TOKENS
-    try:
-        n = int(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_MAX_TOKENS
-    return max(n, 1)
+    if raw is not None:
+        try:
+            return max(int(raw), 1)
+        except (TypeError, ValueError):
+            pass
+    if model_default is not None and int(model_default) > 0:
+        return int(model_default)
+    return DEFAULT_MAX_TOKENS
 
 
-def openai_chat_to_anthropic_messages(payload: dict[str, Any]) -> dict[str, Any]:
+def openai_chat_to_anthropic_messages(
+    payload: dict[str, Any],
+    *,
+    model_max_output_tokens: int | None = None,
+) -> dict[str, Any]:
     system_parts: list[str] = []
     messages: list[dict[str, Any]] = []
 
@@ -65,7 +74,7 @@ def openai_chat_to_anthropic_messages(payload: dict[str, Any]) -> dict[str, Any]
     out: dict[str, Any] = {
         "model": payload.get("model"),
         "messages": merged,
-        "max_tokens": _resolve_max_tokens(payload),
+        "max_tokens": _resolve_max_tokens(payload, model_default=model_max_output_tokens),
     }
     if system_parts:
         out["system"] = "\n\n".join(system_parts)
