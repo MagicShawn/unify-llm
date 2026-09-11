@@ -56,7 +56,23 @@ def test_max_tokens_not_capped_at_4096():
         {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
     )
     assert out["max_tokens"] == DEFAULT_MAX_TOKENS
-    assert DEFAULT_MAX_TOKENS >= 32768
+    assert DEFAULT_MAX_TOKENS >= 65536
+
+    out_lim = openai_chat_to_anthropic_messages(
+        {"model": "m", "messages": [{"role": "user", "content": "hi"}]},
+        model_max_output_tokens=384000,
+    )
+    assert out_lim["max_tokens"] == 384000
+
+    out_cli = openai_chat_to_anthropic_messages(
+        {
+            "model": "m",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 1024,
+        },
+        model_max_output_tokens=384000,
+    )
+    assert out_cli["max_tokens"] == 1024
 
     out2 = openai_chat_to_anthropic_messages(
         {

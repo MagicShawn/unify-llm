@@ -569,7 +569,14 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 client=_client_ip(request),
             )
             started = time.time()
-            adapter = create_adapter(rt.provider_id, rt.provider, state.config.defaults, state.http)
+            model_limit = state.config.resolve_max_output_tokens(rt.model, rt.requested_model)
+            adapter = create_adapter(
+                rt.provider_id,
+                rt.provider,
+                state.config.defaults,
+                state.http,
+                model_max_output_tokens=model_limit,
+            )
             attempt_body = dict(body)
             attempt_body["model"] = rt.model
 
@@ -750,11 +757,16 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
             return JSONResponse({"error": {"message": "Field 'model' is required"}}, status_code=400)
         if "max_tokens" not in payload and "max_completion_tokens" not in payload:
             payload = dict(payload)
-            # Anthropic API requires max_tokens. Use a high default so long
-            # generations are not truncated when the client omits the field.
             from .convert import DEFAULT_MAX_TOKENS
 
-            payload["max_tokens"] = DEFAULT_MAX_TOKENS
+            # Prefer per-model limit from config.model_limits; else global fallback.
+            resolved = None
+            try:
+                r = state.registry.resolve(str(model))
+                resolved = state.config.resolve_max_output_tokens(r.model, r.requested_model)
+            except ModelNotFoundError:
+                resolved = state.config.resolve_max_output_tokens(str(model))
+            payload["max_tokens"] = int(resolved or DEFAULT_MAX_TOKENS)
 
         async def call(adapter, body, stream):
             return await adapter.messages(body, stream=stream)

@@ -48,11 +48,14 @@ class BaseAdapter:
         provider: ProviderConfig,
         defaults: DefaultsConfig,
         client: httpx.AsyncClient,
+        model_max_output_tokens: int | None = None,
     ):
         self.provider_id = provider_id
         self.provider = provider
         self.defaults = defaults
         self.client = client
+        # From config.model_limits — used only when the client omitted max_tokens.
+        self.model_max_output_tokens = model_max_output_tokens
 
     @property
     def headers_auth(self) -> dict[str, str]:

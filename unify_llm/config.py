@@ -100,6 +100,28 @@ class ModelPricing(BaseModel):
     output: float = 0.0
 
 
+class ModelLimit(BaseModel):
+    """Per-model token ceilings from the vendor docs.
+
+    max_output_tokens: max completion tokens the model may generate.
+      Used when a client omits max_tokens on Anthropic /v1/messages.
+    max_context_tokens: total prompt+completion window (informational / future checks).
+    """
+
+    max_output_tokens: int | None = None
+    max_context_tokens: int | None = None
+
+    @field_validator("max_output_tokens", "max_context_tokens")
+    @classmethod
+    def _positive_or_none(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        n = int(v)
+        if n <= 0:
+            raise ValueError("must be > 0 or null")
+        return n
+
+
 class PricingConfig(BaseModel):
     """Optional token cost estimation.
 
@@ -148,6 +170,18 @@ class AppConfig(BaseModel):
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     aliases: dict[str, str] = Field(default_factory=dict)
     pricing: PricingConfig = Field(default_factory=PricingConfig)
+    # model id or alias -> vendor token limits
+    model_limits: dict[str, ModelLimit] = Field(default_factory=dict)
+
+    def resolve_max_output_tokens(self, *model_ids: str) -> int | None:
+        """First configured max_output_tokens among model id / alias candidates."""
+        for mid in model_ids:
+            if not mid:
+                continue
+            lim = self.model_limits.get(mid)
+            if lim is not None and lim.max_output_tokens:
+                return int(lim.max_output_tokens)
+        return None
 
     def gateway_api_key(self) -> str:
         """Effective gateway key: config auth.api_key, else UNIFY_GATEWAY_KEY."""

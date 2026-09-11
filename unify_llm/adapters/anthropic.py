@@ -56,7 +56,10 @@ class AnthropicAdapter(BaseAdapter):
         stream: bool,
     ) -> tuple[int, dict[str, Any] | None, AsyncIterator[bytes] | None]:
         """OpenAI client → Anthropic upstream (cross-protocol)."""
-        msg = openai_chat_to_anthropic_messages(payload)
+        msg = openai_chat_to_anthropic_messages(
+            payload,
+            model_max_output_tokens=self.model_max_output_tokens,
+        )
         model = str(msg.get("model") or payload.get("model") or "")
         status, data, byte_iter = await self.messages(msg, stream=stream)
         if status >= 400:
