@@ -2,6 +2,23 @@
 
 Local multi-provider LLM gateway. One fixed port routes OpenAI-compatible and Anthropic clients to DeepSeek, Kimi, GLM, and other upstreams, with concurrency monitoring and a web dashboard.
 
+## Dashboard
+
+Monochrome print-style UI (paper grain + stipple) with Overview / Providers / Traffic / Logs.
+
+![Unify LLM dashboard](docs/assets/dashboard-overview.png)
+
+## Capabilities at a glance
+
+![Feature quadrants](docs/assets/feature-quadrants.svg)
+
+| | |
+|--|--|
+| **1 Multi-provider routing** | DeepSeek, Kimi, GLM, OpenAI, Anthropic; one port; model id or alias |
+| **2 Dual protocol** | OpenAI chat + Anthropic messages; cross-protocol tools and SSE |
+| **3 Live monitoring** | Concurrency, in-flight, p50/p95, tokens, optional USD cost, live logs |
+| **4 Ops & reliability** | Timeout/retry/fallback, rate limit, LAN key, health probes, hot-reload |
+
 ## Features
 
 - Deploy locally and integrate multiple vendor Base URLs and API keys.

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 520" width="880" height="520">
+  <rect width="880" height="520" fill="#f5f5f5"/>
+  <!-- grid -->
+  <rect x="40" y="40" width="380" height="200" rx="12" fill="#fff" stroke="#e2e2e2"/>
+  <rect x="460" y="40" width="380" height="200" rx="12" fill="#fff" stroke="#e2e2e2"/>
+  <rect x="40" y="280" width="380" height="200" rx="12" fill="#fff" stroke="#e2e2e2"/>
+  <rect x="460" y="280" width="380" height="200" rx="12" fill="#fff" stroke="#e2e2e2"/>
+  <!-- accents -->
+  <rect x="40" y="40" width="380" height="4" rx="2" fill="#111"/>
+  <rect x="460" y="40" width="380" height="4" rx="2" fill="#666"/>
+  <rect x="40" y="280" width="380" height="4" rx="2" fill="#444"/>
+  <rect x="460" y="280" width="380" height="4" rx="2" fill="#999"/>
+
+  <text x="64" y="84" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600" fill="#111">1 · Multi-provider routing</text>
+  <text x="64" y="112" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">DeepSeek · Kimi · GLM · OpenAI · Anthropic</text>
+  <text x="64" y="138" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">One port · model-id / alias switch</text>
+  <text x="64" y="164" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">Per-model max_output_tokens from config</text>
+
+  <text x="484" y="84" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600" fill="#111">2 · Dual protocol</text>
+  <text x="484" y="112" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">OpenAI /v1/chat/completions</text>
+  <text x="484" y="138" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">Anthropic /v1/messages</text>
+  <text x="484" y="164" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">Cross-protocol tools + SSE conversion</text>
+
+  <text x="64" y="324" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600" fill="#111">3 · Live monitoring</text>
+  <text x="64" y="352" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">Concurrency · in-flight · p50/p95</text>
+  <text x="64" y="378" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">Token + optional USD cost estimate</text>
+  <text x="64" y="404" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">Dashboard live log stream</text>
+
+  <text x="484" y="324" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600" fill="#111">4 · Ops &amp; reliability</text>
+  <text x="484" y="352" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">Timeout · retry · fallback · rate limit</text>
+  <text x="484" y="378" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">LAN gateway key · provider health</text>
+  <text x="484" y="404" font-family="Segoe UI, sans-serif" font-size="13" fill="#444">Hot-reload · Windows service scripts</text>
+
+  <text x="40" y="510" font-family="Segoe UI, sans-serif" font-size="11" fill="#777">Unify LLM · capability map</text>
+</svg>
