@@ -33,6 +33,10 @@ class ServerConfig(BaseModel):
     dashboard: bool = True
 
 
+class AuthConfig(BaseModel):
+    api_key: str = ""
+
+
 class DefaultsConfig(BaseModel):
     timeout_seconds: float = 120.0
     connect_timeout_seconds: float = 10.0
@@ -63,8 +67,13 @@ class ProviderConfig(BaseModel):
 class AppConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     aliases: dict[str, str] = Field(default_factory=dict)
+
+    def gateway_api_key(self) -> str:
+        """Effective gateway key: config auth.api_key, else UNIFY_GATEWAY_KEY."""
+        return self.auth.api_key or os.environ.get("UNIFY_GATEWAY_KEY", "")
 
     def model_catalog(self) -> list[dict[str, Any]]:
         """OpenAI-style model list, including aliases."""
@@ -89,6 +98,43 @@ class AppConfig(BaseModel):
                     "owned_by": f"alias:{target}",
                 }
         return list(items.values())
+
+
+def set_provider_enabled(path: str | Path, provider_id: str, enabled: bool) -> None:
+    """Toggle providers.<id>.enabled in the YAML file.
+
+    Loads the file as-is (no env expansion) so secret key strings stay literal.
+    Never logs file contents. Raises ConfigError if the file cannot be updated.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text(encoding="utf-8")
+        data = yaml.safe_load(text) or {}
+    except yaml.YAMLError as e:
+        raise ConfigError(f"Invalid YAML in {path}: {e}") from e
+    except OSError as e:
+        raise ConfigError(f"Cannot read {path}: {e}") from e
+
+    if not isinstance(data, dict):
+        raise ConfigError("Config root must be a mapping")
+    providers = data.get("providers")
+    if not isinstance(providers, dict) or provider_id not in providers:
+        raise ConfigError(f"Provider '{provider_id}' not found in {path}")
+    entry = providers[provider_id]
+    if not isinstance(entry, dict):
+        raise ConfigError(f"Provider '{provider_id}' must be a mapping")
+    entry["enabled"] = bool(enabled)
+
+    try:
+        new_text = yaml.safe_dump(
+            data,
+            allow_unicode=True,
+            sort_keys=False,
+            default_flow_style=False,
+        )
+        path.write_text(new_text, encoding="utf-8")
+    except OSError as e:
+        raise ConfigError(f"Cannot write {path}: {e}") from e
 
 
 def load_config(path: str | Path) -> AppConfig:

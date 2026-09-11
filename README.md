@@ -69,7 +69,7 @@ python -m pip install -r requirements.txt
 | OpenAI-compatible | `http://127.0.0.1:8787/v1` |
 | Anthropic Messages | `http://127.0.0.1:8787` |
 
-The gateway does not authenticate local clients in v1. SDKs still require a non-empty API key string; pass a placeholder such as `local`.
+The gateway does not authenticate local clients by default. For LAN access, set `UNIFY_GATEWAY_KEY` (see [LAN access](#lan-access)); clients then send that key as `Authorization: Bearer` or `x-api-key`. SDKs still require a non-empty API key string when auth is off; pass a placeholder such as `local`.
 
 ### OpenAI SDK
 
@@ -151,9 +151,14 @@ List the same model id under only one enabled provider. The first match wins.
 |--------|------|-------------|
 | GET | `/healthz` | Liveness |
 | GET | `/dashboard` | Web UI |
+| GET | `/api/info` | Service name, version, host, auth_required |
 | GET | `/api/status` | Concurrency, latency series, tokens, models |
 | GET | `/api/history` | Recent completed requests |
 | GET | `/api/config` | Redacted config view |
+| GET | `/api/providers` | Providers (redacted) + monitor totals |
+| PATCH | `/api/providers/{id}` | Toggle `enabled` (YAML write-back + in-memory) |
+| POST | `/api/providers/{id}/test` | Upstream ping (`status_code`, `latency_ms`) |
+| POST | `/api/admin/reload` | Hot-reload config from startup path |
 | GET | `/v1/models` | Combined model catalog |
 | POST | `/v1/chat/completions` | OpenAI chat (supports `stream`) |
 | POST | `/v1/messages` | Anthropic messages (supports `stream`) |
@@ -193,6 +198,40 @@ python scripts/bench.py live --model deepseek-flash --protocol openai \
 - Do not expose port `8787` to the public internet without adding authentication.
 - Keep API keys in environment variables or a gitignored `config.yaml`.
 - `/api/config` redacts API keys; avoid sharing base URLs and model maps with untrusted parties.
+
+## LAN access
+
+Bind to all interfaces so other machines on the LAN can use the gateway:
+
+```bash
+python main.py --host 0.0.0.0
+# or set server.host: "0.0.0.0" in config.yaml
+```
+
+Set a shared gateway key (recommended when bound to LAN):
+
+```powershell
+$env:UNIFY_GATEWAY_KEY = "change-me-long-random"
+```
+
+Or in `config.yaml`:
+
+```yaml
+auth:
+  api_key: "${UNIFY_GATEWAY_KEY}"
+```
+
+When a key is set, `/v1/*` and `/api/*` require `Authorization: Bearer <key>` or `x-api-key: <key>`. `/healthz` and `/dashboard` stay open.
+
+Other machines point at:
+
+| Protocol | Base URL |
+|----------|----------|
+| OpenAI-compatible | `http://<host-ip>:8787/v1` |
+| Anthropic Messages | `http://<host-ip>:8787` |
+| Health / info | `http://<host-ip>:8787/healthz`, `/api/info` |
+
+Allow inbound TCP 8787 in the host firewall for the LAN subnet only. Do not port-forward 8787 to the internet.
 
 ## Project layout
 

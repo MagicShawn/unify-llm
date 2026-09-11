@@ -14,7 +14,11 @@ def main() -> None:
         default="config.yaml",
         help="Path to config.yaml (default: ./config.yaml)",
     )
-    parser.add_argument("--host", default=None, help="Override server.host")
+    parser.add_argument(
+        "--host",
+        default=None,
+        help="Override server.host (e.g. 0.0.0.0 for LAN access)",
+    )
     parser.add_argument("--port", type=int, default=None, help="Override server.port")
     args = parser.parse_args()
 
@@ -32,13 +36,21 @@ def main() -> None:
     config = load_config(cfg_path)
     host = args.host or config.server.host
     port = args.port or config.server.port
-    app = create_app(config=config)
+    if args.host:
+        config.server.host = args.host
+    app = create_app(config_path=cfg_path, config=config)
+    auth_required = bool(config.gateway_api_key())
+    lan = host in ("0.0.0.0", "::")
 
     print(f"Unify LLM listening on http://{host}:{port}")
     print(f"  Dashboard:  http://{host}:{port}/dashboard")
     print(f"  OpenAI:     http://{host}:{port}/v1")
     print(f"  Anthropic:  http://{host}:{port}/v1/messages")
     print(f"  Health:     http://{host}:{port}/healthz")
+    print(f"  Info:       http://{host}:{port}/api/info")
+    print(f"  Gateway auth: {'required' if auth_required else 'disabled'}")
+    if lan:
+        print("  LAN access enabled — set UNIFY_GATEWAY_KEY and firewall port 8787.")
 
     uvicorn.run(app, host=host, port=port, log_level="info")
 
