@@ -55,6 +55,32 @@ def _usage_pair(usage: dict[str, Any]) -> tuple[int, int]:
     return 0, 0
 
 
+class LogBuffer:
+    """Tiny in-memory ring buffer for live dashboard logs (no files, no I/O)."""
+
+    def __init__(self, size: int = 200):
+        self._lock = threading.Lock()
+        self._items: deque[dict[str, Any]] = deque(maxlen=size)
+        self._seq = 0
+
+    def add(self, level: str, msg: str, **fields: Any) -> None:
+        with self._lock:
+            self._seq += 1
+            item = {
+                "seq": self._seq,
+                "t": time.time(),
+                "level": level,
+                "msg": msg,
+            }
+            if fields:
+                item.update(fields)
+            self._items.append(item)
+
+    def tail(self, limit: int = 80) -> list[dict[str, Any]]:
+        with self._lock:
+            return list(self._items)[-limit:]
+
+
 class StreamUsageSniffer:
     """Parse SSE bytes in-flight and recover token usage without breaking passthrough."""
 
@@ -258,6 +284,10 @@ class Monitor:
         self._bucket_seconds = bucket_seconds
         self._series_buckets = series_buckets
         self._pricing = pricing
+        self.logs = LogBuffer(size=200)
+
+    def log(self, level: str, msg: str, **fields: Any) -> None:
+        self.logs.add(level, msg, **fields)
 
     def set_pricing(self, pricing: PricingConfig | None) -> None:
         """Replace pricing rates used for cost estimates on subsequent requests."""
@@ -325,6 +355,15 @@ class Monitor:
             stats.in_flight[rid] = rec
             self._global_active += 1
             self._global_total += 1
+        self.logs.add(
+            "info",
+            f"→ {path} {protocol} model={requested_model} via {provider_id}",
+            rid=rid,
+            provider=provider_id,
+            model=model,
+            protocol=protocol,
+            path=path,
+        )
         return rid
 
     def end(
@@ -400,6 +439,24 @@ class Monitor:
             stats.recent.append(completed)
             self._global_recent.append(completed)
             self._global_active = max(0, self._global_active - 1)
+        level = "error" if status == "error" else "info"
+        self.logs.add(
+            level,
+            (
+                f"← {path} {http_status} {latency_ms}ms model={model or requested} "
+                f"tok={prompt_tokens}+{completion_tokens}"
+                + (f" err={error}" if error else "")
+            ),
+            rid=request_id,
+            provider=provider_id,
+            model=model,
+            status=status,
+            http_status=http_status,
+            latency_ms=latency_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            error=error,
+        )
 
     def _latency_series_locked(self) -> dict[str, Any]:
         """Last-N successful requests → continuous rolling p50/p95 series (no sparse nulls)."""
@@ -495,6 +552,7 @@ class Monitor:
                 "latency": self._latency_series_locked(),
                 "models": models,
                 "providers": [p.snapshot() for p in self._providers.values()],
+                "logs": self.logs.tail(80),
             }
 
     def provider_totals(self, provider_id: str) -> dict[str, Any] | None:

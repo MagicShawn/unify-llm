@@ -1540,17 +1540,48 @@
       flex-shrink: 0;
       display: inline-flex;
     }
+    .sys-item select {
+      background: var(--bg-soft);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 6px;
+      max-width: 110px;
+    }
+    .panel-switch { gap: 6px; }
+    .log-stream {
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+      max-height: 280px;
+      overflow: auto;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+    }
+    .log-stream .row { display: flex; gap: 8px; white-space: pre-wrap; word-break: break-word; }
+    .log-stream .t { color: var(--ink-3); flex-shrink: 0; }
+    .log-stream .lvl-info { color: var(--ink-2); }
+    .log-stream .lvl-error { color: var(--err); }
+    .log-stream .lvl-warn { color: var(--warn, #e6b450); }
     .shortcuts-pop {
-      position: absolute;
-      top: calc(100% + 8px);
-      right: 0;
-      z-index: 40;
-      min-width: 220px;
-      padding: 10px 12px;
+      position: fixed;
+      top: 56px;
+      right: 12px;
+      left: auto;
+      z-index: 80;
+      min-width: 240px;
+      max-width: min(360px, calc(100vw - 24px));
+      max-height: min(70vh, 420px);
+      overflow: auto;
+      padding: 12px 14px;
       border-radius: var(--radius);
       border: 1px solid var(--line-strong);
       background: var(--bg-elev);
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
       font-family: var(--mono);
       font-size: 11px;
       color: var(--ink-2);
@@ -1686,6 +1717,15 @@
         <span class="v" id="sysLimits">—</span>
       </span>
       <span class="sysbar-spacer"></span>
+      <label class="sys-item panel-switch" title="Switch panel / 切换页面">
+        <span class="k">view</span>
+        <select id="panelSelect" aria-label="Switch panel">
+          <option value="overview">Overview</option>
+          <option value="providers">Providers</option>
+          <option value="traffic">Traffic</option>
+          <option value="logs">Logs</option>
+        </select>
+      </label>
       <span class="sys-item">
         <span class="k" id="sysUpdated">—</span>
       </span>
@@ -1930,6 +1970,12 @@
             <span class="filter-meta" id="logFilterMeta">—</span>
           </div>
         </div>
+        <div class="card" style="margin-bottom: 12px">
+          <div class="page-sub" style="margin-bottom: 8px">Live log stream · 实时日志</div>
+          <div class="log-stream" id="liveLogStream" aria-live="polite">
+            <div class="empty">Waiting for traffic…</div>
+          </div>
+        </div>
         <div class="card tight table-wrap" id="historyWrap">
           <div class="connecting" aria-live="polite">
             <span class="pulse" aria-hidden="true"></span>
@@ -2005,10 +2051,16 @@
       document.querySelectorAll(".panel").forEach((p) => {
         p.classList.toggle("active", p.id === "panel-" + target);
       });
+      const sel = $("panelSelect");
+      if (sel && sel.value !== target) sel.value = target;
     }
     document.querySelectorAll(".nav-item").forEach((btn) => {
       btn.addEventListener("click", () => switchPanel(btn.dataset.panel));
     });
+    const panelSelect = $("panelSelect");
+    if (panelSelect) {
+      panelSelect.addEventListener("change", () => switchPanel(panelSelect.value));
+    }
 
     /* ── Utils ── */
     function esc(s) {
@@ -3366,6 +3418,21 @@
       }
     }
 
+    function renderLiveLogs(logs) {
+      const el = $("liveLogStream");
+      if (!el) return;
+      if (!logs || !logs.length) {
+        el.innerHTML = '<div class="empty">Waiting for traffic…</div>';
+        return;
+      }
+      const rows = logs.slice(-60).reverse();
+      el.innerHTML = rows.map((r) => {
+        const t = r.t ? new Date(r.t * 1000).toLocaleTimeString() : "";
+        const lvl = r.level === "error" ? "lvl-error" : "lvl-info";
+        return `<div class="row ${lvl}"><span class="t">${esc(t)}</span><span>${esc(r.msg)}</span></div>`;
+      }).join("");
+    }
+
     async function refresh() {
       try {
         const res = await apiFetch("/api/status");
@@ -3427,6 +3494,8 @@
         $("brandVer").textContent = "v" + (data.version || "—");
         $("overviewMeta").textContent =
           "v" + data.version + " · up " + up;
+
+        renderLiveLogs(data.logs || []);
 
         // Optional rate-limit line (hidden when both limits are off)
         const lim = data.limits;

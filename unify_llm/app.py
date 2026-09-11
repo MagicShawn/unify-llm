@@ -417,6 +417,11 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
             )
         counts = state.apply_config(new_config)
         await state.restart_health_tasks()
+        state.monitor.log(
+            "info",
+            f"config reloaded ({counts.get('providers', 0)} providers, "
+            f"{counts.get('enabled', 0)} enabled)",
+        )
         return JSONResponse({"ok": True, "config_path": str(path), **counts})
 
     @app.get("/api/providers")
