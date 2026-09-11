@@ -31,18 +31,30 @@ defaults:
   # Set to 0 to disable background health tasks. Manual POST /api/providers/{id}/test still works.
   health_interval_seconds: 60
 
-# Optional token cost estimation (USD). Defaults are 0 — never invent vendor prices.
-# Fill rates from each vendor's public pricing page (USD per 1_000_000 tokens).
-# When left at 0, /api/status and the dashboard still report tokens; cost stays $0.00.
-# pricing:
-#   # Global fallback rates applied to any model without an override below.
-#   per_million_input: 0
-#   per_million_output: 0
-#   # Optional per-model overrides (key = model id or alias). Fully replaces defaults.
-#   models:
-#     # deepseek-flash:
-#     #   input: 0.27
-#     #   output: 1.10
+# Optional token cost estimation (USD). Unify LLM does NOT call vendor billing APIs.
+# It estimates cost as: (prompt_tokens * input_rate + completion_tokens * output_rate) / 1e6
+# Rates are USD per 1,000,000 tokens. Leave at 0 to disable cost (tokens still count).
+# After editing, reload: POST /api/admin/reload (or restart).
+pricing:
+  # Global fallback for any model without an override.
+  per_million_input: 0
+  per_million_output: 0
+  # Per-model overrides (key = model id or alias). Replace rates with values from
+  # each vendor's public pricing page — do not copy these numbers blindly.
+  models: {}
+  # models:
+  #   deepseek-flash:
+  #     input: 0   # USD / 1M prompt tokens
+  #     output: 0  # USD / 1M completion tokens
+  #   deepseek-v4-pro:
+  #     input: 0
+  #     output: 0
+  #   kimi-k3:
+  #     input: 0
+  #     output: 0
+  #   glm-5.3-flash:
+  #     input: 0
+  #     output: 0
 
 providers:
   # DeepSeek — OpenAI-compatible
