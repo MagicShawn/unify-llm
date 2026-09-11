@@ -122,6 +122,17 @@ providers:
       - deepseek-flash
       - deepseek-v4-pro
 
+  # Prefer this when the client speaks Anthropic Messages (e.g. OpenCode/Claude tools).
+  # Same-protocol avoids cross-protocol tool conversion.
+  # deepseek_anthropic:
+  #   type: anthropic
+  #   base_url: "https://api.deepseek.com/anthropic"
+  #   api_key: "${DEEPSEEK_API_KEY}"
+  #   enabled: true
+  #   models:
+  #     - deepseek-flash
+  #     - deepseek-v4-pro
+
   # Kimi / Moonshot — OpenAI-compatible
   # Anthropic-compatible base (optional): https://api.moonshot.cn/anthropic
   kimi:

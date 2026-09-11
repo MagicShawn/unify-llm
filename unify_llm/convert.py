@@ -1,8 +1,7 @@
-"""Best-effort conversion between OpenAI chat.completions and Anthropic messages.
+"""Conversion between OpenAI chat.completions and Anthropic Messages.
 
-v1: text-focused. Tools / images may be dropped on cross-protocol paths.
-Same-protocol paths are preferred and do not use these helpers for body rewrite
-(only model name / stream flags).
+Supports text, tools/tool_use/tool_result, and stream (SSE) both directions.
+Same-protocol paths do not use these helpers for body rewrite.
 """
 
 from __future__ import annotations
@@ -11,8 +10,6 @@ import json
 import time
 from typing import Any, AsyncIterator
 
-# Fallback when neither the client nor model_limits provides a value.
-# max_tokens is the completion budget, not the context window.
 DEFAULT_MAX_TOKENS = 128_000
 
 
@@ -40,12 +37,6 @@ def apply_max_tokens_policy(
     model_limit: int | None,
     raise_to_model_limit: bool,
 ) -> tuple[dict[str, Any], int | None]:
-    """Return (payload, effective_max_tokens).
-
-    - Client value is kept unless raise_to_model_limit and it is smaller than model_limit.
-    - Missing value is filled from model_limit, then DEFAULT_MAX_TOKENS is left to callers
-      that must always send the field (Anthropic).
-    """
     body = dict(payload)
     client_raw = body.get("max_tokens")
     if client_raw is None:
@@ -67,14 +58,12 @@ def apply_max_tokens_policy(
         and model_limit
         and effective < int(model_limit)
     ):
-        # Clients (IDEs) often send 4k/8k; raise to vendor model cap.
         effective = int(model_limit)
         body["max_tokens"] = effective
     return body, effective
 
 
 def stream_error_frame(protocol: str, message: str) -> bytes:
-    """Tell the client the stream failed instead of dying silently mid-reply."""
     payload = {
         "type": "error",
         "error": {"type": "upstream_error", "message": message},
@@ -85,6 +74,131 @@ def stream_error_frame(protocol: str, message: str) -> bytes:
     return f"data: {json.dumps(body, ensure_ascii=False)}\n\ndata: [DONE]\n\n".encode()
 
 
+def _as_text(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                if block.get("type") == "text":
+                    parts.append(block.get("text") or "")
+                elif "text" in block and block.get("type") not in ("tool_use", "tool_result"):
+                    parts.append(str(block.get("text") or ""))
+        return "".join(parts)
+    if isinstance(content, dict):
+        if block_text := content.get("text"):
+            return str(block_text)
+        return ""
+    return str(content)
+
+
+def _json_dumps(obj: Any) -> str:
+    return json.dumps(obj, ensure_ascii=False)
+
+
+def _parse_json_arg(raw: Any) -> Any:
+    if isinstance(raw, (dict, list)):
+        return raw
+    if raw is None or raw == "":
+        return {}
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {"_raw": raw}
+    return raw
+
+
+# ---------------------------------------------------------------------------
+# tools
+# ---------------------------------------------------------------------------
+
+
+def openai_tools_to_anthropic(tools: list[Any] | None) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for t in tools or []:
+        if not isinstance(t, dict):
+            continue
+        if t.get("type") == "function" and isinstance(t.get("function"), dict):
+            fn = t["function"]
+            item: dict[str, Any] = {
+                "name": fn.get("name") or "",
+                "description": fn.get("description") or "",
+                "input_schema": fn.get("parameters") or {"type": "object", "properties": {}},
+            }
+            out.append(item)
+        elif t.get("name"):
+            out.append(
+                {
+                    "name": t["name"],
+                    "description": t.get("description") or "",
+                    "input_schema": t.get("input_schema")
+                    or t.get("parameters")
+                    or {"type": "object", "properties": {}},
+                }
+            )
+    return out
+
+
+def anthropic_tools_to_openai(tools: list[Any] | None) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for t in tools or []:
+        if not isinstance(t, dict):
+            continue
+        out.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": t.get("name") or "",
+                    "description": t.get("description") or "",
+                    "parameters": t.get("input_schema")
+                    or t.get("parameters")
+                    or {"type": "object", "properties": {}},
+                },
+            }
+        )
+    return out
+
+
+def openai_tool_choice_to_anthropic(choice: Any) -> dict[str, Any] | None:
+    if choice is None:
+        return None
+    if choice == "auto":
+        return {"type": "auto"}
+    if choice == "none":
+        return None
+    if choice == "required":
+        return {"type": "any"}
+    if isinstance(choice, dict):
+        fn = choice.get("function") or {}
+        name = fn.get("name") or choice.get("name")
+        if name:
+            return {"type": "tool", "name": name}
+    return None
+
+
+def anthropic_tool_choice_to_openai(choice: Any) -> Any:
+    if choice is None:
+        return None
+    if choice == "auto" or (isinstance(choice, dict) and choice.get("type") == "auto"):
+        return "auto"
+    if choice == "any" or (isinstance(choice, dict) and choice.get("type") == "any"):
+        return "required"
+    if isinstance(choice, dict) and choice.get("type") == "tool" and choice.get("name"):
+        return {"type": "function", "function": {"name": choice["name"]}}
+    return None
+
+
+# ---------------------------------------------------------------------------
+# request: OpenAI → Anthropic
+# ---------------------------------------------------------------------------
+
+
 def openai_chat_to_anthropic_messages(
     payload: dict[str, Any],
     *,
@@ -92,35 +206,119 @@ def openai_chat_to_anthropic_messages(
 ) -> dict[str, Any]:
     system_parts: list[str] = []
     messages: list[dict[str, Any]] = []
+    # OpenAI tool_call_id → Anthropic tool_use_id pairing via sequential map
+    pending_tool_results: list[dict[str, Any]] = []
+
+    def flush_tool_results() -> None:
+        nonlocal pending_tool_results
+        if pending_tool_results:
+            messages.append({"role": "user", "content": pending_tool_results})
+            pending_tool_results = []
 
     for m in payload.get("messages") or []:
         role = m.get("role")
         content = m.get("content")
-        if role == "system" or role == "developer":
+
+        if role in ("system", "developer"):
+            flush_tool_results()
             system_parts.append(_as_text(content))
             continue
-        if role == "tool":
-            # collapse tool results into a user turn
-            text = _as_text(content)
-            messages.append({"role": "user", "content": text})
-            continue
-        if role == "assistant":
-            messages.append({"role": "assistant", "content": _as_text(content)})
-            continue
-        # user / default
-        messages.append({"role": "user", "content": _as_text(content)})
 
-    # Anthropic requires alternating roles starting with user; merge consecutive same roles
+        if role == "tool":
+            # OpenAI tool result → Anthropic tool_result block
+            result_text = content if isinstance(content, str) else _as_text(content)
+            if isinstance(content, list):
+                # already block-ish
+                result_text = _as_text(content)
+            pending_tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": m.get("tool_call_id") or m.get("id") or "",
+                    "content": result_text,
+                }
+            )
+            continue
+
+        flush_tool_results()
+
+        if role == "assistant":
+            blocks: list[dict[str, Any]] = []
+            text = _as_text(content)
+            if text:
+                blocks.append({"type": "text", "text": text})
+            for tc in m.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                fn = tc.get("function") or {}
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.get("id") or "",
+                        "name": fn.get("name") or "",
+                        "input": _parse_json_arg(fn.get("arguments")),
+                    }
+                )
+            # legacy function_call
+            fc = m.get("function_call")
+            if isinstance(fc, dict) and fc.get("name"):
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": m.get("tool_call_id") or "call_legacy",
+                        "name": fc.get("name"),
+                        "input": _parse_json_arg(fc.get("arguments")),
+                    }
+                )
+            if not blocks:
+                blocks = [{"type": "text", "text": ""}]
+            messages.append({"role": "assistant", "content": blocks})
+            continue
+
+        # user: may contain tool_result blocks already (rare on OpenAI path)
+        if isinstance(content, list):
+            anth_blocks: list[dict[str, Any]] = []
+            for b in content:
+                if isinstance(b, dict) and b.get("type") in ("text", "image_url"):
+                    if b.get("type") == "text":
+                        anth_blocks.append({"type": "text", "text": b.get("text") or ""})
+                    else:
+                        # drop images in v1 text path
+                        continue
+                else:
+                    anth_blocks.append({"type": "text", "text": _as_text(b)})
+            messages.append(
+                {"role": "user", "content": anth_blocks or [{"type": "text", "text": ""}]}
+            )
+        else:
+            messages.append({"role": "user", "content": _as_text(content)})
+
+    flush_tool_results()
+
+    # Merge consecutive same-role text-only messages; keep structured blocks intact
     merged: list[dict[str, Any]] = []
     for msg in messages:
-        if merged and merged[-1]["role"] == msg["role"]:
+        if (
+            merged
+            and merged[-1]["role"] == msg["role"]
+            and isinstance(merged[-1]["content"], str)
+            and isinstance(msg["content"], str)
+        ):
             merged[-1]["content"] = f"{merged[-1]['content']}\n\n{msg['content']}"
         else:
             merged.append(dict(msg))
+
     if not merged:
         merged = [{"role": "user", "content": "(empty)"}]
     if merged[0]["role"] != "user":
-        merged.insert(0, {"role": "user", "content": "(continue)"})
+        # tool_result turns are user; if first is assistant, insert placeholder
+        if not (
+            isinstance(merged[0].get("content"), list)
+            and any(
+                isinstance(b, dict) and b.get("type") == "tool_result"
+                for b in merged[0]["content"]
+            )
+        ):
+            merged.insert(0, {"role": "user", "content": "(continue)"})
 
     out: dict[str, Any] = {
         "model": payload.get("model"),
@@ -136,7 +334,18 @@ def openai_chat_to_anthropic_messages(
     if payload.get("stop"):
         stop = payload["stop"]
         out["stop_sequences"] = stop if isinstance(stop, list) else [stop]
+    tools = openai_tools_to_anthropic(payload.get("tools"))
+    if tools:
+        out["tools"] = tools
+    tc = openai_tool_choice_to_anthropic(payload.get("tool_choice"))
+    if tc:
+        out["tool_choice"] = tc
     return out
+
+
+# ---------------------------------------------------------------------------
+# request: Anthropic → OpenAI
+# ---------------------------------------------------------------------------
 
 
 def anthropic_messages_to_openai_chat(payload: dict[str, Any]) -> dict[str, Any]:
@@ -147,15 +356,70 @@ def anthropic_messages_to_openai_chat(payload: dict[str, Any]) -> dict[str, Any]
 
     for m in payload.get("messages") or []:
         role = m.get("role", "user")
-        if role not in ("user", "assistant"):
-            role = "user"
-        messages.append({"role": role, "content": _as_text(m.get("content"))})
+        content = m.get("content")
+
+        if isinstance(content, str):
+            messages.append({"role": role if role in ("user", "assistant") else "user", "content": content})
+            continue
+
+        if not isinstance(content, list):
+            messages.append(
+                {"role": role if role in ("user", "assistant") else "user", "content": _as_text(content)}
+            )
+            continue
+
+        text_parts: list[str] = []
+        tool_uses: list[dict[str, Any]] = []
+        tool_results: list[dict[str, Any]] = []
+
+        for b in content:
+            if not isinstance(b, dict):
+                text_parts.append(_as_text(b))
+                continue
+            btype = b.get("type")
+            if btype == "text":
+                text_parts.append(b.get("text") or "")
+            elif btype == "tool_use":
+                tool_uses.append(
+                    {
+                        "id": b.get("id") or "",
+                        "type": "function",
+                        "function": {
+                            "name": b.get("name") or "",
+                            "arguments": _json_dumps(b.get("input") or {}),
+                        },
+                    }
+                )
+            elif btype == "tool_result":
+                rc = b.get("content")
+                tool_results.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": b.get("tool_use_id") or "",
+                        "content": rc if isinstance(rc, str) else _as_text(rc),
+                    }
+                )
+            # ignore images etc.
+
+        if role == "assistant":
+            msg: dict[str, Any] = {"role": "assistant", "content": "".join(text_parts)}
+            if tool_uses:
+                msg["tool_calls"] = tool_uses
+            if msg.get("content") == "" and not tool_uses:
+                msg["content"] = ""
+            messages.append(msg)
+            continue
+
+        # user: emit tool results first, then text
+        for tr in tool_results:
+            messages.append(tr)
+        if text_parts or not tool_results:
+            messages.append({"role": "user", "content": "".join(text_parts)})
 
     out: dict[str, Any] = {
         "model": payload.get("model"),
         "messages": messages,
     }
-    # Pass through client max_tokens unchanged when present; never invent a low cap.
     if payload.get("max_tokens") is not None:
         out["max_tokens"] = payload["max_tokens"]
     elif payload.get("max_completion_tokens") is not None:
@@ -166,7 +430,18 @@ def anthropic_messages_to_openai_chat(payload: dict[str, Any]) -> dict[str, Any]
         out["top_p"] = payload["top_p"]
     if payload.get("stop_sequences"):
         out["stop"] = payload["stop_sequences"]
+    tools = anthropic_tools_to_openai(payload.get("tools"))
+    if tools:
+        out["tools"] = tools
+    tc = anthropic_tool_choice_to_openai(payload.get("tool_choice"))
+    if tc is not None:
+        out["tool_choice"] = tc
     return out
+
+
+# ---------------------------------------------------------------------------
+# stop reasons
+# ---------------------------------------------------------------------------
 
 
 def _finish_reason_to_stop_reason(reason: str | None) -> str:
@@ -197,10 +472,8 @@ def _stop_reason_to_finish_reason(reason: str | None) -> str:
 def _openai_message_text(message: dict[str, Any] | None) -> str:
     if not message:
         return ""
-    content = message.get("content")
-    text = _as_text(content)
+    text = _as_text(message.get("content"))
     if not text:
-        # DeepSeek / reasoning models may put the answer elsewhere
         for key in ("reasoning_content", "reasoning", "thinking"):
             extra = message.get(key)
             if extra:
@@ -214,28 +487,48 @@ def openai_response_to_anthropic_message(
     *,
     model: str | None = None,
 ) -> dict[str, Any]:
-    """Non-stream OpenAI chat.completions → Anthropic message."""
-    if "type" in data and data.get("type") in ("message", "error") and "content" in data:
-        # already anthropic-shaped
+    """Non-stream OpenAI chat.completions → Anthropic message (incl. tool_use)."""
+    if data.get("type") == "message" and "content" in data:
+        return data
+    if data.get("type") == "error":
         return data
 
     choices = data.get("choices") or []
     choice = choices[0] if choices else {}
     message = choice.get("message") or {}
-    text = _openai_message_text(message)
     usage = data.get("usage") or {}
-    input_tokens = usage.get("prompt_tokens") or 0
-    output_tokens = usage.get("completion_tokens") or 0
+
+    blocks: list[dict[str, Any]] = []
+    text = _openai_message_text(message)
+    if text:
+        blocks.append({"type": "text", "text": text})
+    for tc in message.get("tool_calls") or []:
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get("function") or {}
+        blocks.append(
+            {
+                "type": "tool_use",
+                "id": tc.get("id") or "",
+                "name": fn.get("name") or "",
+                "input": _parse_json_arg(fn.get("arguments")),
+            }
+        )
+    if not blocks:
+        blocks = [{"type": "text", "text": ""}]
 
     return {
         "id": f"msg_{data.get('id') or 'proxy'}",
         "type": "message",
         "role": "assistant",
         "model": model or data.get("model") or "",
-        "content": [{"type": "text", "text": text}],
+        "content": blocks,
         "stop_reason": _finish_reason_to_stop_reason(choice.get("finish_reason")),
         "stop_sequence": None,
-        "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+        "usage": {
+            "input_tokens": usage.get("prompt_tokens") or 0,
+            "output_tokens": usage.get("completion_tokens") or 0,
+        },
     }
 
 
@@ -244,18 +537,38 @@ def anthropic_response_to_openai_chat(
     *,
     model: str | None = None,
 ) -> dict[str, Any]:
-    """Non-stream Anthropic message → OpenAI chat.completion."""
+    """Non-stream Anthropic message → OpenAI chat.completion (incl. tool_calls)."""
     if "choices" in data:
         return data
 
     blocks = data.get("content") or []
-    parts: list[str] = []
+    text_parts: list[str] = []
+    tool_calls: list[dict[str, Any]] = []
     if isinstance(blocks, list):
         for b in blocks:
-            if isinstance(b, dict) and b.get("type") == "text":
-                parts.append(b.get("text") or "")
-            elif isinstance(b, str):
-                parts.append(b)
+            if not isinstance(b, dict):
+                text_parts.append(_as_text(b))
+                continue
+            if b.get("type") == "text":
+                text_parts.append(b.get("text") or "")
+            elif b.get("type") == "tool_use":
+                tool_calls.append(
+                    {
+                        "id": b.get("id") or "",
+                        "type": "function",
+                        "function": {
+                            "name": b.get("name") or "",
+                            "arguments": _json_dumps(b.get("input") or {}),
+                        },
+                    }
+                )
+
+    message: dict[str, Any] = {"role": "assistant", "content": "".join(text_parts)}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+        if not message["content"]:
+            message["content"] = None
+
     usage = data.get("usage") or {}
     return {
         "id": f"chatcmpl-{data.get('id') or 'proxy'}",
@@ -265,7 +578,7 @@ def anthropic_response_to_openai_chat(
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": "".join(parts)},
+                "message": message,
                 "finish_reason": _stop_reason_to_finish_reason(data.get("stop_reason")),
             }
         ],
@@ -277,18 +590,13 @@ def anthropic_response_to_openai_chat(
     }
 
 
-def _sse_events(raw: bytes) -> list[str]:
-    """Split SSE payload into data field values (no 'data: ' prefix)."""
-    text = raw.decode("utf-8", errors="replace")
-    out: list[str] = []
-    for line in text.splitlines():
-        if line.startswith("data:"):
-            out.append(line[5:].strip())
-    return out
-
-
 def _anthropic_sse(event: str, data: dict[str, Any]) -> bytes:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+# ---------------------------------------------------------------------------
+# stream: OpenAI SSE → Anthropic SSE (text + tool_use)
+# ---------------------------------------------------------------------------
 
 
 async def openai_sse_to_anthropic_sse(
@@ -296,14 +604,19 @@ async def openai_sse_to_anthropic_sse(
     *,
     model: str,
 ) -> AsyncIterator[bytes]:
-    """Convert OpenAI chat.completion chunks to Anthropic Messages SSE."""
     msg_id = f"msg_proxy_{model}"
-    started = False
-    finished = False
     output_tokens = 0
     input_tokens = 0
     saw_usage = False
     buffer = b""
+
+    # block index management
+    next_index = 1
+    text_index: int | None = 0
+    tool_index_by_slot: dict[int, int] = {}
+    open_text = True
+    open_tools: set[int] = set()
+    finish_reason = None
 
     yield _anthropic_sse(
         "message_start",
@@ -321,6 +634,7 @@ async def openai_sse_to_anthropic_sse(
             },
         },
     )
+
     yield _anthropic_sse(
         "content_block_start",
         {
@@ -329,17 +643,13 @@ async def openai_sse_to_anthropic_sse(
             "content_block": {"type": "text", "text": ""},
         },
     )
-    started = True
 
-    finish_reason = None
     async for chunk in source:
         buffer += chunk
-        # process complete lines
         while b"\n" in buffer:
             line, buffer = buffer.split(b"\n", 1)
             if not line.strip():
                 continue
-            # re-wrap single line as SSE data for parser
             if line.startswith(b"data:"):
                 payload = line[5:].strip().decode("utf-8", errors="replace")
             else:
@@ -349,32 +659,29 @@ async def openai_sse_to_anthropic_sse(
             try:
                 obj = json.loads(payload)
             except json.JSONDecodeError:
-                # Incomplete JSON split across TCP chunks — keep it for next read.
                 buffer = f"data: {payload}\n".encode() + buffer
                 break
             if not isinstance(obj, dict):
                 continue
+
             if obj.get("id") and str(obj["id"]).startswith(("chatcmpl", "req")):
                 msg_id = f"msg_{obj['id']}"
+
             usage = obj.get("usage")
             if isinstance(usage, dict):
                 if "prompt_tokens" in usage or "completion_tokens" in usage:
                     input_tokens = max(input_tokens, int(usage.get("prompt_tokens") or 0))
                     output_tokens = max(output_tokens, int(usage.get("completion_tokens") or 0))
                     saw_usage = True
-                elif "input_tokens" in usage or "output_tokens" in usage:
-                    input_tokens = max(input_tokens, int(usage.get("input_tokens") or 0))
-                    output_tokens = max(output_tokens, int(usage.get("output_tokens") or 0))
-                    saw_usage = True
+
             choices = obj.get("choices") or []
             if not choices:
-                # usage-only final chunk
                 continue
             choice = choices[0]
             delta = choice.get("delta") or {}
+
             text = delta.get("content")
             if not text:
-                # reasoning models
                 for key in ("reasoning_content", "reasoning", "thinking"):
                     if delta.get(key):
                         text = delta.get(key)
@@ -386,30 +693,88 @@ async def openai_sse_to_anthropic_sse(
                     "content_block_delta",
                     {
                         "type": "content_block_delta",
-                        "index": 0,
+                        "index": text_index if text_index is not None else 0,
                         "delta": {"type": "text_delta", "text": text},
                     },
                 )
+
+            # OpenAI tool_calls deltas
+            for tc in delta.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                slot = int(tc.get("index") or 0)
+                if slot not in tool_index_by_slot:
+                    # close text block first if open and we already emitted text
+                    if open_text and text_index is not None:
+                        yield _anthropic_sse(
+                            "content_block_stop",
+                            {"type": "content_block_stop", "index": text_index},
+                        )
+                        open_text = False
+                    tool_index_by_slot[slot] = next_index
+                    next_index += 1
+                    fn0 = tc.get("function") or {}
+                    yield _anthropic_sse(
+                        "content_block_start",
+                        {
+                            "type": "content_block_start",
+                            "index": tool_index_by_slot[slot],
+                            "content_block": {
+                                "type": "tool_use",
+                                "id": tc.get("id") or f"toolu_{slot}",
+                                "name": fn0.get("name") or "",
+                                "input": {},
+                            },
+                        },
+                    )
+                    open_tools.add(slot)
+                idx = tool_index_by_slot[slot]
+                fn = tc.get("function") or {}
+                args = fn.get("arguments")
+                if args:
+                    yield _anthropic_sse(
+                        "content_block_delta",
+                        {
+                            "type": "content_block_delta",
+                            "index": idx,
+                            "delta": {"type": "input_json_delta", "partial_json": args},
+                        },
+                    )
+
             fr = choice.get("finish_reason")
             if fr:
                 finish_reason = fr
 
-    if started:
-        yield _anthropic_sse("content_block_stop", {"type": "content_block_stop", "index": 0})
+    # close open blocks
+    if open_text and text_index is not None:
         yield _anthropic_sse(
-            "message_delta",
-            {
-                "type": "message_delta",
-                "delta": {
-                    "stop_reason": _finish_reason_to_stop_reason(finish_reason),
-                    "stop_sequence": None,
-                },
-                "usage": {"output_tokens": max(output_tokens, 1 if not saw_usage else 0)},
-            },
+            "content_block_stop",
+            {"type": "content_block_stop", "index": text_index},
         )
-        yield _anthropic_sse("message_stop", {"type": "message_stop"})
-        finished = True
-    _ = finished
+    for slot in list(open_tools):
+        yield _anthropic_sse(
+            "content_block_stop",
+            {"type": "content_block_stop", "index": tool_index_by_slot[slot]},
+        )
+    open_tools.clear()
+
+    yield _anthropic_sse(
+        "message_delta",
+        {
+            "type": "message_delta",
+            "delta": {
+                "stop_reason": _finish_reason_to_stop_reason(finish_reason),
+                "stop_sequence": None,
+            },
+            "usage": {"output_tokens": max(output_tokens, 1 if not saw_usage else 0)},
+        },
+    )
+    yield _anthropic_sse("message_stop", {"type": "message_stop"})
+
+
+# ---------------------------------------------------------------------------
+# stream: Anthropic SSE → OpenAI SSE (text + tool_calls)
+# ---------------------------------------------------------------------------
 
 
 async def anthropic_sse_to_openai_sse(
@@ -417,7 +782,6 @@ async def anthropic_sse_to_openai_sse(
     *,
     model: str,
 ) -> AsyncIterator[bytes]:
-    """Convert Anthropic Messages SSE to OpenAI chat.completion chunks."""
     chunk_id = f"chatcmpl-{model}"
     created = int(time.time())
     buffer = b""
@@ -440,10 +804,13 @@ async def anthropic_sse_to_openai_sse(
 
     yield _chunk({"role": "assistant", "content": ""})
 
+    # track anthropic content block index → openai tool_calls index
+    block_tool_slot: dict[int, int] = {}
+    next_tool_slot = 0
+
     async for chunk in source:
         buffer += chunk
         text_buf = buffer.decode("utf-8", errors="replace")
-        # parse whole events separated by blank lines
         while "\n\n" in text_buf:
             raw_event, text_buf = text_buf.split("\n\n", 1)
             data_lines = []
@@ -458,39 +825,59 @@ async def anthropic_sse_to_openai_sse(
             try:
                 obj = json.loads(payload)
             except json.JSONDecodeError:
-                continue
+                text_buf = payload + "\n\n" + text_buf
+                break
             if not isinstance(obj, dict):
                 continue
+
             etype = obj.get("type")
-            if etype == "content_block_delta":
+            if etype == "content_block_start":
+                cb = obj.get("content_block") or {}
+                bidx = int(obj.get("index") or 0)
+                if cb.get("type") == "tool_use":
+                    slot = next_tool_slot
+                    next_tool_slot += 1
+                    block_tool_slot[bidx] = slot
+                    yield _chunk(
+                        {
+                            "tool_calls": [
+                                {
+                                    "index": slot,
+                                    "id": cb.get("id") or f"call_{slot}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": cb.get("name") or "",
+                                        "arguments": "",
+                                    },
+                                }
+                            ]
+                        }
+                    )
+            elif etype == "content_block_delta":
                 delta = obj.get("delta") or {}
+                bidx = int(obj.get("index") or 0)
                 if delta.get("type") == "text_delta" and delta.get("text"):
                     yield _chunk({"content": delta["text"]})
+                elif delta.get("type") == "input_json_delta" and delta.get("partial_json"):
+                    slot = block_tool_slot.get(bidx, 0)
+                    yield _chunk(
+                        {
+                            "tool_calls": [
+                                {
+                                    "index": slot,
+                                    "function": {"arguments": delta["partial_json"]},
+                                }
+                            ]
+                        }
+                    )
             elif etype == "message_delta":
                 stop = (obj.get("delta") or {}).get("stop_reason")
                 if stop:
                     yield _chunk({}, _stop_reason_to_finish_reason(stop))
             elif etype == "message_stop":
                 yield b"data: [DONE]\n\n"
+            elif etype == "error":
+                err = obj.get("error") or {}
+                yield f"data: {json.dumps({'error': err}, ensure_ascii=False)}\n\n".encode()
+                yield b"data: [DONE]\n\n"
         buffer = text_buf.encode("utf-8")
-
-
-def _as_text(content: Any) -> str:
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, dict):
-                if block.get("type") == "text":
-                    parts.append(block.get("text") or "")
-                elif "text" in block:
-                    parts.append(str(block.get("text") or ""))
-        return "".join(parts)
-    if isinstance(content, dict):
-        return str(content.get("text") or content)
-    return str(content)

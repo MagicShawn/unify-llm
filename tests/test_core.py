@@ -125,10 +125,161 @@ def test_openai_chat_to_anthropic_messages_system_and_roles():
     roles = [m["role"] for m in out["messages"]]
     assert roles[0] == "user"
     assert "assistant" in roles
-    # consecutive same-role turns are merged
     assert roles.count("user") >= 1
-    # tool result collapsed into user
-    assert any("tool result" in m["content"] for m in out["messages"])
+    # tool result becomes Anthropic tool_result block on a user turn
+    found_tool_result = False
+    for m in out["messages"]:
+        c = m["content"]
+        if isinstance(c, list):
+            for b in c:
+                if isinstance(b, dict) and b.get("type") == "tool_result":
+                    assert "tool result" in (b.get("content") or "")
+                    found_tool_result = True
+    assert found_tool_result
+
+
+def test_tool_roundtrip_openai_anthropic_request():
+    """tools, tool_calls, tool_result must survive cross-protocol convert."""
+    from unify_llm.convert import (
+        anthropic_messages_to_openai_chat,
+        openai_chat_to_anthropic_messages,
+    )
+
+    oa = {
+        "model": "m",
+        "max_tokens": 64,
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "read",
+                    "description": "read file",
+                    "parameters": {"type": "object", "properties": {"path": {"type": "string"}}},
+                },
+            }
+        ],
+        "tool_choice": "auto",
+        "messages": [
+            {"role": "user", "content": "read a.txt"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "read", "arguments": '{"path":"a.txt"}'},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "file body"},
+        ],
+    }
+    anth = openai_chat_to_anthropic_messages(oa)
+    assert anth["tools"][0]["name"] == "read"
+    assert anth["tools"][0]["input_schema"]["type"] == "object"
+    assert anth["tool_choice"] == {"type": "auto"}
+
+    # assistant has tool_use
+    asst = next(m for m in anth["messages"] if m["role"] == "assistant")
+    tu = next(b for b in asst["content"] if b.get("type") == "tool_use")
+    assert tu["id"] == "call_1"
+    assert tu["name"] == "read"
+    assert tu["input"]["path"] == "a.txt"
+
+    # tool result
+    user_turns = [m for m in anth["messages"] if m["role"] == "user"]
+    last = user_turns[-1]
+    assert isinstance(last["content"], list)
+    tr = last["content"][0]
+    assert tr["type"] == "tool_result"
+    assert tr["tool_use_id"] == "call_1"
+    assert tr["content"] == "file body"
+
+    # back to OpenAI
+    back = anthropic_messages_to_openai_chat(anth)
+    assert back["tools"][0]["function"]["name"] == "read"
+    back_asst = next(m for m in back["messages"] if m.get("tool_calls"))
+    assert back_asst["tool_calls"][0]["id"] == "call_1"
+    assert json.loads(back_asst["tool_calls"][0]["function"]["arguments"])["path"] == "a.txt"
+    assert any(m.get("role") == "tool" and m.get("tool_call_id") == "call_1" for m in back["messages"])
+
+
+def test_tool_response_convert():
+    from unify_llm.convert import (
+        anthropic_response_to_openai_chat,
+        openai_response_to_anthropic_message,
+    )
+
+    oa_resp = {
+        "id": "chatcmpl-1",
+        "model": "m",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_9",
+                            "type": "function",
+                            "function": {"name": "ls", "arguments": "{}"},
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 2},
+    }
+    anth = openai_response_to_anthropic_message(oa_resp, model="m")
+    assert anth["stop_reason"] == "tool_use"
+    tu = anth["content"][0]
+    assert tu["type"] == "tool_use" and tu["name"] == "ls"
+
+    back = anthropic_response_to_openai_chat(anth, model="m")
+    assert back["choices"][0]["finish_reason"] == "tool_calls"
+    assert back["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "ls"
+
+
+def test_openai_stream_tool_calls_to_anthropic():
+    import asyncio
+    import json as _json
+
+    from unify_llm.convert import openai_sse_to_anthropic_sse
+
+    async def src():
+        chunks = [
+            'data: {"id":"c1","choices":[{"delta":{"content":"Let me read"},"index":0}]}\n\n',
+            'data: {"id":"c1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_x","type":"function","function":{"name":"read","arguments":""}}]},"index":0}]}\n\n',
+            'data: {"id":"c1","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\":"}}]},"index":0}]}\n\n',
+            'data: {"id":"c1","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"a\\"}"}}]},"index":0}]}\n\n',
+            'data: {"id":"c1","choices":[{"delta":{},"finish_reason":"tool_calls","index":0}]}\n\n',
+            "data: [DONE]\n\n",
+        ]
+        for c in chunks:
+            yield c.encode()
+
+    async def run():
+        events = []
+        async for b in openai_sse_to_anthropic_sse(src(), model="m"):
+            for line in b.decode().splitlines():
+                if line.startswith("event:"):
+                    events.append(line.split(":", 1)[1].strip())
+                if line.startswith("data:"):
+                    try:
+                        obj = _json.loads(line[5:].strip())
+                    except Exception:
+                        continue
+                    if obj.get("type") == "content_block_start" and obj.get("content_block", {}).get("type") == "tool_use":
+                        assert obj["content_block"]["name"] == "read"
+        return events
+
+    events = asyncio.run(run())
+    assert "content_block_start" in events
+    assert "content_block_stop" in events
+    assert "message_stop" in events
 
 
 def test_openai_chat_to_anthropic_messages_merges_and_defaults():
