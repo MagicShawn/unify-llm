@@ -13,7 +13,9 @@ Local multi-provider LLM gateway. One fixed port routes OpenAI-compatible and An
 - Stream SSE end to end; recover token usage from stream chunks when available.
 - Configure timeouts, retries, and an optional fallback model.
 - Watch live concurrency, in-flight requests, latency (rolling p50/p95), and token totals on the dashboard.
+- Optional token cost estimation (USD) from configured rates — defaults stay at 0; no vendor prices are invented.
 - Optional LAN gateway key (`UNIFY_GATEWAY_KEY`) for multi-machine access on a private network.
+- Optional gateway rate limits: per-client requests/minute and a global concurrency cap on `/v1/*` (HTTP 429 + `Retry-After`).
 - Provider admin API: list, enable/disable, upstream test, config hot-reload.
 - Dashboard ops: toggle providers, test upstream, reload config, filter logs.
 
@@ -180,6 +182,30 @@ The dashboard shows:
 Status JSON is available at `/api/status` for scripts or other tools.
 
 Token totals for streaming requests are recovered from SSE `usage` fields when the upstream emits them. OpenAI-compatible streams request `stream_options.include_usage`. If a vendor omits usage, those counters stay at zero for that request.
+
+### Token cost estimation (optional)
+
+Cost is **not** enabled by default. The gateway never invents vendor prices — `pricing` rates default to `0` and estimated cost stays `$0.00` until you fill them in.
+
+Copy rates (USD per **1,000,000** tokens) from each vendor’s public pricing page into `config.yaml`:
+
+```yaml
+pricing:
+  # Global fallback for any model without an override below.
+  per_million_input: 0.0    # set to your rates, e.g. 0.27
+  per_million_output: 0.0
+  # Optional per-model overrides (model id or alias). Fully replaces defaults.
+  models:
+    # deepseek-flash:
+    #   input: 0.27
+    #   output: 1.10
+```
+
+When rates are set and usage is known (non-stream body or stream SSE), the gateway estimates:
+
+`cost_usd = (prompt_tokens * input_rate + completion_tokens * output_rate) / 1_000_000`
+
+Results appear on `/api/status` (`totals.cost_usd`, each provider’s `cost_usd`, and per-model breakdown) and on the dashboard **Est. cost** KPI (formatted like `$0.00123`).
 
 ## Develop and test
 

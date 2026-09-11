@@ -6,7 +6,35 @@ import time
 import uuid
 from collections import deque
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover — typing only
+    from .config import PricingConfig
+
+
+def estimate_cost_usd(
+    pricing: PricingConfig | None,
+    *,
+    model: str = "",
+    requested_model: str = "",
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+) -> float:
+    """Estimate USD cost from token counts using pricing defaults + model overrides.
+
+    Returns 0.0 when no rates are configured or tokens are unknown.
+    Tries the resolved model id first, then the client-requested id (aliases).
+    """
+    if pricing is None:
+        return 0.0
+    pt = max(int(prompt_tokens or 0), 0)
+    ct = max(int(completion_tokens or 0), 0)
+    if pt == 0 and ct == 0:
+        return 0.0
+    input_rate, output_rate = pricing.rate_for(model, requested_model)
+    if input_rate <= 0.0 and output_rate <= 0.0:
+        return 0.0
+    return (pt * float(input_rate) + ct * float(output_rate)) / 1_000_000.0
 
 
 def extract_usage(payload: Any) -> tuple[int, int]:
@@ -160,6 +188,7 @@ class CompletedRequest:
     client: str = ""
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    estimated_cost_usd: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -177,6 +206,7 @@ class ProviderStats:
     errors: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    cost_usd: float = 0.0
     last_error: str | None = None
     last_error_at: float | None = None
     last_health: dict[str, Any] | None = None
@@ -196,6 +226,7 @@ class ProviderStats:
             "errors": self.errors,
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
+            "cost_usd": self.cost_usd,
             "last_error": self.last_error,
             "last_error_at": self.last_error_at,
             "last_health": dict(self.last_health) if self.last_health else None,
@@ -207,7 +238,13 @@ class ProviderStats:
 class Monitor:
     """Process-wide concurrency, latency series, token totals, request history."""
 
-    def __init__(self, history_size: int = 500, bucket_seconds: float = 5.0, series_buckets: int = 60):
+    def __init__(
+        self,
+        history_size: int = 500,
+        bucket_seconds: float = 5.0,
+        series_buckets: int = 60,
+        pricing: PricingConfig | None = None,
+    ):
         self._lock = threading.Lock()
         self.started_at = time.time()
         self._global_recent: deque[CompletedRequest] = deque(maxlen=history_size)
@@ -217,8 +254,14 @@ class Monitor:
         self._global_errors = 0
         self._prompt_tokens = 0
         self._completion_tokens = 0
+        self._cost_usd = 0.0
         self._bucket_seconds = bucket_seconds
         self._series_buckets = series_buckets
+        self._pricing = pricing
+
+    def set_pricing(self, pricing: PricingConfig | None) -> None:
+        """Replace pricing rates used for cost estimates on subsequent requests."""
+        self._pricing = pricing
 
     def register_provider(
         self,
@@ -314,6 +357,16 @@ class Monitor:
             else:
                 model = requested = protocol = path = client = ""
             status = "error" if error or http_status >= 400 else "ok"
+            prompt_tokens = int(prompt_tokens or 0)
+            completion_tokens = int(completion_tokens or 0)
+            # Estimate outside the rec branch so stream + non-stream share one path.
+            cost = estimate_cost_usd(
+                self._pricing,
+                model=model,
+                requested_model=requested,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
             completed = CompletedRequest(
                 id=request_id,
                 provider_id=provider_id,
@@ -327,15 +380,18 @@ class Monitor:
                 error=error,
                 finished_at=now,
                 client=client,
-                prompt_tokens=int(prompt_tokens or 0),
-                completion_tokens=int(completion_tokens or 0),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                estimated_cost_usd=cost,
             )
             stats.active = max(0, stats.active - 1)
             stats.total += 1
             stats.prompt_tokens += completed.prompt_tokens
             stats.completion_tokens += completed.completion_tokens
+            stats.cost_usd += cost
             self._prompt_tokens += completed.prompt_tokens
             self._completion_tokens += completed.completion_tokens
+            self._cost_usd += cost
             if status == "error":
                 stats.errors += 1
                 stats.last_error = error or f"HTTP {http_status}"
@@ -400,12 +456,14 @@ class Monitor:
                     "errors": 0,
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
+                    "cost_usd": 0.0,
                     "latencies": [],
                 },
             )
             item["total"] += 1
             item["prompt_tokens"] += r.prompt_tokens
             item["completion_tokens"] += r.completion_tokens
+            item["cost_usd"] += r.estimated_cost_usd
             if r.status == "ok":
                 item["latencies"].append(r.latency_ms)
             else:
@@ -414,6 +472,7 @@ class Monitor:
             lats = sorted(item.pop("latencies") or [])
             item["p50"] = round(_percentile(lats, 0.5), 1) if lats else None
             item["p95"] = round(_percentile(lats, 0.95), 1) if lats else None
+            item["cost_usd"] = round(float(item.get("cost_usd") or 0.0), 12)
         return out
 
     def status(self) -> dict[str, Any]:
@@ -431,6 +490,7 @@ class Monitor:
                     "prompt_tokens": self._prompt_tokens,
                     "completion_tokens": self._completion_tokens,
                     "total_tokens": self._prompt_tokens + self._completion_tokens,
+                    "cost_usd": self._cost_usd,
                 },
                 "latency": self._latency_series_locked(),
                 "models": models,
@@ -449,6 +509,7 @@ class Monitor:
                 "errors": stats.errors,
                 "prompt_tokens": stats.prompt_tokens,
                 "completion_tokens": stats.completion_tokens,
+                "cost_usd": stats.cost_usd,
                 "last_error": stats.last_error,
                 "last_error_at": stats.last_error_at,
                 "last_health": dict(stats.last_health) if stats.last_health else None,

@@ -483,42 +483,100 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8787/api/admin/reload
 
 ### 7.4 以 Windows 计划任务 / 开机自启（可选）
 
-**当前用户登录后启动：**
+仓库提供原生运维脚本（`scripts\*.ps1`），推荐用它们注册 **Scheduled Task「UnifyLLM」**，无需 NSSM。
 
-1. 新建 `start_proxy.bat`（与项目同级或任意路径）：
+#### 7.4.1 一键脚本
 
-```bat
-@echo off
-cd /d D:\Work_space\01_Work_Projects\unify_llm
-call .venv\Scripts\activate.bat
-python main.py
-```
+| 脚本 | 作用 |
+|------|------|
+| `scripts\install_windows_service.ps1` | 注册 AtLogOn 计划任务，隐藏窗口启动 `python main.py` |
+| `scripts\uninstall_windows_service.ps1` | 注销任务，并可顺带停掉 8787 上的进程 |
+| `scripts\start_proxy.ps1` | 启动中转站（默认前台；`-Detach` 后台隐藏） |
+| `scripts\stop_proxy.ps1` | 按端口结束监听进程（默认 8787） |
 
-2. `Win+R` → `shell:startup` → 把该 bat 的快捷方式放进启动文件夹。
+所有脚本均支持 PowerShell 的 `-WhatIf` / `-Confirm`（`SupportsShouldProcess`）。**先 `-WhatIf` 预览，确认后再真实执行。**
 
-**用任务计划程序更稳：**
+#### 7.4.2 注册 / 预览
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute "D:\Work_space\01_Work_Projects\unify_llm\start_proxy.bat"
+cd D:\Work_space\01_Work_Projects\central_proxy
+
+# 预览（不改动系统）
+.\scripts\install_windows_service.ps1 -WhatIf
+
+# 注册：登录后自动启动，监听 127.0.0.1:8787
+.\scripts\install_windows_service.ps1
+
+# 自定义端口 / 监听地址
+.\scripts\install_windows_service.ps1 -Port 8787 -HostAddress 127.0.0.1
+
+# 立即拉起（不等下次登录）
+Start-ScheduledTask -TaskName "UnifyLLM"
+```
+
+脚本行为：
+
+- 任务名：`UnifyLLM`
+- 触发器：当前用户 **AtLogOn**（交互式、非管理员）
+- 工作目录：项目根（含 `main.py` 的目录）
+- Python：优先 `.venv\Scripts\python.exe`，否则 PATH 中的 `python`
+- 启动方式：`powershell.exe -WindowStyle Hidden -File scripts\start_proxy.ps1 -Detach ...`
+
+**管理员权限**：默认**不需要**。当前用户 AtLogOn 任务、`RunLevel Limited` 即可。仅当你要改成系统级任务或结束其他用户进程时才需要提权。
+
+**注意**：参数名是 `-HostAddress`（不能用 `-Host`，PowerShell 保留自动变量）。安装器内部会传给 `main.py --host`。
+
+#### 7.4.3 启动 / 停止（按端口）
+
+```powershell
+# 后台启动（隐藏窗口）
+.\scripts\start_proxy.ps1 -Detach
+
+# 端口已被占用时先杀再启
+.\scripts\start_proxy.ps1 -Detach -Force
+
+# 停止 8787 监听进程
+.\scripts\stop_proxy.ps1
+
+# 一并停掉计划任务（若在跑）
+.\scripts\stop_proxy.ps1 -StopTask
+
+# 换端口
+.\scripts\stop_proxy.ps1 -Port 8788
+.\scripts\start_proxy.ps1 -Port 8788 -Detach
+```
+
+#### 7.4.4 卸载
+
+```powershell
+.\scripts\uninstall_windows_service.ps1 -WhatIf   # 预览
+.\scripts\uninstall_windows_service.ps1           # 注销任务 + 停 8787 进程
+
+# 只注销任务、保留进程
+.\scripts\uninstall_windows_service.ps1 -KeepProcess
+```
+
+等价地，安装脚本也支持就地卸载：
+
+```powershell
+.\scripts\install_windows_service.ps1 -Unregister
+```
+
+#### 7.4.5 手动 / 旧版方式（可选）
+
+若不用脚本，仍可手写任务计划：
+
+```powershell
+$action  = New-ScheduledTaskAction -Execute "python" -Argument "main.py" -WorkingDirectory $PWD
 $trigger = New-ScheduledTaskTrigger -AtLogOn
-Register-ScheduledTask -TaskName "CentralProxy" -Action $action -Trigger $trigger -Description "Local LLM gateway"
+Register-ScheduledTask -TaskName "UnifyLLM" -Action $action -Trigger $trigger -Description "Local LLM gateway"
+Start-ScheduledTask -TaskName "UnifyLLM"
+Stop-ScheduledTask  -TaskName "UnifyLLM"
 ```
 
-手动启停：
+或把启动快捷方式放进 `Win+R` → `shell:startup`。
 
-```powershell
-Start-ScheduledTask -TaskName "CentralProxy"
-Stop-ScheduledTask  -TaskName "CentralProxy"
-```
-
-进程内停止：在前台窗口按 `Ctrl+C`；后台进程可用：
-
-```powershell
-# 按端口找 PID 后结束（管理员可能不需要）
-Get-NetTCPConnection -LocalPort 8787 -State Listen |
-  Select-Object -ExpandProperty OwningProcess |
-  ForEach-Object { Stop-Process -Id $_ -Force }
-```
+前台调试仍推荐直接 `python main.py`，`Ctrl+C` 结束；后台残留进程用 `stop_proxy.ps1` 清理。
 
 ### 7.5 systemd（Linux 服务器可选）
 
@@ -714,8 +772,18 @@ Invoke-RestMethod http://127.0.0.1:8787/v1/chat/completions `
 
 ## 12. 卸载 / 停用
 
-1. 结束进程（Ctrl+C 或结束 8787 监听进程）  
-2. 删除计划任务（若有）：`Unregister-ScheduledTask -TaskName "CentralProxy" -Confirm:$false`  
+推荐使用脚本（见 7.4.4）：
+
+```powershell
+.\scripts\uninstall_windows_service.ps1
+# 或
+.\scripts\install_windows_service.ps1 -Unregister
+```
+
+手动步骤：
+
+1. 结束进程：`.\scripts\stop_proxy.ps1`（或 Ctrl+C / 结束 8787 监听进程）  
+2. 删除计划任务：`Unregister-ScheduledTask -TaskName "UnifyLLM" -Confirm:$false`  
 3. 删除项目目录或仅保留 `config.yaml` 备份  
 4. 如需清除密钥：删除相关用户环境变量  
 

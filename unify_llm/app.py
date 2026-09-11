@@ -16,6 +16,7 @@ from .adapters import create_adapter
 from .config import AppConfig, ProviderConfig, load_config, set_provider_enabled
 from .errors import ConfigError, ModelNotFoundError, ProxyError, UpstreamError
 from .monitor import Monitor, StreamUsageSniffer, extract_usage
+from .rate_limit import RateLimiter
 from .registry import Registry, ResolvedRoute
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -69,7 +70,11 @@ class AppState:
         self.config = config
         self.config_path: Path | None = Path(config_path) if config_path is not None else None
         self.registry = Registry(config)
-        self.monitor = Monitor()
+        self.monitor = Monitor(pricing=config.pricing)
+        self.limiter = RateLimiter(
+            requests_per_minute=config.limits.requests_per_minute,
+            max_concurrent=config.limits.max_concurrent,
+        )
         self._register_all(config)
         self.http: httpx.AsyncClient | None = None
         self._health_tasks: list[asyncio.Task[None]] = []
@@ -88,6 +93,11 @@ class AppState:
         """Replace live config/registry and refresh monitor provider metadata."""
         self.config = config
         self.registry = Registry(config)
+        self.monitor.set_pricing(config.pricing)
+        self.limiter.update_config(
+            config.limits.requests_per_minute,
+            config.limits.max_concurrent,
+        )
         self._register_all(config)
         enabled = sum(1 for p in config.providers.values() if p.enabled)
         return {"providers": len(config.providers), "enabled": enabled}
@@ -255,6 +265,71 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 )
             return await call_next(request)
 
+    # Rate limit /v1/* only (token bucket per client IP + optional concurrency cap).
+    # Always registered so admin reload can turn limits on without restart.
+    @app.middleware("http")
+    async def rate_limit_middleware(request: Request, call_next):
+        path = request.url.path
+        if not path.startswith("/v1/"):
+            return await call_next(request)
+        if not state.limiter.enabled:
+            return await call_next(request)
+
+        decision = state.limiter.check(_client_ip(request))
+        if not decision.allowed:
+            if decision.reason == "max_concurrent":
+                message = (
+                    f"Too many concurrent requests (max {state.limiter.max_concurrent}). "
+                    "Retry shortly."
+                )
+            else:
+                rpm = state.limiter.requests_per_minute
+                message = (
+                    f"Rate limit exceeded: {rpm} requests per minute. "
+                    f"Retry after {decision.retry_after}s."
+                )
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "message": message,
+                        "type": "RateLimitError",
+                        "retry_after": decision.retry_after,
+                    }
+                },
+                headers={"Retry-After": str(decision.retry_after)},
+            )
+
+        released = False
+
+        def _release_once() -> None:
+            nonlocal released
+            if not released:
+                released = True
+                state.limiter.release()
+
+        try:
+            response = await call_next(request)
+        except Exception:
+            _release_once()
+            raise
+
+        body_iterator = getattr(response, "body_iterator", None)
+        if body_iterator is None:
+            # Fully buffered response: slot is free once call_next returns.
+            _release_once()
+            return response
+
+        async def _wrapped(iterator=body_iterator):
+            try:
+                async for chunk in iterator:
+                    yield chunk
+            finally:
+                _release_once()
+
+        response.body_iterator = _wrapped()
+        return response
+
     # ---------- health / status / dashboard ----------
 
     @app.get("/healthz")
@@ -272,7 +347,9 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
 
     @app.get("/api/status")
     async def api_status() -> dict[str, Any]:
-        return state.monitor.status()
+        body = state.monitor.status()
+        body["limits"] = state.limiter.status()
+        return body
 
     @app.get("/api/history")
     async def api_history(limit: int = 50) -> dict[str, Any]:
@@ -292,8 +369,10 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
         return {
             "server": state.config.server.model_dump(),
             "defaults": state.config.defaults.model_dump(),
+            "limits": state.config.limits.model_dump(),
             "providers": providers,
             "aliases": state.config.aliases,
+            "pricing": state.config.pricing.model_dump(),
             "auth_required": bool(state.config.gateway_api_key()),
         }
 

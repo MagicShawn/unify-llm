@@ -401,13 +401,13 @@
     /* ── Cards / KPI ── */
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: var(--gap);
       margin-bottom: var(--gap);
     }
     .kpi-grid.tokens { grid-template-columns: repeat(3, 1fr); }
     @media (max-width: 1100px) {
-      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .kpi-grid { grid-template-columns: repeat(3, 1fr); }
       .kpi-grid.tokens { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 720px) {
@@ -1681,6 +1681,10 @@
       <span class="sys-item" id="sysAuthWrap" hidden>
         <span class="auth-note" id="sysAuth"></span>
       </span>
+      <span class="sys-item" id="sysLimitsWrap" hidden>
+        <span class="k">lim</span>
+        <span class="v" id="sysLimits">—</span>
+      </span>
       <span class="sysbar-spacer"></span>
       <span class="sys-item">
         <span class="k" id="sysUpdated">—</span>
@@ -1756,6 +1760,11 @@
             <div class="label"><span>Total tokens</span><span class="zh">总 tokens</span></div>
             <div class="value ok" id="kpiTokens">0</div>
             <div class="hint" id="kpiTokSplit">in 0 · out 0</div>
+          </div>
+          <div class="card kpi accent">
+            <div class="label"><span>Est. cost</span><span class="zh">预估费用</span></div>
+            <div class="value accent" id="kpiCost">$0.00</div>
+            <div class="hint" id="kpiCostHint">set pricing rates</div>
           </div>
         </div>
 
@@ -2012,6 +2021,13 @@
       if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
       if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
       return String(Math.round(n));
+    }
+    function fmtUSD(n) {
+      const v = Number(n) || 0;
+      if (v === 0) return "$0.00";
+      if (v < 0.01) return "$" + v.toFixed(5);
+      if (v < 1) return "$" + v.toFixed(4);
+      return "$" + v.toFixed(2);
     }
     function fmtMs(ms) {
       if (ms == null || ms === undefined) return "—";
@@ -2422,6 +2438,10 @@
                 <div class="dd sub">in ${tokIn} · out ${tokOut} · Σ ${tokTotal}</div>
               </div>
               <div>
+                <div class="dt">est. cost</div>
+                <div class="dd sub">${fmtUSD(m.cost_usd)}</div>
+              </div>
+              <div>
                 <div class="dt">recent latency</div>
                 <div class="dd">
                   ${spark
@@ -2572,6 +2592,7 @@
                 <div class="cell"><div class="n">${p.total ?? 0}</div><div class="t">total</div></div>
                 <div class="cell"><div class="n ${p.errors ? "bad" : ""}">${p.errors ?? 0}</div><div class="t">err</div></div>
                 <div class="cell"><div class="n">${fmtN((p.prompt_tokens || 0) + (p.completion_tokens || 0))}</div><div class="t">tokens</div></div>
+                <div class="cell"><div class="n">${fmtUSD(p.cost_usd)}</div><div class="t">cost</div></div>
               </div>
               <div class="prov-test-result" data-test-result="${esc(p.id)}" hidden></div>
             </div>
@@ -3364,6 +3385,11 @@
         $("kpiTokens").textContent = fmtN(t.total_tokens ?? 0);
         $("kpiTokSplit").textContent =
           "in " + fmtN(t.prompt_tokens || 0) + " · out " + fmtN(t.completion_tokens || 0);
+        const costUsd = Number(t.cost_usd) || 0;
+        $("kpiCost").textContent = fmtUSD(costUsd);
+        $("kpiCostHint").textContent = costUsd > 0
+          ? "est. · set pricing in config"
+          : "set pricing rates";
         $("tokIn").textContent = fmtN(t.prompt_tokens || 0);
         $("tokOut").textContent = fmtN(t.completion_tokens || 0);
         const avgTok = t.requests > 0
@@ -3394,6 +3420,24 @@
         $("brandVer").textContent = "v" + (data.version || "—");
         $("overviewMeta").textContent =
           "v" + data.version + " · up " + up;
+
+        // Optional rate-limit line (hidden when both limits are off)
+        const lim = data.limits;
+        if (lim && lim.enabled) {
+          $("sysLimitsWrap").hidden = false;
+          const parts = [];
+          if (lim.requests_per_minute > 0) {
+            parts.push(
+              (lim.remaining != null ? lim.remaining : "—") + "/" + lim.requests_per_minute + "/m"
+            );
+          }
+          if (lim.max_concurrent > 0) {
+            parts.push("c " + (lim.active ?? 0) + "/" + lim.max_concurrent);
+          }
+          $("sysLimits").textContent = parts.join(" · ") || "on";
+        } else {
+          $("sysLimitsWrap").hidden = true;
+        }
 
         const latency = data.latency || { series: [], points: [], window: 10 };
         const series = latency.series || [];
