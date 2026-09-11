@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,12 +13,55 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import __version__
 from .adapters import create_adapter
-from .config import AppConfig, load_config, set_provider_enabled
+from .config import AppConfig, ProviderConfig, load_config, set_provider_enabled
 from .errors import ConfigError, ModelNotFoundError, ProxyError, UpstreamError
 from .monitor import Monitor, StreamUsageSniffer, extract_usage
 from .registry import Registry, ResolvedRoute
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+PROBE_TIMEOUT_SECONDS = 10.0
+
+
+async def probe_provider(
+    http: httpx.AsyncClient,
+    p: ProviderConfig,
+    timeout: float = PROBE_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Lightweight upstream reachability probe. Never logs or returns keys.
+
+    openai → GET {base}/models; anthropic → GET base with x-api-key.
+    Returns {ok, status_code, latency_ms} (+ error class name on failure).
+    """
+    if p.type == "anthropic":
+        url = p.base_url.rstrip("/")
+        headers = {
+            "x-api-key": p.api_key or "",
+            "anthropic-version": "2023-06-01",
+        }
+    else:
+        url = f"{p.base_url.rstrip('/')}/models"
+        headers = {}
+        if p.api_key:
+            headers["Authorization"] = f"Bearer {p.api_key}"
+
+    started = time.time()
+    try:
+        resp = await http.get(url, headers=headers, timeout=timeout)
+        latency_ms = int((time.time() - started) * 1000)
+        return {
+            "ok": resp.status_code < 400,
+            "status_code": resp.status_code,
+            "latency_ms": latency_ms,
+        }
+    except Exception as e:  # noqa: BLE001
+        latency_ms = int((time.time() - started) * 1000)
+        return {
+            "ok": False,
+            "status_code": 0,
+            "latency_ms": latency_ms,
+            "error": e.__class__.__name__,
+        }
 
 
 class AppState:
@@ -29,6 +72,7 @@ class AppState:
         self.monitor = Monitor()
         self._register_all(config)
         self.http: httpx.AsyncClient | None = None
+        self._health_tasks: list[asyncio.Task[None]] = []
 
     def _register_all(self, config: AppConfig) -> None:
         for pid, p in config.providers.items():
@@ -62,8 +106,56 @@ class AppState:
         }
         totals = self.monitor.provider_totals(provider_id)
         if totals is not None:
-            item["totals"] = totals
+            item["totals"] = {
+                k: v for k, v in totals.items() if k != "last_health"
+            }
+            item["last_health"] = totals.get("last_health")
         return item
+
+    def health_interval(self) -> float:
+        try:
+            return float(self.config.defaults.health_interval_seconds)
+        except (TypeError, ValueError):
+            return 60.0
+
+    def _cancel_health_tasks(self) -> list[asyncio.Task[None]]:
+        tasks = list(self._health_tasks)
+        self._health_tasks = []
+        for t in tasks:
+            t.cancel()
+        return tasks
+
+    def _spawn_health_tasks(self) -> None:
+        """Start one background probe loop per enabled provider. Safe to re-call."""
+        interval = self.health_interval()
+        if interval <= 0 or self.http is None:
+            return
+        for pid, p in self.config.providers.items():
+            if not p.enabled:
+                continue
+            task = asyncio.create_task(
+                self._health_loop(pid, interval),
+                name=f"unify-health-{pid}",
+            )
+            self._health_tasks.append(task)
+
+    async def restart_health_tasks(self) -> None:
+        """Cancel existing health loops and respawn for the current enabled set.
+
+        Does not await cancelled tasks (avoids deadlock if called from a request
+        handler while a probe is in-flight). Shutdown still gathers them.
+        """
+        self._cancel_health_tasks()
+        self._spawn_health_tasks()
+
+    async def _health_loop(self, provider_id: str, interval: float) -> None:
+        while True:
+            p = self.config.providers.get(provider_id)
+            http = self.http
+            if p is not None and p.enabled and http is not None:
+                result = await probe_provider(http, p)
+                self.monitor.set_health(provider_id, result)
+            await asyncio.sleep(interval)
 
     async def startup(self) -> None:
         self.http = httpx.AsyncClient(
@@ -71,8 +163,18 @@ class AppState:
             follow_redirects=True,
             limits=httpx.Limits(max_connections=256, max_keepalive_connections=64),
         )
+        self._spawn_health_tasks()
 
     async def shutdown(self) -> None:
+        tasks = self._cancel_health_tasks()
+        if tasks:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=2.0,
+                )
+            except (asyncio.TimeoutError, TimeoutError):
+                pass
         if self.http is not None:
             await self.http.aclose()
             self.http = None
@@ -219,6 +321,7 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 status_code=400,
             )
         counts = state.apply_config(new_config)
+        await state.restart_health_tasks()
         return JSONResponse({"ok": True, "config_path": str(path), **counts})
 
     @app.get("/api/providers")
@@ -281,6 +384,7 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
             enabled=p.enabled,
             models=list(p.models),
         )
+        await state.restart_health_tasks()
 
         return JSONResponse(
             {
@@ -307,41 +411,17 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 status_code=503,
             )
 
-        if p.type == "anthropic":
-            url = p.base_url.rstrip("/")
-            headers = {
-                "x-api-key": p.api_key or "",
-                "anthropic-version": "2023-06-01",
-            }
-        else:
-            url = f"{p.base_url.rstrip('/')}/models"
-            headers = {}
-            if p.api_key:
-                headers["Authorization"] = f"Bearer {p.api_key}"
-
-        started = time.time()
-        try:
-            resp = await state.http.get(url, headers=headers, timeout=10.0)
-            latency_ms = int((time.time() - started) * 1000)
-            return JSONResponse(
-                {
-                    "provider_id": provider_id,
-                    "ok": resp.status_code < 400,
-                    "status_code": resp.status_code,
-                    "latency_ms": latency_ms,
-                }
-            )
-        except Exception as e:  # noqa: BLE001
-            latency_ms = int((time.time() - started) * 1000)
-            return JSONResponse(
-                {
-                    "provider_id": provider_id,
-                    "ok": False,
-                    "status_code": 0,
-                    "latency_ms": latency_ms,
-                    "error": e.__class__.__name__,
-                }
-            )
+        result = await probe_provider(state.http, p)
+        state.monitor.set_health(provider_id, result)
+        payload: dict[str, Any] = {
+            "provider_id": provider_id,
+            "ok": result["ok"],
+            "status_code": result["status_code"],
+            "latency_ms": result["latency_ms"],
+        }
+        if "error" in result:
+            payload["error"] = result["error"]
+        return JSONResponse(payload)
 
     @app.get("/dashboard")
     async def dashboard() -> Response:

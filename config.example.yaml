@@ -19,6 +19,9 @@ defaults:
   max_retries: 2
   retry_backoff_seconds: 0.8
   fallback_model: null
+  # Background probe of each enabled provider (openai GET /models, anthropic GET base).
+  # Set to 0 to disable background health tasks. Manual POST /api/providers/{id}/test still works.
+  health_interval_seconds: 60
 
 providers:
   # DeepSeek — OpenAI-compatible

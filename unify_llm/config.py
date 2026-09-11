@@ -43,6 +43,8 @@ class DefaultsConfig(BaseModel):
     max_retries: int = 2
     retry_backoff_seconds: float = 0.8
     fallback_model: str | None = None
+    # Background provider probe interval. 0 disables background health tasks.
+    health_interval_seconds: float = 60.0
 
 
 class ProviderConfig(BaseModel):

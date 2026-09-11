@@ -13,6 +13,9 @@ Local multi-provider LLM gateway. One fixed port routes OpenAI-compatible and An
 - Stream SSE end to end; recover token usage from stream chunks when available.
 - Configure timeouts, retries, and an optional fallback model.
 - Watch live concurrency, in-flight requests, latency (rolling p50/p95), and token totals on the dashboard.
+- Optional LAN gateway key (`UNIFY_GATEWAY_KEY`) for multi-machine access on a private network.
+- Provider admin API: list, enable/disable, upstream test, config hot-reload.
+- Dashboard ops: toggle providers, test upstream, reload config, filter logs.
 
 ## Requirements
 
@@ -233,6 +236,14 @@ Other machines point at:
 
 Allow inbound TCP 8787 in the host firewall for the LAN subnet only. Do not port-forward 8787 to the internet.
 
+Print host LAN IPs and client env snippets:
+
+```bash
+python scripts/print_lan_urls.py
+```
+
+Full multi-machine guide (firewall, env vars, IDE tools, troubleshooting): [docs/LAN.md](./docs/LAN.md).
+
 ## Project layout
 
 ```
@@ -247,10 +258,13 @@ unify_llm/
 scripts/
   smoke.py
   bench.py
+  print_lan_urls.py
 main.py
 config.example.yaml
 DESIGN.md
 DEPLOYMENT.md
+docs/
+  LAN.md
 ```
 
 ## Documentation
@@ -259,6 +273,7 @@ DEPLOYMENT.md
 |----------|---------|
 | [README.md](./README.md) | Overview and quick start |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Install, ops, systemd, troubleshooting |
+| [docs/LAN.md](./docs/LAN.md) | LAN multi-machine clients, firewall, env vars |
 | [DESIGN.md](./DESIGN.md) | Architecture and design decisions |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute |
 | [docs/style-guide.md](./docs/style-guide.md) | Docs and commit style (Google-aligned) |
