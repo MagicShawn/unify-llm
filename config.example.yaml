@@ -33,6 +33,10 @@ defaults:
   # Background probe of each enabled provider (openai GET /models, anthropic GET base).
   # Set to 0 to disable background health tasks. Manual POST /api/providers/{id}/test still works.
   health_interval_seconds: 60
+  # IDEs often send max_tokens=4096/8192. When true, raise the client value up to
+  # model_limits.<model>.max_output_tokens so long replies are not truncated.
+  # Set false to always honor the client value exactly.
+  raise_max_tokens_to_model_limit: true
 
 # Optional token cost estimation (USD). Not vendor billing — local estimate only:
 #   cost = (prompt_tokens * input_rate + completion_tokens * output_rate) / 1e6

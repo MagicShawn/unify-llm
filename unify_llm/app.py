@@ -15,6 +15,7 @@ from . import __version__
 from .adapters import create_adapter
 from .config import AppConfig, ProviderConfig, load_config, set_provider_enabled
 from .errors import ConfigError, ModelNotFoundError, ProxyError, UpstreamError
+from .convert import DEFAULT_MAX_TOKENS, apply_max_tokens_policy, stream_error_frame
 from .monitor import Monitor, StreamUsageSniffer, extract_usage
 from .rate_limit import RateLimiter
 from .registry import Registry, ResolvedRoute
@@ -579,6 +580,13 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
             )
             attempt_body = dict(body)
             attempt_body["model"] = rt.model
+            attempt_body, effective_max = apply_max_tokens_policy(
+                attempt_body,
+                model_limit=model_limit,
+                raise_to_model_limit=state.config.defaults.raise_max_tokens_to_model_limit,
+            )
+            if protocol == "anthropic" and "max_tokens" not in attempt_body:
+                attempt_body["max_tokens"] = int(effective_max or DEFAULT_MAX_TOKENS)
 
             try:
                 status, json_body, byte_iter = await call(adapter, attempt_body, stream)
@@ -632,7 +640,11 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                     prompt_tokens=pt,
                     completion_tokens=ct,
                 )
-                return JSONResponse(json_body, status_code=status)
+                return JSONResponse(
+                    json_body,
+                    status_code=status,
+                    headers={"X-Proxy-Effective-Max-Tokens": str(effective_max or "")},
+                )
 
             if status >= 400:
                 # Stream request failed before any body: surface JSON, do not
@@ -667,6 +679,7 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 continue
 
             sniffer = StreamUsageSniffer(protocol)
+            client_proto = protocol
 
             async def event_gen(
                 byte_iter=byte_iter,
@@ -675,6 +688,7 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 started=started,
                 status=status,
                 sniffer=sniffer,
+                client_proto=client_proto,
             ) -> AsyncIterator[bytes]:
                 try:
                     assert byte_iter is not None
@@ -687,10 +701,15 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                         rid,
                         provider_id=rt.provider_id,
                         http_status=502,
-                        error=f"stream: {e}",
+                        error=f"stream: {type(e).__name__}: {e}",
                         started_at=started,
                         prompt_tokens=pt,
                         completion_tokens=ct,
+                    )
+                    # Do not die silently — client would see a truncated reply.
+                    yield stream_error_frame(
+                        client_proto,
+                        f"Upstream stream aborted: {type(e).__name__}: {e}",
                     )
                     return
                 else:
@@ -709,7 +728,11 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 event_gen(),
                 status_code=status,
                 media_type="text/event-stream",
-                headers={"Cache-Control": "no-cache", "X-Proxy-Request-Id": rid},
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Proxy-Request-Id": rid,
+                    "X-Proxy-Effective-Max-Tokens": str(effective_max or ""),
+                },
             )
 
         if last_err is not None:

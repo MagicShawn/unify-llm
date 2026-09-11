@@ -65,13 +65,16 @@ class LimitsConfig(BaseModel):
 
 
 class DefaultsConfig(BaseModel):
-    timeout_seconds: float = 120.0
+    timeout_seconds: float = 600.0
     connect_timeout_seconds: float = 10.0
     max_retries: int = 2
     retry_backoff_seconds: float = 0.8
     fallback_model: str | None = None
     # Background provider probe interval. 0 disables background health tasks.
     health_interval_seconds: float = 60.0
+    # If client max_tokens is smaller than model_limits.max_output_tokens, raise it.
+    # IDEs often hardcode 4k/8k and truncate long replies through the proxy.
+    raise_max_tokens_to_model_limit: bool = True
 
 
 class ProviderConfig(BaseModel):
