@@ -639,9 +639,17 @@
     }
     function fmtN(n) {
       n = Number(n) || 0;
-      if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+      if (n >= 1e9) return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + "B";
+      if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
       if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
       return String(Math.round(n));
+    }
+    function fmtPts(n) {
+      n = Number(n);
+      if (!Number.isFinite(n)) return "—";
+      if (n === -1) return "∞";
+      if (Math.abs(n) >= 1000) return n.toLocaleString();
+      return String(n);
     }
     function fmtTs(ts) {
       if (ts == null) return "—";
@@ -942,6 +950,7 @@
     async function refreshUsage() {
       const { res, body } = await api("/api/me/usage");
       if (!res.ok) return;
+      const unlimited = !!body.points_unlimited || Number(body.points_balance) === -1;
       $("uReq").textContent = fmtN(body.recent_requests || 0);
       $("uIn").textContent = fmtN(body.prompt_tokens || 0);
       $("uOut").textContent = fmtN(body.completion_tokens || 0);
@@ -960,7 +969,7 @@
       const ovT = $("ovTok");
       if (ovT) ovT.textContent = fmtN(tokTotal);
       const ovP = $("ovPoints");
-      if (ovP) ovP.textContent = unlimited ? "∞" : fmtN(body.points_balance || 0);
+      if (ovP) ovP.textContent = unlimited ? "∞" : fmtPts(body.points_balance || 0);
       const ovS = $("ovStatus");
       if (ovS) {
         ovS.textContent = !body.points_charging_enabled
@@ -1013,9 +1022,8 @@
             "</tbody></table>";
         }
       }
-      const unlimited = !!body.points_unlimited || Number(body.points_balance) === -1;
-      $("uPoints").textContent = unlimited ? "∞" : fmtN(body.points_balance || 0);
-      $("uSpent").textContent = fmtN(body.points_spent || 0);
+      $("uPoints").textContent = unlimited ? "∞" : fmtPts(body.points_balance || 0);
+      $("uSpent").textContent = fmtPts(body.points_spent || 0);
       const statusEl = $("uPointsStatus");
       if (statusEl) {
         if (!body.points_charging_enabled) {
@@ -1065,8 +1073,8 @@
           bar.style.width = pct + "%";
           bar.style.background = bal <= 0 ? "#a00" : bal < grant * 0.15 ? "#c60" : "#111";
           plabel.textContent =
-            pct + "% used · remaining " + fmtN(Math.max(0, bal)) +
-            " / granted " + fmtN(grant) +
+            pct + "% used · remaining " + fmtPts(Math.max(0, bal)) +
+            " / granted " + fmtPts(grant) +
             (bal <= 0 ? " · blocked" : "");
         }
       }
@@ -1100,9 +1108,9 @@
               "<tr><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
               esc(t) +
               "</td><td style='padding:6px 10px;color:#a00'>-" +
-              esc(fmtN(Math.abs(r.delta || 0))) +
+              esc(fmtPts(Math.abs(r.delta || 0))) +
               "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
-              esc(r.balance_after === -1 ? "∞" : fmtN(r.balance_after)) +
+              esc(r.balance_after === -1 ? "∞" : fmtPts(r.balance_after)) +
               "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
               esc(fmtN(r.prompt_tokens || 0)) +
               "+" +
