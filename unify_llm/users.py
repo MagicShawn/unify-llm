@@ -293,6 +293,18 @@ class UserStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
                 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+                CREATE TABLE IF NOT EXISTS points_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    delta INTEGER NOT NULL,
+                    balance_after INTEGER NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'deduct',
+                    note TEXT,
+                    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                    completion_tokens INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_points_log_user ON points_log(user_id, id);
                 """
             )
             self._conn.commit()
@@ -508,7 +520,15 @@ class UserStore:
                 ).fetchone()
         return _row_user(updated) if updated else None
 
-    def deduct_points(self, user_id: int, amount: int) -> dict[str, Any] | None:
+    def deduct_points(
+        self,
+        user_id: int,
+        amount: int,
+        *,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        note: str = "",
+    ) -> dict[str, Any] | None:
         """Deduct points after a successful request. Always increments points_spent.
 
         Unlimited (-1) keeps balance unchanged and only tracks spent.
@@ -518,6 +538,7 @@ class UserStore:
         amt = max(0, int(amount))
         if amt == 0:
             return self.get_user(user_id)
+        now = time.time()
         with self._lock:
             row = self._conn.execute(
                 "SELECT points_balance, points_spent FROM users WHERE id=?",
@@ -528,20 +549,63 @@ class UserStore:
             bal = int(row["points_balance"] or 0)
             spent = int(row["points_spent"] or 0) + amt
             if bal == POINTS_UNLIMITED:
+                new_bal = POINTS_UNLIMITED
                 self._conn.execute(
                     "UPDATE users SET points_spent=? WHERE id=?",
                     (spent, int(user_id)),
                 )
             else:
+                new_bal = bal - amt
                 self._conn.execute(
                     "UPDATE users SET points_balance=?, points_spent=? WHERE id=?",
-                    (bal - amt, spent, int(user_id)),
+                    (new_bal, spent, int(user_id)),
                 )
+            self._conn.execute(
+                "INSERT INTO points_log "
+                "(user_id, delta, balance_after, kind, note, prompt_tokens, "
+                "completion_tokens, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    int(user_id),
+                    -amt,
+                    new_bal,
+                    "deduct",
+                    note or "",
+                    int(prompt_tokens or 0),
+                    int(completion_tokens or 0),
+                    now,
+                ),
+            )
             self._conn.commit()
             updated = self._conn.execute(
                 "SELECT * FROM users WHERE id=?", (int(user_id),)
             ).fetchone()
         return _row_user(updated) if updated else None
+
+    def list_points_log(self, user_id: int, limit: int = 30) -> list[dict[str, Any]]:
+        """Recent point movements for one user (newest first)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, user_id, delta, balance_after, kind, note, prompt_tokens, "
+                "completion_tokens, created_at FROM points_log "
+                "WHERE user_id=? ORDER BY id DESC LIMIT ?",
+                (int(user_id), int(max(1, min(limit, 200)))),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            out.append(
+                {
+                    "id": r["id"],
+                    "user_id": r["user_id"],
+                    "delta": int(r["delta"] or 0),
+                    "balance_after": int(r["balance_after"] or 0),
+                    "kind": r["kind"] or "deduct",
+                    "note": r["note"] or "",
+                    "prompt_tokens": int(r["prompt_tokens"] or 0),
+                    "completion_tokens": int(r["completion_tokens"] or 0),
+                    "created_at": float(r["created_at"] or 0),
+                }
+            )
+        return out
 
     def set_profile(
         self,

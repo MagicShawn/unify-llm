@@ -403,6 +403,11 @@
       font-size: 12px;
       margin-bottom: 8px;
     }
+    .portal-tabs { margin: 14px 0 4px; }
+    .portal-panel { display: none; }
+    .portal-panel.active { display: block; animation: fadeIn .18s ease; }
+    @keyframes fadeIn { from { opacity: .4; transform: translateY(2px);} to { opacity: 1; transform: none; } }
+    #portalNav .tab { min-width: 72px; }
   </style>
 </head>
 <body>
@@ -468,6 +473,30 @@
 
       <div class="msg warn" id="pendingMsg">Your account is not active. An admin must approve it before keys work.</div>
 
+      <div class="tabs portal-tabs" role="tablist" id="portalNav">
+        <button type="button" class="tab active" data-panel="overview" role="tab">Overview</button>
+        <button type="button" class="tab" data-panel="points" role="tab">Points</button>
+        <button type="button" class="tab" data-panel="usage" role="tab">Usage</button>
+        <button type="button" class="tab" data-panel="keys" role="tab">Keys</button>
+        <button type="button" class="tab" data-panel="settings" role="tab">Settings</button>
+      </div>
+
+      <!-- Overview -->
+      <div class="portal-panel active" id="panel-overview">
+        <div class="usage-grid" style="margin:12px 0">
+          <div class="usage-card"><div class="k">requests (recent)</div><div class="v" id="ovReq">—</div></div>
+          <div class="usage-card"><div class="k">tokens total</div><div class="v" id="ovTok">—</div></div>
+          <div class="usage-card"><div class="k">points left</div><div class="v" id="ovPoints">—</div></div>
+          <div class="usage-card"><div class="k">status</div><div class="v" id="ovStatus" style="font-size:13px">—</div></div>
+        </div>
+        <div class="section-title">Available models · 可用模型</div>
+        <div class="card" style="padding:0;box-shadow:none" id="modelsWrap">
+          <div class="empty">Loading…</div>
+        </div>
+        <p class="sub" style="margin-top:10px">Call <b>/v1</b> with your API key. Track spend under Points · Usage.</p>
+      </div>
+
+      <div class="portal-panel" id="panel-settings">
       <div class="section-title">Account settings · 账户设置</div>
       <div class="settings-grid">
         <div class="settings-box">
@@ -495,20 +524,29 @@
           <div class="msg" id="passwordMsg" role="status"></div>
         </div>
       </div>
+      </div><!-- /settings -->
 
+      <div class="portal-panel" id="panel-points">
       <div class="section-title">Points · 积分</div>
       <div class="usage-grid" id="pointsGrid">
         <div class="usage-card"><div class="k">balance</div><div class="v" id="uPoints">—</div></div>
         <div class="usage-card"><div class="k">spent</div><div class="v" id="uSpent">—</div></div>
         <div class="usage-card"><div class="k">status</div><div class="v" id="uPointsStatus" style="font-size:13px">—</div></div>
       </div>
-      <p class="sub" id="pointsHint" style="margin:8px 0 0;display:none"></p>
-
-      <div class="section-title">Available models · 可用模型</div>
-      <div class="card" style="padding:0;box-shadow:none" id="modelsWrap">
-        <div class="empty">Loading…</div>
+      <div class="card" style="margin-top:10px;padding:12px 14px" id="pointsProgressCard">
+        <div class="k" style="font-size:11px;color:var(--ink-3);margin-bottom:6px">remaining progress · 剩余进度</div>
+        <div style="height:8px;background:var(--bg-soft);border-radius:4px;overflow:hidden">
+          <div id="pointsBar" style="height:100%;width:0%;background:#111;transition:width .35s"></div>
+        </div>
+        <div class="sub" id="pointsProgressLabel" style="margin-top:6px;font-size:12px">—</div>
       </div>
+      <p class="sub" id="pointsHint" style="margin:8px 0 0;display:none"></p>
+      <div class="card" style="margin-top:10px;padding:0;box-shadow:none" id="pointsLogWrap">
+        <div class="empty">No deductions yet · 暂无扣费记录</div>
+      </div>
+      </div><!-- /points -->
 
+      <div class="portal-panel" id="panel-keys">
       <div class="section-title">API keys · 我的密钥</div>
       <div class="inline-form">
         <div class="field">
@@ -520,14 +558,23 @@
       <div class="card" style="padding:0;box-shadow:none" id="keysWrap">
         <div class="empty">Loading…</div>
       </div>
+      </div><!-- /keys -->
 
-      <div class="section-title">Recent usage · 近期用量</div>
-      <div class="usage-grid" id="usageGrid">
+      <div class="portal-panel" id="panel-usage">
+      <div class="section-title">Token consumption · Token 消耗</div>
+      <div class="usage-grid">
         <div class="usage-card"><div class="k">requests</div><div class="v" id="uReq">—</div></div>
         <div class="usage-card"><div class="k">tokens in</div><div class="v" id="uIn">—</div></div>
         <div class="usage-card"><div class="k">tokens out</div><div class="v" id="uOut">—</div></div>
+        <div class="usage-card"><div class="k">tokens total</div><div class="v" id="uTotal">—</div></div>
         <div class="usage-card"><div class="k">errors</div><div class="v" id="uErr">—</div></div>
+        <div class="usage-card"><div class="k">est. USD</div><div class="v" id="uCost">—</div></div>
       </div>
+      <div class="section-title" style="margin-top:14px">Recent requests · 最近请求</div>
+      <div class="card" style="padding:0;box-shadow:none" id="usageItemsWrap">
+        <div class="empty">No traffic yet · 暂无请求</div>
+      </div>
+      </div><!-- /usage -->
     </div>
 
     <div class="foot">
@@ -688,7 +735,16 @@
       refreshKeys();
       refreshUsage();
       refreshModels();
+      refreshPointsLog();
     }
+
+    // Live points: poll balance + deduction ledger every 5s while signed in.
+    setInterval(async () => {
+      const home = $("homeCard");
+      if (!home || home.classList.contains("hidden")) return;
+      refreshUsage();
+      refreshPointsLog();
+    }, 5000);
 
     async function loadMe() {
       const { res, body } = await api("/api/auth/me");
@@ -860,6 +916,29 @@
       showMsg($("passwordMsg"), "ok", "Password updated. You remain signed in on this device.");
     });
 
+    function switchPortalPanel(name) {
+      document.querySelectorAll("#portalNav .tab").forEach((b) => {
+        const on = b.dataset.panel === name;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll(".portal-panel").forEach((p) => {
+        p.classList.toggle("active", p.id === "panel-" + name);
+      });
+      try {
+        history.replaceState(null, "", "#" + name);
+      } catch (_) {}
+    }
+    document.querySelectorAll("#portalNav .tab").forEach((btn) => {
+      btn.addEventListener("click", () => switchPortalPanel(btn.dataset.panel));
+    });
+    (function initPortalHash() {
+      const h = (location.hash || "").replace("#", "");
+      if (["overview", "points", "usage", "keys", "settings"].includes(h)) {
+        switchPortalPanel(h);
+      }
+    })();
+
     async function refreshUsage() {
       const { res, body } = await api("/api/me/usage");
       if (!res.ok) return;
@@ -867,6 +946,73 @@
       $("uIn").textContent = fmtN(body.prompt_tokens || 0);
       $("uOut").textContent = fmtN(body.completion_tokens || 0);
       $("uErr").textContent = fmtN(body.errors || 0);
+      const tokTotal = Number(body.prompt_tokens || 0) + Number(body.completion_tokens || 0);
+      const ut = $("uTotal");
+      if (ut) ut.textContent = fmtN(tokTotal);
+      const uc = $("uCost");
+      if (uc) {
+        const usd = Number(body.estimated_cost_usd || 0);
+        uc.textContent = usd > 0 ? "$" + usd.toFixed(usd < 0.01 ? 4 : 2) : "—";
+      }
+      // Overview tiles
+      const ovR = $("ovReq");
+      if (ovR) ovR.textContent = fmtN(body.recent_requests || 0);
+      const ovT = $("ovTok");
+      if (ovT) ovT.textContent = fmtN(tokTotal);
+      const ovP = $("ovPoints");
+      if (ovP) ovP.textContent = unlimited ? "∞" : fmtN(body.points_balance || 0);
+      const ovS = $("ovStatus");
+      if (ovS) {
+        ovS.textContent = !body.points_charging_enabled
+          ? "free"
+          : unlimited
+            ? "unlimited"
+            : Number(body.points_balance || 0) <= 0
+              ? "blocked"
+              : "active";
+      }
+      // request table
+      const iwrap = $("usageItemsWrap");
+      if (iwrap) {
+        const items = body.items || [];
+        if (!items.length) {
+          iwrap.innerHTML = '<div class="empty">No traffic yet · 暂无请求</div>';
+        } else {
+          iwrap.innerHTML =
+            '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr>' +
+            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">time</th>' +
+            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">model</th>' +
+            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">status</th>' +
+            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">latency</th>' +
+            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">tokens</th>' +
+            "</tr></thead><tbody>" +
+            items
+              .slice(0, 20)
+              .map((r) => {
+                const t = r.finished_at
+                  ? new Date(r.finished_at * 1000).toLocaleTimeString()
+                  : "";
+                const ok = r.status === "ok";
+                return (
+                  "<tr><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+                  esc(t) +
+                  "</td><td style='padding:6px 10px'>" +
+                  esc(r.model || r.requested_model || "") +
+                  "</td><td style='padding:6px 10px;color:" +
+                  (ok ? "#1a7f37" : "#a00") +
+                  "'>" +
+                  esc(r.status || "") +
+                  "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+                  esc((r.latency_ms || 0) + "ms") +
+                  "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+                  esc(fmtN(r.prompt_tokens || 0) + "+" + fmtN(r.completion_tokens || 0)) +
+                  "</td></tr>"
+                );
+              })
+              .join("") +
+            "</tbody></table>";
+        }
+      }
       const unlimited = !!body.points_unlimited || Number(body.points_balance) === -1;
       $("uPoints").textContent = unlimited ? "∞" : fmtN(body.points_balance || 0);
       $("uSpent").textContent = fmtN(body.points_spent || 0);
@@ -903,6 +1049,71 @@
             " / 1k completion. Balance −1 = unlimited.";
         }
       }
+      // remaining progress: spent / (balance + spent) when finite
+      const bar = $("pointsBar");
+      const plabel = $("pointsProgressLabel");
+      if (bar && plabel) {
+        const bal = Number(body.points_balance || 0);
+        const spent = Number(body.points_spent || 0);
+        if (unlimited || !body.points_charging_enabled) {
+          bar.style.width = "100%";
+          bar.style.background = "#888";
+          plabel.textContent = unlimited ? "Unlimited · 不限量" : "Charging off · 未开启计费";
+        } else {
+          const grant = Math.max(0, bal) + spent;
+          const pct = grant > 0 ? Math.min(100, Math.round((spent / grant) * 100)) : 0;
+          bar.style.width = pct + "%";
+          bar.style.background = bal <= 0 ? "#a00" : bal < grant * 0.15 ? "#c60" : "#111";
+          plabel.textContent =
+            pct + "% used · remaining " + fmtN(Math.max(0, bal)) +
+            " / granted " + fmtN(grant) +
+            (bal <= 0 ? " · blocked" : "");
+        }
+      }
+    }
+
+    async function refreshPointsLog() {
+      const wrap = $("pointsLogWrap");
+      if (!wrap) return;
+      const { res, body } = await api("/api/me/points-history?limit=15");
+      if (!res.ok) return;
+      const items = (body && body.items) || [];
+      if (!items.length) {
+        wrap.innerHTML = '<div class="empty">No deductions yet · 暂无扣费记录</div>';
+        return;
+      }
+      wrap.innerHTML =
+        '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+        "<thead><tr>" +
+        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">time</th>' +
+        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">delta</th>' +
+        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">balance</th>' +
+        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">tokens</th>' +
+        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">note</th>' +
+        "</tr></thead><tbody>" +
+        items
+          .map((r) => {
+            const t = r.created_at
+              ? new Date(r.created_at * 1000).toLocaleTimeString()
+              : "";
+            return (
+              "<tr><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+              esc(t) +
+              "</td><td style='padding:6px 10px;color:#a00'>-" +
+              esc(fmtN(Math.abs(r.delta || 0))) +
+              "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+              esc(r.balance_after === -1 ? "∞" : fmtN(r.balance_after)) +
+              "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+              esc(fmtN(r.prompt_tokens || 0)) +
+              "+" +
+              esc(fmtN(r.completion_tokens || 0)) +
+              "</td><td style='padding:6px 10px;color:var(--ink-3)'>" +
+              esc(r.note || "") +
+              "</td></tr>"
+            );
+          })
+          .join("") +
+        "</tbody></table>";
     }
 
     async function refreshModels() {

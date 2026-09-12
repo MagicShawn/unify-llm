@@ -963,7 +963,11 @@ def create_app(
         return None
 
     def _deduct_points_after_success(
-        user_id: str | int, prompt_tokens: int, completion_tokens: int
+        user_id: str | int,
+        prompt_tokens: int,
+        completion_tokens: int,
+        *,
+        note: str = "",
     ) -> None:
         """Persist points spend after a successful upstream response."""
         if not user_id or state.users is None:
@@ -973,7 +977,13 @@ def create_app(
         if cost <= 0:
             return
         try:
-            state.users.deduct_points(int(user_id), cost)
+            state.users.deduct_points(
+                int(user_id),
+                cost,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                note=note,
+            )
         except Exception:  # noqa: BLE001 — billing must never break the response
             pass
 
@@ -1529,6 +1539,31 @@ def create_app(
             }
         )
 
+    @app.get("/api/me/points-history")
+    async def me_points_history(request: Request, limit: int = 30) -> Response:
+        """Recent point deductions for the signed-in user."""
+        session = _require_me(request)
+        if session is None:
+            return _session_auth_error()
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        rows = users_store.list_points_log(session["user_id"], limit=limit)
+        fresh = users_store.get_user(int(session["user_id"]))
+        return JSONResponse(
+            {
+                "ok": True,
+                "points_balance": int((fresh or {}).get("points_balance") or 0),
+                "points_spent": int((fresh or {}).get("points_spent") or 0),
+                "points_unlimited": int((fresh or {}).get("points_balance") or 0)
+                == POINTS_UNLIMITED,
+                "items": rows,
+            }
+        )
+
     @app.get("/api/me/models")
     async def me_models(request: Request) -> Response:
         """Models the signed-in user may call. Reads live AppConfig (post hot-reload)."""
@@ -1803,7 +1838,9 @@ def create_app(
                     completion_tokens=ct,
                 )
                 if status < 400:
-                    _deduct_points_after_success(auth_user_id, pt, ct)
+                    _deduct_points_after_success(
+                        auth_user_id, pt, ct, note=f"{path} {rt.model}"
+                    )
                 return JSONResponse(
                     json_body,
                     status_code=status,
@@ -1887,7 +1924,9 @@ def create_app(
                         prompt_tokens=pt,
                         completion_tokens=ct,
                     )
-                    _deduct_points_after_success(auth_user_id, pt, ct)
+                    _deduct_points_after_success(
+                        auth_user_id, pt, ct, note=f"{path} {rt.model} stream"
+                    )
 
             return StreamingResponse(
                 event_gen(),
