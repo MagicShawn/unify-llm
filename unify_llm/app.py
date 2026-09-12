@@ -220,6 +220,16 @@ class AppState:
 
 
 def _client_ip(request: Request) -> str:
+    """Best-effort client IP for LAN / reverse-proxy setups."""
+    # Prefer first hop from X-Forwarded-For when behind nginx/caddy on the LAN.
+    xff = request.headers.get("x-forwarded-for") or ""
+    if xff:
+        first = xff.split(",")[0].strip()
+        if first:
+            return first
+    xri = request.headers.get("x-real-ip") or ""
+    if xri.strip():
+        return xri.strip()
     if request.client:
         return request.client.host
     return ""
