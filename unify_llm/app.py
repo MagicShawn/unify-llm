@@ -283,6 +283,7 @@ def _sanitize_headers(request: Request) -> dict[str, str]:
 def _guess_client_app(user_agent: str) -> str:
     ua = (user_agent or "").lower()
     table = [
+        ("powershell", "PowerShell"),
         ("opencode", "OpenCode"),
         ("claude-code", "Claude Code"),
         ("anthropic", "Anthropic SDK"),
@@ -290,13 +291,14 @@ def _guess_client_app(user_agent: str) -> str:
         ("curl", "curl"),
         ("python-httpx", "httpx"),
         ("python-requests", "requests"),
-        ("node", "Node"),
-        ("go-http-client", "Go"),
-        ("java", "Java"),
-        ("postman", "Postman"),
         ("insomnia", "Insomnia"),
+        ("postman", "Postman"),
         ("vscode", "VS Code"),
         ("cursor", "Cursor"),
+        ("go-http-client", "Go"),
+        ("node", "Node"),
+        ("java", "Java"),
+        ("mozilla", "Browser/SDK"),
     ]
     for key, name in table:
         if key in ua:
