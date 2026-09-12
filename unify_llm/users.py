@@ -18,13 +18,23 @@ KEY_HEX_CHARS = 32
 KEY_PREFIX_CHARS = 8
 
 # Password hashing: scrypt (stdlib). Format: scrypt$n$r$p$salt_hex$hash_hex
-_SCRYPT_N = 2**14
+# New hashes use N=2^15 (OWASP 2023 recommends >=2^17; 2^15 balances LAN login latency).
+# verify_password accepts any n/r/p embedded in a stored hash, so old N=2^14 rows keep working.
+_SCRYPT_N = 2**15
 _SCRYPT_R = 8
 _SCRYPT_P = 1
 _SCRYPT_DKLEN = 32
 _SALT_BYTES = 16
+# Hard caps so a tampered DB row cannot force unbounded scrypt work on verify.
+_SCRYPT_N_MAX = 2**20
+_SCRYPT_R_MAX = 16
+_SCRYPT_P_MAX = 4
+# OpenSSL default maxmem (~32MB) is too small for N=2^15,r=8 (needs 32MB+).
+# Memory ≈ 128 * N * r bytes. 64MB covers our new params and leaves headroom
+# for verify of modest legacy/tampered rows; absurd n/r/p are rejected above.
+_SCRYPT_MAXMEM = 64 * 1024 * 1024
 
-# Session cookie / table
+# Session cookie / table. Only SHA-256 of the raw token is stored.
 SESSION_COOKIE = "unify_session"
 SESSION_TTL_SECONDS = 7 * 24 * 3600  # 7 days
 SESSION_TOKEN_BYTES = 32
@@ -34,7 +44,8 @@ STATUSES = ("pending", "active", "disabled")
 
 DISPLAY_NAME_MAX_LEN = 64
 BADGE_MAX_LEN = 16
-PASSWORD_MIN_LEN = 8
+PASSWORD_MIN_LEN = 10
+PASSWORD_MAX_LEN = 128
 
 # points_balance == -1 means unlimited (no pre-call block; still tracks spent).
 POINTS_UNLIMITED = -1
@@ -47,6 +58,29 @@ def _now() -> float:
 def hash_api_key(raw: str) -> str:
     """SHA-256 hex digest of the raw API key. Never store the raw key."""
     return hashlib.sha256((raw or "").encode("utf-8")).hexdigest()
+
+
+def hash_session_token(token: str) -> str:
+    """SHA-256 hex digest of a raw session token. Never store the raw token."""
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
+def _looks_like_session_hash(value: str) -> bool:
+    """True when a sessions.token column value is already a SHA-256 hex digest."""
+    if len(value) != 64:
+        return False
+    try:
+        bytes.fromhex(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _check_password_length(password: str) -> None:
+    if not password or len(password) < PASSWORD_MIN_LEN:
+        raise ValueError(f"password must be at least {PASSWORD_MIN_LEN} characters")
+    if len(password) > PASSWORD_MAX_LEN:
+        raise ValueError(f"password must be at most {PASSWORD_MAX_LEN} characters")
 
 
 def generate_api_key() -> tuple[str, str, str]:
@@ -67,6 +101,8 @@ def hash_password(password: str, *, salt: bytes | None = None) -> str:
     """
     if not password:
         raise ValueError("password is required")
+    if len(password) > PASSWORD_MAX_LEN:
+        raise ValueError(f"password must be at most {PASSWORD_MAX_LEN} characters")
     salt_b = salt if salt is not None else secrets.token_bytes(_SALT_BYTES)
     dk = hashlib.scrypt(
         password.encode("utf-8"),
@@ -75,6 +111,7 @@ def hash_password(password: str, *, salt: bytes | None = None) -> str:
         r=_SCRYPT_R,
         p=_SCRYPT_P,
         dklen=_SCRYPT_DKLEN,
+        maxmem=_SCRYPT_MAXMEM,
     )
     return f"scrypt${_SCRYPT_N}${_SCRYPT_R}${_SCRYPT_P}${salt_b.hex()}${dk.hex()}"
 
@@ -88,6 +125,8 @@ def verify_password(password: str, stored: str | None) -> bool:
         if algo != "scrypt":
             return False
         n, r, p = int(n_s), int(r_s), int(p_s)
+        if n < 2 or n > _SCRYPT_N_MAX or r < 1 or r > _SCRYPT_R_MAX or p < 1 or p > _SCRYPT_P_MAX:
+            return False
         salt = bytes.fromhex(salt_hex)
         expected = bytes.fromhex(hash_hex)
     except (ValueError, TypeError):
@@ -99,6 +138,7 @@ def verify_password(password: str, stored: str | None) -> bool:
         r=r,
         p=p,
         dklen=len(expected) or _SCRYPT_DKLEN,
+        maxmem=_SCRYPT_MAXMEM,
     )
     return hmac.compare_digest(dk, expected)
 
@@ -219,8 +259,10 @@ class UserStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.execute("PRAGMA secure_delete=ON")
         self._init_schema()
         self._migrate_schema()
+        self._migrate_session_tokens()
 
     def _init_schema(self) -> None:
         with self._lock:
@@ -311,6 +353,31 @@ class UserStore:
 
     # ── users ──────────────────────────────────────────────────────────────
 
+    def _migrate_session_tokens(self) -> None:
+        """One-time: replace legacy plaintext session tokens with SHA-256 hashes.
+
+        Clients keep the raw cookie; lookups always hash the incoming value.
+        secure_delete + VACUUM scrub the old plaintext from free pages.
+        """
+        migrated = False
+        with self._lock:
+            rows = self._conn.execute("SELECT token FROM sessions").fetchall()
+            for row in rows:
+                tok = row["token"] or ""
+                if not tok or _looks_like_session_hash(tok):
+                    continue
+                self._conn.execute(
+                    "UPDATE sessions SET token=? WHERE token=?",
+                    (hash_session_token(tok), tok),
+                )
+                migrated = True
+            self._conn.commit()
+            if migrated:
+                try:
+                    self._conn.execute("VACUUM")
+                except sqlite3.OperationalError:
+                    pass
+
     def create_user(
         self,
         name: str,
@@ -328,6 +395,8 @@ class UserStore:
         note_v = (note or "").strip()
         role_v = _normalize_role(role)
         status_v = _normalize_status(status)
+        if password:
+            _check_password_length(password)
         pw_hash = hash_password(password) if password else None
         now = _now()
         with self._lock:
@@ -362,8 +431,7 @@ class UserStore:
         email_v = (email or "").strip()
         if not email_v:
             raise ValueError("email is required")
-        if not password or len(password) < PASSWORD_MIN_LEN:
-            raise ValueError(f"password must be at least {PASSWORD_MIN_LEN} characters")
+        _check_password_length(password)
         return self.create_user(
             name=name,
             email=email_v,
@@ -387,6 +455,30 @@ class UserStore:
                 "SELECT * FROM users WHERE email=?", (email_v,)
             ).fetchone()
         return _row_user(row) if row else None
+
+    def get_user_by_name(self, name: str) -> dict[str, Any] | None:
+        name_v = (name or "").strip()
+        if not name_v:
+            return None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM users WHERE name=?", (name_v,)
+            ).fetchone()
+        return _row_user(row) if row else None
+
+    def password_matches(self, user_id: int, password: str) -> bool:
+        """True when the plaintext password matches this user's stored hash.
+
+        Used only to give pending/disabled owners a clearer login error;
+        never used as an auth decision by itself.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT password_hash FROM users WHERE id=?", (int(user_id),)
+            ).fetchone()
+        if row is None or not row["password_hash"]:
+            return False
+        return verify_password(password, row["password_hash"])
 
     def list_users(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -436,8 +528,7 @@ class UserStore:
         return _row_user(row) if row else None
 
     def set_password(self, user_id: int, password: str) -> dict[str, Any] | None:
-        if not password or len(password) < PASSWORD_MIN_LEN:
-            raise ValueError(f"password must be at least {PASSWORD_MIN_LEN} characters")
+        _check_password_length(password)
         pw_hash = hash_password(password)
         with self._lock:
             cur = self._conn.execute(
@@ -451,17 +542,21 @@ class UserStore:
         return _row_user(row) if row else None
 
     def change_password(
-        self, user_id: int, old_password: str, new_password: str
+        self,
+        user_id: int,
+        old_password: str,
+        new_password: str,
+        *,
+        keep_session_token: str | None = None,
     ) -> dict[str, Any]:
         """Self-service password change. Verifies the current password first.
 
-        Does not invalidate sessions (caller keeps the current session).
-        Returns the updated user meta.
+        Revokes every other session for the user. When keep_session_token is
+        provided, that one session stays active (the device that changed the password).
         """
         if not old_password:
             raise ValueError("old_password is required")
-        if not new_password or len(new_password) < PASSWORD_MIN_LEN:
-            raise ValueError(f"password must be at least {PASSWORD_MIN_LEN} characters")
+        _check_password_length(new_password)
         with self._lock:
             row = self._conn.execute(
                 "SELECT * FROM users WHERE id=?", (int(user_id),)
@@ -475,6 +570,7 @@ class UserStore:
         updated = self.set_password(user_id, new_password)
         if updated is None:
             raise ValueError(f"unknown user_id: {user_id}")
+        self.delete_sessions_for_user(user_id, keep_token=keep_session_token)
         return updated
 
     def set_points_balance(self, user_id: int, balance: int) -> dict[str, Any] | None:
@@ -678,7 +774,10 @@ class UserStore:
     # ── sessions ───────────────────────────────────────────────────────────
 
     def create_session(self, user_id: int, *, ttl_seconds: int = SESSION_TTL_SECONDS) -> str:
-        """Issue a session token for an active user. Returns the raw token."""
+        """Issue a session token for an active user. Returns the raw token.
+
+        Only the SHA-256 of the token is persisted.
+        """
         user = self.get_user(user_id)
         if user is None:
             raise ValueError(f"unknown user_id: {user_id}")
@@ -690,7 +789,7 @@ class UserStore:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO sessions(token, user_id, created_at, expires_at) VALUES(?,?,?,?)",
-                (token, int(user_id), now, expires),
+                (hash_session_token(token), int(user_id), now, expires),
             )
             self._conn.commit()
         return token
@@ -700,15 +799,16 @@ class UserStore:
         tok = (token or "").strip()
         if not tok:
             return None
+        token_hash = hash_session_token(tok)
         now = _now()
         with self._lock:
             row = self._conn.execute(
-                "SELECT * FROM sessions WHERE token=?", (tok,)
+                "SELECT * FROM sessions WHERE token=?", (token_hash,)
             ).fetchone()
             if row is None:
                 return None
             if float(row["expires_at"]) < now:
-                self._conn.execute("DELETE FROM sessions WHERE token=?", (tok,))
+                self._conn.execute("DELETE FROM sessions WHERE token=?", (token_hash,))
                 self._conn.commit()
                 return None
             uid = int(row["user_id"])
@@ -733,15 +833,27 @@ class UserStore:
         if not tok:
             return False
         with self._lock:
-            cur = self._conn.execute("DELETE FROM sessions WHERE token=?", (tok,))
+            cur = self._conn.execute(
+                "DELETE FROM sessions WHERE token=?", (hash_session_token(tok),)
+            )
             self._conn.commit()
             return cur.rowcount > 0
 
-    def delete_sessions_for_user(self, user_id: int) -> int:
+    def delete_sessions_for_user(
+        self, user_id: int, *, keep_token: str | None = None
+    ) -> int:
+        """Revoke sessions for a user. keep_token (raw) is preserved if given."""
+        keep_hash = hash_session_token(keep_token) if keep_token else None
         with self._lock:
-            cur = self._conn.execute(
-                "DELETE FROM sessions WHERE user_id=?", (int(user_id),)
-            )
+            if keep_hash:
+                cur = self._conn.execute(
+                    "DELETE FROM sessions WHERE user_id=? AND token!=?",
+                    (int(user_id), keep_hash),
+                )
+            else:
+                cur = self._conn.execute(
+                    "DELETE FROM sessions WHERE user_id=?", (int(user_id),)
+                )
             self._conn.commit()
             return cur.rowcount
 
