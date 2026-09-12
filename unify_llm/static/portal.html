@@ -419,6 +419,65 @@
     .portal-panel.active { display: block; animation: fadeIn .18s ease; }
     @keyframes fadeIn { from { opacity: .4; transform: translateY(2px);} to { opacity: 1; transform: none; } }
     #portalNav .tab { min-width: 72px; }
+    .guide-section { margin-bottom: 18px; }
+    .guide-section h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .guide-section p {
+      margin: 0 0 8px;
+      color: var(--ink-2);
+      font-size: 12.5px;
+    }
+    .guide-section .note {
+      color: var(--ink-3);
+      font-size: 12px;
+      margin: 0 0 8px;
+    }
+    .code-block {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--bg-soft);
+      margin: 0 0 10px;
+      overflow: hidden;
+    }
+    .code-block pre {
+      margin: 0;
+      padding: 12px 72px 12px 12px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      line-height: 1.55;
+      color: var(--ink);
+      overflow-x: auto;
+      white-space: pre;
+      word-break: normal;
+    }
+    .code-copy {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      min-height: 26px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+    .guide-checklist {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--ink-2);
+      font-size: 12.5px;
+    }
+    .guide-checklist li { margin-bottom: 4px; }
+    .guide-checklist code {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 0 4px;
+    }
   </style>
 </head>
 <body>
@@ -486,6 +545,7 @@
 
       <div class="tabs portal-tabs" role="tablist" id="portalNav">
         <button type="button" class="tab active" data-panel="overview" role="tab">Overview</button>
+        <button type="button" class="tab" data-panel="guide" role="tab">Guide</button>
         <button type="button" class="tab" data-panel="points" role="tab">Points</button>
         <button type="button" class="tab" data-panel="usage" role="tab">Usage</button>
         <button type="button" class="tab" data-panel="keys" role="tab">Keys</button>
@@ -506,6 +566,117 @@
         </div>
         <p class="sub" style="margin-top:10px">Call <b>/v1</b> with your API key. Track spend under Points · Usage.</p>
       </div>
+
+      <!-- Guide -->
+      <div class="portal-panel" id="panel-guide">
+        <div class="section-title">User guide · 使用指南</div>
+        <p class="sub" style="margin:0 0 14px">
+          Point coding tools at this local gateway. Replace <span class="mono">127.0.0.1</span> with your LAN IP if the tool runs on another machine ·
+          将编码工具指向本机网关；若工具在其他机器运行，请把 127.0.0.1 换成局域网 IP。
+        </p>
+
+        <div class="guide-section">
+          <h3>1. Gateway base URLs · 网关地址</h3>
+          <p>Use the API key from the <b>Keys</b> tab (starts with <span class="mono">sk-unify-</span>) · 使用「Keys」页签中的密钥。</p>
+          <div class="code-block">
+            <button type="button" class="btn code-copy" data-copy="guide-urls">Copy</button>
+            <pre id="guide-urls"># OpenAI-compatible · OpenAI 兼容
+http://127.0.0.1:8787/v1
+
+# Anthropic-compatible · Anthropic 兼容
+http://127.0.0.1:8787
+
+# API key (from Keys tab)
+sk-unify-…</pre>
+          </div>
+        </div>
+
+        <div class="guide-section">
+          <h3>2. OpenCode</h3>
+          <p>Example config at <span class="mono">~/.config/opencode/opencode.json</span> · 示例配置路径。</p>
+          <div class="code-block">
+            <button type="button" class="btn code-copy" data-copy="guide-opencode">Copy</button>
+            <pre id="guide-opencode">{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "local_proxy": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "Unify Local Gateway",
+      "options": {
+        "baseURL": "http://127.0.0.1:8787",
+        "apiKey": "sk-unify-…"
+      },
+      "models": {
+        "deepseek-flash": { "name": "DeepSeek Flash" },
+        "glm-5.3-flash": { "name": "GLM 5.3 Flash" }
+      }
+    }
+  }
+}</pre>
+          </div>
+          <p class="note">baseURL is the host root (no <span class="mono">/v1</span>) for the Anthropic npm package · Anthropic 包使用主机根路径。</p>
+        </div>
+
+        <div class="guide-section">
+          <h3>3. Z Code</h3>
+          <p>Claude-Code-like CLI: set Anthropic-compatible env vars · 类 Claude Code 的 CLI：配置 Anthropic 兼容环境变量。</p>
+          <div class="code-block">
+            <button type="button" class="btn code-copy" data-copy="guide-zcode">Copy</button>
+            <pre id="guide-zcode"># Windows PowerShell
+$env:ANTHROPIC_BASE_URL = "http://127.0.0.1:8787"
+$env:ANTHROPIC_AUTH_TOKEN = "sk-unify-…"
+$env:ANTHROPIC_API_KEY = "sk-unify-…"
+
+# Linux / macOS
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+export ANTHROPIC_AUTH_TOKEN=sk-unify-…
+export ANTHROPIC_API_KEY=sk-unify-…</pre>
+          </div>
+          <p class="note">Optional: <span class="mono">ANTHROPIC_API_KEY</span> can match <span class="mono">ANTHROPIC_AUTH_TOKEN</span>. Adjust if Z Code docs differ · 若其文档不同请按官方说明调整。</p>
+        </div>
+
+        <div class="guide-section">
+          <h3>4. Codex / OpenAI Codex CLI</h3>
+          <p>OpenAI-compatible endpoint · 使用 OpenAI 兼容端点。</p>
+          <div class="code-block">
+            <button type="button" class="btn code-copy" data-copy="guide-codex">Copy</button>
+            <pre id="guide-codex"># Windows PowerShell
+$env:OPENAI_BASE_URL = "http://127.0.0.1:8787/v1"
+$env:OPENAI_API_KEY = "sk-unify-…"
+
+# Linux / macOS
+export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+export OPENAI_API_KEY=sk-unify-…
+
+# Model name examples · 模型名示例
+# deepseek-flash
+# glm-5.3-flash</pre>
+          </div>
+        </div>
+
+        <div class="guide-section">
+          <h3>5. DeepSeek client apps · DeepSeek 客户端</h3>
+          <p>Official app / DSH and similar — only if they allow a custom OpenAI-compatible base URL · 仅当应用支持自定义端点时可用。</p>
+          <div class="code-block">
+            <button type="button" class="btn code-copy" data-copy="guide-deepseek">Copy</button>
+            <pre id="guide-deepseek">Base URL:  http://127.0.0.1:8787/v1
+API key:   sk-unify-…
+Model:     deepseek-flash
+  (or)     deepseek-v4-pro</pre>
+          </div>
+          <p class="note">Works only if the app supports a custom OpenAI-compatible endpoint · 仅在应用允许自定义 OpenAI 兼容端点时有效。</p>
+        </div>
+
+        <div class="guide-section">
+          <h3>6. Quick checklist · 快速检查</h3>
+          <ol class="guide-checklist">
+            <li>Create a key in the <b>Keys</b> tab · 在「Keys」页签创建密钥</li>
+            <li>Paste it into your tool (env var or config) · 粘贴到工具的环境变量或配置</li>
+            <li>Point the tool at <code>http://127.0.0.1:8787/v1</code> (OpenAI) or host root (Anthropic) · 指向网关地址</li>
+            <li>Call the API, then watch <b>Usage</b> / <b>Points</b> · 调用后在「Usage / Points」查看消耗</li>
+          </ol>
+        </div>
+      </div><!-- /guide -->
 
       <div class="portal-panel" id="panel-settings">
       <div class="section-title">Account settings · 账户设置</div>
@@ -956,10 +1127,25 @@
     });
     (function initPortalHash() {
       const h = (location.hash || "").replace("#", "");
-      if (["overview", "points", "usage", "keys", "settings"].includes(h)) {
+      if (["overview", "guide", "points", "usage", "keys", "settings"].includes(h)) {
         switchPortalPanel(h);
       }
     })();
+
+    /* Guide code-block copy buttons */
+    document.querySelectorAll(".code-copy[data-copy]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const src = $(btn.getAttribute("data-copy"));
+        const text = src ? (src.textContent || "") : "";
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.textContent = "Copied";
+        } catch (_) {
+          btn.textContent = "Copy failed";
+        }
+        setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+      });
+    });
 
     async function refreshUsage() {
       const { res, body } = await api("/api/me/usage");
