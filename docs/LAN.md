@@ -36,9 +36,9 @@ For install and general ops, see [DEPLOYMENT.md](../DEPLOYMENT.md). This page co
    curl http://127.0.0.1:8787/healthz
    ```
 
-## Host: gateway key
+## Host: gateway key (required for LAN)
 
-When bound to `0.0.0.0`, set a shared key so other machines cannot spend your upstream quota anonymously:
+When bound to `0.0.0.0`, a shared key is **required**. Without it, remote clients can call `/v1` anonymously (if no user keys exist yet) and self-register portal accounts. The gateway prints a loud warning at startup if you bind LAN without a key.
 
 ```powershell
 $env:UNIFY_GATEWAY_KEY = "change-me-long-random"
@@ -56,6 +56,23 @@ auth:
 ```
 
 When a key is set, `/v1/*` and `/api/*` require `Authorization: Bearer <key>` or `x-api-key: <key>`. `/healthz` and `/dashboard` stay open.
+
+### Reverse proxies
+
+If nginx/caddy fronts the gateway, list its IP in `auth.trusted_proxies`. Until you do, the gateway treats the TCP peer as the client and ignores `X-Forwarded-For` / `X-Real-IP` (so forged headers cannot fake localhost admin access or reset rate-limit buckets).
+
+The process also starts with uvicorn `proxy_headers=False`, so the TCP peer is never rewritten from XFF. If you prefer uvicorn to rewrite the peer, launch it yourself with `proxy_headers=True` and a tight `forwarded_allow_ips` instead of relying on the default `main.py` path.
+
+```yaml
+auth:
+  api_key: "${UNIFY_GATEWAY_KEY}"
+  trusted_proxies:
+    - 127.0.0.1
+```
+
+### TLS (recommended)
+
+Passwords and session cookies travel in cleartext on plain HTTP. Prefer TLS termination at nginx/caddy, then set `auth.session_cookie_secure: true` so the portal cookie is marked `Secure`.
 
 ## Discover host URLs
 

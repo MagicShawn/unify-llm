@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import math
 import os
+import threading
 import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Coroutine
@@ -15,7 +18,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from . import __version__
 from .adapters import create_adapter
-from .config import AppConfig, ProviderConfig, load_config, set_provider_enabled
+from .config import AppConfig, LoginLimitConfig, ProviderConfig, load_config, set_provider_enabled
 from .errors import ConfigError, ModelNotFoundError, ProxyError, UpstreamError
 from .convert import DEFAULT_MAX_TOKENS, apply_max_tokens_policy, stream_error_frame
 from .monitor import Monitor, StreamUsageSniffer, extract_usage
@@ -34,8 +37,99 @@ DEFAULT_STATS_DB = Path("data") / "unify_stats.db"
 DEFAULT_USERS_DB = Path("data") / "unify_users.db"
 
 _LOCALHOST_IPS = frozenset({"127.0.0.1", "::1", "localhost", ""})
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 PROBE_TIMEOUT_SECONDS = 10.0
+
+
+class LoginGuard:
+    """In-memory failed-login throttle keyed by client IP and account.
+
+    Success clears the account counter. Counts live in a sliding window.
+    Not shared across processes — adequate for a single uvicorn worker LAN gateway.
+    """
+
+    def __init__(self, config: LoginLimitConfig | None = None):
+        # threading.Lock: AppState is constructed outside the request loop
+        # (asyncio.Lock would bind to the wrong event loop on Python 3.10).
+        self._lock = threading.Lock()
+        self._ip_hits: dict[str, deque[float]] = defaultdict(deque)
+        self._acct_hits: dict[str, deque[float]] = defaultdict(deque)
+        self._ip_locked_until: dict[str, float] = {}
+        self._acct_locked_until: dict[str, float] = {}
+        self.update_config(config or LoginLimitConfig())
+
+    def update_config(self, config: LoginLimitConfig) -> None:
+        self.max_failures_per_ip = int(config.max_failures_per_ip or 0)
+        self.max_failures_per_account = int(config.max_failures_per_account or 0)
+        self.window_seconds = float(config.window_seconds or 60.0)
+        self.lockout_seconds = float(config.lockout_seconds or 30.0)
+
+    @property
+    def enabled(self) -> bool:
+        return self.max_failures_per_ip > 0 or self.max_failures_per_account > 0
+
+    def _prune(self, q: deque[float], now: float) -> None:
+        cutoff = now - self.window_seconds
+        while q and q[0] < cutoff:
+            q.popleft()
+
+    def check(self, ip: str, account: str) -> tuple[bool, int]:
+        """Return (allowed, retry_after_seconds)."""
+        if not self.enabled:
+            return True, 0
+        now = time.monotonic()
+        with self._lock:
+            for key, locked in (
+                (ip, self._ip_locked_until),
+                (account.lower() if account else "", self._acct_locked_until),
+            ):
+                if not key:
+                    continue
+                until = locked.get(key)
+                if until is not None and until > now:
+                    return False, max(1, int(math.ceil(until - now)))
+            if self.max_failures_per_ip > 0 and ip:
+                self._prune(self._ip_hits[ip], now)
+                if len(self._ip_hits[ip]) >= self.max_failures_per_ip:
+                    self._ip_locked_until[ip] = now + self.lockout_seconds
+                    return False, max(1, int(math.ceil(self.lockout_seconds)))
+            if self.max_failures_per_account > 0 and account:
+                key = account.lower()
+                self._prune(self._acct_hits[key], now)
+                if len(self._acct_hits[key]) >= self.max_failures_per_account:
+                    self._acct_locked_until[key] = now + self.lockout_seconds
+                    return False, max(1, int(math.ceil(self.lockout_seconds)))
+        return True, 0
+
+    def record_failure(self, ip: str, account: str) -> None:
+        if not self.enabled:
+            return
+        now = time.monotonic()
+        with self._lock:
+            if ip:
+                q = self._ip_hits[ip]
+                self._prune(q, now)
+                q.append(now)
+            if account:
+                key = account.lower()
+                q = self._acct_hits[key]
+                self._prune(q, now)
+                q.append(now)
+
+    def record_success(self, account: str) -> None:
+        if not account:
+            return
+        with self._lock:
+            self._acct_hits.pop(account.lower(), None)
+            self._acct_locked_until.pop(account.lower(), None)
+
+    def reset(self) -> None:
+        """Drop all counters (tests / admin reload)."""
+        self._ip_hits.clear()
+        self._acct_hits.clear()
+        self._ip_locked_until.clear()
+        self._acct_locked_until.clear()
 
 
 async def probe_provider(
@@ -113,6 +207,7 @@ class AppState:
             max_queue=config.limits.max_queue,
             queue_timeout_seconds=config.limits.queue_timeout_seconds,
         )
+        self.login_guard = LoginGuard(config.login)
         self._register_all(config)
         self.http: httpx.AsyncClient | None = None
         self._health_tasks: list[asyncio.Task[None]] = []
@@ -138,6 +233,7 @@ class AppState:
             config.limits.max_queue,
             config.limits.queue_timeout_seconds,
         )
+        self.login_guard.update_config(config.login)
         self._register_all(config)
         enabled = sum(1 for p in config.providers.values() if p.enabled)
         return {"providers": len(config.providers), "enabled": enabled}
@@ -243,9 +339,24 @@ class AppState:
             self.http = None
 
 
-def _client_ip(request: Request) -> str:
-    """Best-effort client IP for LAN / reverse-proxy setups."""
-    # Prefer first hop from X-Forwarded-For when behind nginx/caddy on the LAN.
+def _peer_ip(request: Request) -> str:
+    """TCP peer address. Never consults client-controlled headers."""
+    if request.client:
+        return request.client.host or ""
+    return ""
+
+
+def _client_ip(request: Request, trusted_proxies: frozenset[str] | None = None) -> str:
+    """Client IP for rate limiting / logging.
+
+    X-Forwarded-For / X-Real-IP are honored only when the TCP peer is an
+    explicitly configured trusted proxy. Otherwise the peer address wins.
+    Localhost privilege checks must use _peer_ip, never this helper.
+    """
+    peer = _peer_ip(request)
+    proxies = trusted_proxies if trusted_proxies is not None else frozenset()
+    if peer and peer not in proxies:
+        return peer
     xff = request.headers.get("x-forwarded-for") or ""
     if xff:
         first = xff.split(",")[0].strip()
@@ -254,9 +365,11 @@ def _client_ip(request: Request) -> str:
     xri = request.headers.get("x-real-ip") or ""
     if xri.strip():
         return xri.strip()
-    if request.client:
-        return request.client.host
-    return ""
+    return peer
+
+
+def _is_loopback(host: str) -> bool:
+    return (host or "").strip().lower() in _LOCALHOST_IPS
 
 
 # Headers safe to log (never full secrets).
@@ -494,7 +607,9 @@ def _resolve_session(state: AppState, request: Request) -> dict[str, Any] | None
     return session
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
+def _set_session_cookie(
+    response: Response, token: str, *, secure: bool = False
+) -> None:
     response.set_cookie(
         key=SESSION_COOKIE,
         value=token,
@@ -502,7 +617,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
         httponly=True,
         samesite="lax",
         path="/",
-        secure=False,  # LAN HTTP gateway
+        secure=secure,
     )
 
 
@@ -566,6 +681,13 @@ def create_app(
         config = load_config(config_path or "config.yaml")
     state = AppState(config, config_path=config_path, users_db=Path(users_db) if users_db else None)
     gateway_key = config.gateway_api_key()
+    trusted_proxies = frozenset(
+        p.strip() for p in (config.auth.trusted_proxies or []) if p and p.strip()
+    )
+    cookie_secure = bool(config.auth.session_cookie_secure)
+
+    def _keys_match(provided: str, expected: str) -> bool:
+        return hmac.compare_digest(provided or "", expected or "")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -622,7 +744,7 @@ def create_app(
         is_user_admin = path.startswith(("/api/admin/users", "/api/admin/keys"))
 
         # Master gateway key always grants full access.
-        if gateway_key and client_key == gateway_key:
+        if gateway_key and _keys_match(client_key, gateway_key):
             return await call_next(request)
 
         # Admin session cookie grants dashboard + admin API access.
@@ -635,9 +757,10 @@ def create_app(
         ):
             return await call_next(request)
 
-        # User/key admin without a master key → localhost only (v1 policy).
+        # User/key admin without a master key → TCP peer must be loopback.
+        # Never trust X-Forwarded-For here (auth bypass / admin takeover).
         if is_user_admin and not gateway_key:
-            if _client_ip(request) not in _LOCALHOST_IPS:
+            if not _is_loopback(_peer_ip(request)):
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -675,10 +798,10 @@ def create_app(
                 if not gateway_key and not has_user_keys:
                     return await call_next(request)
                 return _auth_error()
-            # Other /api/*: localhost always works for first-run / local admin.
-            # Once portal accounts exist, non-localhost needs admin session or master key.
+            # Other /api/*: loopback TCP peer always works for first-run / local admin.
+            # Once portal accounts exist, non-loopback needs admin session or master key.
             if not gateway_key:
-                if _client_ip(request) in _LOCALHOST_IPS:
+                if _is_loopback(_peer_ip(request)):
                     return await call_next(request)
                 if users is not None and users.count_users() > 0:
                     return _auth_error()
@@ -698,7 +821,8 @@ def create_app(
         if not state.limiter.enabled:
             return await call_next(request)
 
-        client = _client_ip(request)
+        # Rate-limit the real peer unless it is a configured trusted proxy.
+        client = _client_ip(request, trusted_proxies)
 
         async def _reject(reason: str, retry_after: int, message: str) -> Response:
             return JSONResponse(
@@ -1251,10 +1375,27 @@ def create_app(
                 {"error": {"message": "Fields 'name', 'email', and 'password' are required"}},
                 status_code=400,
             )
+        peer = _peer_ip(request)
+        allowed, retry_after = state.login_guard.check(peer, f"register:{email.lower()}")
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "message": "Too many sign-up attempts. Try again later.",
+                        "type": "RateLimitError",
+                        "retry_after": retry_after,
+                    }
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
         try:
             user = users_store.register_user(name, email, password)
         except ValueError as e:
+            state.login_guard.record_failure(peer, f"register:{email.lower()}")
             return JSONResponse({"error": {"message": str(e)}}, status_code=400)
+        # Count each signup against the IP window so open registration cannot be spammed freely.
+        state.login_guard.record_failure(peer, "__register_ip__")
         state.monitor.log("info", f"user registered id={user['id']} email={user['email']}")
         return JSONResponse(
             {
@@ -1286,11 +1427,30 @@ def create_app(
                 {"error": {"message": "Fields 'email' and 'password' are required"}},
                 status_code=400,
             )
+        peer = _peer_ip(request)
+        allowed, retry_after = state.login_guard.check(peer, login)
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "message": "Too many failed sign-in attempts. Try again later.",
+                        "type": "RateLimitError",
+                        "retry_after": retry_after,
+                    }
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
         user = users_store.authenticate_password(login, password)
         if user is None:
-            # Distinguish pending vs bad credentials without leaking password state.
-            by_email = users_store.get_user_by_email(login)
-            if by_email is not None and by_email.get("status") == "pending":
+            # Correct password + pending/disabled → tell the account owner.
+            # Wrong credentials stay a uniform 401 (no account enumeration).
+            by_login = users_store.get_user_by_email(login) or users_store.get_user_by_name(login)
+            if (
+                by_login is not None
+                and by_login.get("status") != "active"
+                and users_store.password_matches(by_login["id"], password)
+            ):
                 return JSONResponse(
                     {
                         "error": {
@@ -1300,6 +1460,7 @@ def create_app(
                     },
                     status_code=403,
                 )
+            state.login_guard.record_failure(peer, login)
             return JSONResponse(
                 {
                     "error": {
@@ -1309,9 +1470,10 @@ def create_app(
                 },
                 status_code=401,
             )
+        state.login_guard.record_success(login)
         token = users_store.create_session(user["id"])
         resp = JSONResponse({"ok": True, "user": _public_user(user)})
-        _set_session_cookie(resp, token)
+        _set_session_cookie(resp, token, secure=cookie_secure)
         state.monitor.log("info", f"user login id={user['id']} name={user['name']}")
         return resp
 
@@ -1433,7 +1595,10 @@ def create_app(
             )
         try:
             user = users_store.change_password(
-                session["user_id"], old_password, new_password
+                session["user_id"],
+                old_password,
+                new_password,
+                keep_session_token=session.get("token") or "",
             )
         except ValueError as e:
             msg = str(e)
@@ -1445,7 +1610,7 @@ def create_app(
                     status_code=400,
                 )
             return JSONResponse({"error": {"message": msg}}, status_code=status)
-        # Session intentionally kept (documented): user stays signed in after change.
+        # Other sessions for this user were revoked; this device stays signed in.
         state.monitor.log("info", f"password changed by user id={session['user_id']}")
         return JSONResponse({"ok": True, "user": _public_user(user), "session_kept": True})
 
@@ -1756,7 +1921,7 @@ def create_app(
                 requested_model=rt.requested_model,
                 protocol=protocol,
                 path=path,
-                client=_client_ip(request),
+                client=_client_ip(request, trusted_proxies),
                 user_agent=user_agent,
                 app=client_app,
                 headers=hdrs,

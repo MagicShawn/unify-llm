@@ -1,0 +1,45 @@
+workdir: D:\AppData\Local\Temp\unify-audit-x8n92jba   (mock upstream + 2 gateway instances, ephemeral ports)
+
+═══ Part A: password & key storage (direct store checks) ═══
+[A1] PASS (OK) — scrypt N=2^14,r=8,p=1, per-hash random salt (two hashes of same password differ: True)
+[A2] PASS (OK) — verify_password accepts correct / rejects wrong password (constant-time compare)
+[A3] PASS (OK) — raw API key never persisted (SHA-256 hash + prefix only) — raw key absent from DB file bytes
+[A4] PASS (OK) — plaintext password never persisted; users table holds scrypt string only
+[A5-FINDING] CONFIRMED FINDING — session tokens ARE stored raw (not hashed) in DB — DB theft = live session hijack
+    info: tampered hash with N=2^30 → rejected: ValueError
+
+═══ Part B1: LAN-bound gateway, NO master key (open-admin mode) ═══
+[B0] PASS (OK) — gateway up on http://192.168.124.4:25938 (/healthz=200)
+[B1] PASS (OK) — admin API from LAN IP 192.168.124.4 without credentials → 403 (correctly refused)
+[B2-FINDING] CONFIRMED FINDING — FORGED 'X-Forwarded-For: 127.0.0.1' from LAN IP → HTTP 200, full user list leaked (server trusts client-supplied XFF as client IP)
+[B3-FINDING] CONFIRMED FINDING — remote attacker forged XFF → created own admin account AND obtained a valid admin session cookie (complete auth bypass when no master key is set)
+[B4-FINDING] CONFIRMED FINDING — same forged-XFF admin API returns a usable sk-unify-* key for the real admin (prefix=ebf70d44…)
+
+═══ Part B2: localhost gateway WITH master key (auth matrix, brute force, limits) ═══
+[C0] PASS (OK) — gateway up on http://127.0.0.1:25961
+[C1] PASS (OK) — /v1 auth: master key=200, wrong key=401, no key=401
+[C2] PASS (OK) — user key call → HTTP 200, points 10→9 (mock usage 1000 prompt tok × 1pt/1k = 1)
+[C3] PASS (OK) — zero-balance user key → HTTP 402 (blocked pre-upstream)
+[C4] PASS (OK) — provider upstream key masked in /api/config (leak=False)
+[C5-FINDING] CONFIRMED FINDING — 20 consecutive wrong-password logins → all HTTP 401, zero throttled, 0.1s total (296 attempts/s) — NO rate limit / lockout on /api/auth/login
+[C6-FINDING] CONFIRMED FINDING — login wrong-password: pending account → 403 'Account pending', unknown email → 401 — leaks which emails exist WITHOUT knowing the password
+[C7] PASS (OK) — SQLi payloads in login → 401/401 (parameterized queries hold)
+[C8-FINDING] CONFIRMED FINDING — session cookie: HttpOnly=True, SameSite=lax=True, Secure=False — Secure off by design (LAN HTTP); tokens/passwords cross the wire in cleartext
+[C9] PASS (OK) — user-role session on /api/admin/users → 401 (RBAC holds)
+[C10-FINDING] CONFIRMED FINDING — after password change, an older session token still resolves (HTTP 200) — change_password invalidates no other sessions
+[C11] PASS (OK) — session of disabled user → 401 (server-side revocation works)
+[C12] PASS (OK) — RPM=5 → 429 after burst (limit enforced on /v1)
+[C13-FINDING] CONFIRMED FINDING — 15/15 requests passed right after hitting the RPM cap by rotating 'X-Forwarded-For: 10.9.9.x' — per-IP rate limiting is fully bypassable via header spoofing
+[C14] PASS (OK) — open self-registration → 201 (pending approval gate; spam/noise vector)
+
+══════════════════════════════════════════════════════════════════════
+SUMMARY: 25 checks, 9 finding(s)
+  • A5-FINDING: session tokens ARE stored raw (not hashed) in DB — DB theft = live session hijack
+  • B2-FINDING: FORGED 'X-Forwarded-For: 127.0.0.1' from LAN IP → HTTP 200, full user list leaked (server trusts client-supplied XFF as client IP)
+  • B3-FINDING: remote attacker forged XFF → created own admin account AND obtained a valid admin session cookie (complete auth bypass when no master key is set)
+  • B4-FINDING: same forged-XFF admin API returns a usable sk-unify-* key for the real admin (prefix=ebf70d44…)
+  • C5-FINDING: 20 consecutive wrong-password logins → all HTTP 401, zero throttled, 0.1s total (296 attempts/s) — NO rate limit / lockout on /api/auth/login
+  • C6-FINDING: login wrong-password: pending account → 403 'Account pending', unknown email → 401 — leaks which emails exist WITHOUT knowing the password
+  • C8-FINDING: session cookie: HttpOnly=True, SameSite=lax=True, Secure=False — Secure off by design (LAN HTTP); tokens/passwords cross the wire in cleartext
+  • C10-FINDING: after password change, an older session token still resolves (HTTP 200) — change_password invalidates no other sessions
+  • C13-FINDING: 15/15 requests passed right after hitting the RPM cap by rotating 'X-Forwarded-For: 10.9.9.x' — per-IP rate limiting is fully bypassable via header spoofing

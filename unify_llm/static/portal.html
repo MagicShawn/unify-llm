@@ -783,8 +783,8 @@
         <input id="regName" name="name" type="text" required autocomplete="name" />
         <label for="regEmail">Email</label>
         <input id="regEmail" name="email" type="email" required autocomplete="username" />
-        <label for="regPassword">Password (min 8)</label>
-        <input id="regPassword" name="password" type="password" required minlength="8" autocomplete="new-password" />
+        <label for="regPassword">Password (min 10)</label>
+        <input id="regPassword" name="password" type="password" required minlength="10" autocomplete="new-password" />
         <div class="btn-row">
           <button type="submit" class="btn primary">Create account</button>
         </div>
@@ -959,12 +959,12 @@ Model:     deepseek-flash
           <div class="msg" id="profileMsg" role="status"></div>
         </div>
         <div class="settings-box">
-          <p class="hint">You stay signed in on this device after changing the password.</p>
+          <p class="hint">Changing your password signs out every other device. This session stays active.</p>
           <form id="passwordForm" autocomplete="on">
             <label for="oldPassword">Current password</label>
             <input id="oldPassword" type="password" required autocomplete="current-password" />
-            <label for="newPassword">New password (min 8)</label>
-            <input id="newPassword" type="password" required minlength="8" autocomplete="new-password" />
+            <label for="newPassword">New password (min 10)</label>
+            <input id="newPassword" type="password" required minlength="10" autocomplete="new-password" />
             <div class="btn-row">
               <button type="submit" class="btn primary">Change password</button>
             </div>
@@ -1412,7 +1412,7 @@ Model:     deepseek-flash
         return;
       }
       $("passwordForm").reset();
-      showMsg($("passwordMsg"), "ok", "Password updated. You remain signed in on this device.");
+      showMsg($("passwordMsg"), "ok", "Password updated. Other devices were signed out.");
     });
 
     function switchPortalPanel(name) {

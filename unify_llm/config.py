@@ -35,6 +35,59 @@ class ServerConfig(BaseModel):
 
 class AuthConfig(BaseModel):
     api_key: str = ""
+    # Peer IPs (nginx/caddy on this host or a known reverse-proxy) allowed to
+    # set X-Forwarded-For / X-Real-IP. Empty (default) = never trust those headers.
+    trusted_proxies: list[str] = Field(default_factory=list)
+    # Set true when the gateway is only reached over HTTPS (cookie Secure flag).
+    session_cookie_secure: bool = False
+
+    @field_validator("trusted_proxies", mode="before")
+    @classmethod
+    def _proxies_list(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, list):
+            return [str(s).strip() for s in v if str(s).strip()]
+        raise ValueError("trusted_proxies must be a list of IPs")
+
+
+class LoginLimitConfig(BaseModel):
+    """Failed-login throttle for /api/auth/login and /api/auth/register.
+
+    In-memory only (per process). Successful logins clear the account counter.
+    """
+
+    # Max failed attempts per client IP within the window. 0 disables IP throttle.
+    max_failures_per_ip: int = 30
+    # Max failed attempts per account within the window. 0 disables account throttle.
+    max_failures_per_account: int = 10
+    # Sliding window for failure counts (seconds).
+    window_seconds: float = 60.0
+    # Lockout duration once a limit is hit (seconds).
+    lockout_seconds: float = 30.0
+
+    @field_validator(
+        "max_failures_per_ip", "max_failures_per_account", mode="before"
+    )
+    @classmethod
+    def _none_is_disabled(cls, v: Any) -> Any:
+        if v is None:
+            return 0
+        return v
+
+    @field_validator("max_failures_per_ip", "max_failures_per_account")
+    @classmethod
+    def _non_negative(cls, v: int) -> int:
+        if int(v) < 0:
+            raise ValueError("must be >= 0 (0 disables)")
+        return int(v)
+
+    @field_validator("window_seconds", "lockout_seconds")
+    @classmethod
+    def _positive_seconds(cls, v: float) -> float:
+        return max(1.0, float(v or 1.0))
 
 
 class LimitsConfig(BaseModel):
@@ -204,6 +257,7 @@ class AppConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
+    login: LoginLimitConfig = Field(default_factory=LoginLimitConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     aliases: dict[str, str] = Field(default_factory=dict)

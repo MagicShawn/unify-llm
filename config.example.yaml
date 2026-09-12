@@ -10,8 +10,21 @@ server:
 # If api_key is non-empty (or env UNIFY_GATEWAY_KEY is set),
 # /v1/* and /api/* require Authorization: Bearer <key> or x-api-key: <key>.
 # /healthz and /dashboard stay open.
+# REQUIRED when server.host is 0.0.0.0 / :: (LAN bind).
 # auth:
 #   api_key: "${UNIFY_GATEWAY_KEY}"
+#   # Only these TCP peers may set X-Forwarded-For / X-Real-IP.
+#   # Leave empty (default) if clients talk to the gateway directly.
+#   trusted_proxies: []
+#   # Set true when the portal is only reached over HTTPS.
+#   session_cookie_secure: false
+
+# Failed-login / signup throttle (in-memory, per process).
+# login:
+#   max_failures_per_ip: 30
+#   max_failures_per_account: 10
+#   window_seconds: 60
+#   lockout_seconds: 30
 
 # Optional gateway rate limits (applies to /v1/* only; /api/* and /healthz are unrestricted).
 # 0 or omitted disables the corresponding check.

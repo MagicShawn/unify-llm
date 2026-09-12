@@ -49,10 +49,25 @@ def main() -> None:
     print(f"  Health:     http://{host}:{port}/healthz")
     print(f"  Info:       http://{host}:{port}/api/info")
     print(f"  Gateway auth: {'required' if auth_required else 'disabled'}")
-    if lan:
-        print("  LAN access enabled — set UNIFY_GATEWAY_KEY and firewall port 8787.")
+    if lan and not auth_required:
+        print("  WARNING: LAN bind (0.0.0.0/::) WITHOUT a gateway key.")
+        print("           Remote clients can call /v1 and register portal accounts.")
+        print("           SET UNIFY_GATEWAY_KEY or auth.api_key before sharing this host.")
+    elif lan:
+        print("  LAN access enabled — firewall port 8787 to your subnet only.")
 
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    # proxy_headers=False: never let uvicorn rewrite request.client from
+    # X-Forwarded-For. Localhost privilege checks and rate-limit buckets must
+    # see the real TCP peer. If you terminate TLS at nginx/caddy, either put
+    # its IP in auth.trusted_proxies (gateway reads XFF itself) or explicitly
+    # re-enable proxy_headers with a tight forwarded_allow_ips.
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info",
+        proxy_headers=False,
+    )
 
 
 if __name__ == "__main__":
