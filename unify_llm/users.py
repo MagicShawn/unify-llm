@@ -36,6 +36,9 @@ DISPLAY_NAME_MAX_LEN = 64
 BADGE_MAX_LEN = 16
 PASSWORD_MIN_LEN = 8
 
+# points_balance == -1 means unlimited (no pre-call block; still tracks spent).
+POINTS_UNLIMITED = -1
+
 
 def _now() -> float:
     return time.time()
@@ -152,6 +155,16 @@ def _row_user(row: sqlite3.Row) -> dict[str, Any]:
     role = str(row["role"]) if "role" in keys and row["role"] else "user"
     display_name = (row["display_name"] or "") if "display_name" in keys else ""
     badge = (row["badge"] or "") if "badge" in keys else ""
+    points_balance = (
+        int(row["points_balance"])
+        if "points_balance" in keys and row["points_balance"] is not None
+        else 0
+    )
+    points_spent = (
+        int(row["points_spent"])
+        if "points_spent" in keys and row["points_spent"] is not None
+        else 0
+    )
     return {
         "id": int(row["id"]),
         "name": row["name"],
@@ -162,6 +175,8 @@ def _row_user(row: sqlite3.Row) -> dict[str, Any]:
         "status": status,
         "display_name": display_name,
         "badge": badge,
+        "points_balance": points_balance,
+        "points_spent": points_spent,
         "created_at": float(row["created_at"]),
     }
 
@@ -257,6 +272,14 @@ class UserStore:
                 self._conn.execute("ALTER TABLE users ADD COLUMN display_name TEXT")
             if "badge" not in cols:
                 self._conn.execute("ALTER TABLE users ADD COLUMN badge TEXT")
+            if "points_balance" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE users ADD COLUMN points_balance INTEGER NOT NULL DEFAULT 0"
+                )
+            if "points_spent" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE users ADD COLUMN points_spent INTEGER NOT NULL DEFAULT 0"
+                )
             self._conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -438,6 +461,84 @@ class UserStore:
         if updated is None:
             raise ValueError(f"unknown user_id: {user_id}")
         return updated
+
+    def set_points_balance(self, user_id: int, balance: int) -> dict[str, Any] | None:
+        """Set absolute points balance. -1 (POINTS_UNLIMITED) means unlimited."""
+        bal = int(balance)
+        if bal < 0 and bal != POINTS_UNLIMITED:
+            raise ValueError("points_balance must be >= 0 or -1 (unlimited)")
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE users SET points_balance=? WHERE id=?",
+                (bal, int(user_id)),
+            )
+            self._conn.commit()
+            if cur.rowcount == 0:
+                return None
+            row = self._conn.execute("SELECT * FROM users WHERE id=?", (int(user_id),)).fetchone()
+        return _row_user(row) if row else None
+
+    def add_points(self, user_id: int, delta: int) -> dict[str, Any] | None:
+        """Add (or subtract) points. Unlimited balance stays unlimited."""
+        d = int(delta)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT points_balance FROM users WHERE id=?", (int(user_id),)
+            ).fetchone()
+            if row is None:
+                return None
+            bal = int(row["points_balance"] or 0)
+            if bal == POINTS_UNLIMITED:
+                updated = self._conn.execute(
+                    "SELECT * FROM users WHERE id=?", (int(user_id),)
+                ).fetchone()
+                self._conn.commit()
+            else:
+                new_bal = bal + d
+                self._conn.execute(
+                    "UPDATE users SET points_balance=? WHERE id=?",
+                    (new_bal, int(user_id)),
+                )
+                self._conn.commit()
+                updated = self._conn.execute(
+                    "SELECT * FROM users WHERE id=?", (int(user_id),)
+                ).fetchone()
+        return _row_user(updated) if updated else None
+
+    def deduct_points(self, user_id: int, amount: int) -> dict[str, Any] | None:
+        """Deduct points after a successful request. Always increments points_spent.
+
+        Unlimited (-1) keeps balance unchanged and only tracks spent.
+        Non-unlimited balances may go slightly negative if a single call costs
+        more than the remaining balance (next call is then blocked).
+        """
+        amt = max(0, int(amount))
+        if amt == 0:
+            return self.get_user(user_id)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT points_balance, points_spent FROM users WHERE id=?",
+                (int(user_id),),
+            ).fetchone()
+            if row is None:
+                return None
+            bal = int(row["points_balance"] or 0)
+            spent = int(row["points_spent"] or 0) + amt
+            if bal == POINTS_UNLIMITED:
+                self._conn.execute(
+                    "UPDATE users SET points_spent=? WHERE id=?",
+                    (spent, int(user_id)),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE users SET points_balance=?, points_spent=? WHERE id=?",
+                    (bal - amt, spent, int(user_id)),
+                )
+            self._conn.commit()
+            updated = self._conn.execute(
+                "SELECT * FROM users WHERE id=?", (int(user_id),)
+            ).fetchone()
+        return _row_user(updated) if updated else None
 
     def set_profile(
         self,

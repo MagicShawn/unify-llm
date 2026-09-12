@@ -3771,7 +3771,7 @@
       }
       let html =
         "<table><thead><tr>" +
-        "<th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Keys</th><th>Actions</th>" +
+        "<th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Points</th><th>Keys</th><th>Actions</th>" +
         "</tr></thead><tbody>";
       lastUsers.forEach((u) => {
         const keys = u.keys || [];
@@ -3819,6 +3819,17 @@
             : "";
         const dn = u.display_name || "";
         const bg = u.badge || "";
+        const bal = Number(u.points_balance || 0);
+        const spent = Number(u.points_spent || 0);
+        const balLabel = bal === -1 ? "∞" : String(bal);
+        const pointsHtml =
+          '<div class="mono" style="font-size:10px;color:var(--ink-3)">spent ' + esc(String(spent)) + "</div>" +
+          '<div style="display:flex;gap:4px;align-items:center;margin-top:4px">' +
+          '<input class="filter-input" style="height:24px;padding:0 6px;font-size:11px;max-width:72px" ' +
+          'type="number" step="1" data-set-points="' + Number(u.id) + '" value="' + esc(balLabel === "∞" ? "-1" : balLabel) + '" ' +
+          'title="-1 = unlimited" aria-label="Points balance for ' + esc(u.name) + '" />' +
+          '<button type="button" class="btn-ops" data-save-points="' + Number(u.id) + '">Set</button>' +
+          "</div>";
         html +=
           "<tr>" +
           "<td><b>" + esc(dn || u.name) + '</b> ' +
@@ -3837,6 +3848,7 @@
           '<td class="mono">' + esc(u.email || "—") + "</td>" +
           "<td>" + roleSel + "</td>" +
           "<td>" + statusPill + "</td>" +
+          "<td>" + pointsHtml + "</td>" +
           "<td>" + keysHtml + "</td>" +
           '<td><div class="user-actions">' +
           approveBtn +
@@ -4012,6 +4024,36 @@
       }
     }
 
+    async function saveUserPoints(userId) {
+      const el = document.querySelector('[data-set-points="' + Number(userId) + '"]');
+      if (!el) return;
+      const raw = el.value.trim();
+      if (raw === "") {
+        showToast("err", "Points value required");
+        el.focus();
+        return;
+      }
+      const bal = Number(raw);
+      if (!Number.isFinite(bal) || !Number.isInteger(bal)) {
+        showToast("err", "Points must be an integer (-1 = unlimited)");
+        el.focus();
+        return;
+      }
+      try {
+        const res = await apiFetch("/api/admin/users/" + Number(userId), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ points_balance: bal }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        showToast("ok", "Points updated", bal === -1 ? "unlimited" : String(bal));
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Points update failed", e.message || String(e));
+      }
+    }
+
     async function deleteUser(userId) {
       if (!confirm("Delete this user and all their keys?")) return;
       try {
@@ -4060,6 +4102,11 @@
           const saveProf = e.target.closest("[data-save-profile]");
           if (saveProf) {
             saveUserProfile(Number(saveProf.getAttribute("data-save-profile")));
+            return;
+          }
+          const savePts = e.target.closest("[data-save-points]");
+          if (savePts) {
+            saveUserPoints(Number(savePts.getAttribute("data-save-points")));
             return;
           }
           const toggle = e.target.closest("[data-toggle-user]");

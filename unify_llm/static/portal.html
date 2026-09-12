@@ -496,6 +496,19 @@
         </div>
       </div>
 
+      <div class="section-title">Points · 积分</div>
+      <div class="usage-grid" id="pointsGrid">
+        <div class="usage-card"><div class="k">balance</div><div class="v" id="uPoints">—</div></div>
+        <div class="usage-card"><div class="k">spent</div><div class="v" id="uSpent">—</div></div>
+        <div class="usage-card"><div class="k">status</div><div class="v" id="uPointsStatus" style="font-size:13px">—</div></div>
+      </div>
+      <p class="sub" id="pointsHint" style="margin:8px 0 0;display:none"></p>
+
+      <div class="section-title">Available models · 可用模型</div>
+      <div class="card" style="padding:0;box-shadow:none" id="modelsWrap">
+        <div class="empty">Loading…</div>
+      </div>
+
       <div class="section-title">API keys · 我的密钥</div>
       <div class="inline-form">
         <div class="field">
@@ -674,6 +687,7 @@
       closeKeyModal();
       refreshKeys();
       refreshUsage();
+      refreshModels();
     }
 
     async function loadMe() {
@@ -853,6 +867,82 @@
       $("uIn").textContent = fmtN(body.prompt_tokens || 0);
       $("uOut").textContent = fmtN(body.completion_tokens || 0);
       $("uErr").textContent = fmtN(body.errors || 0);
+      const unlimited = !!body.points_unlimited || Number(body.points_balance) === -1;
+      $("uPoints").textContent = unlimited ? "∞" : fmtN(body.points_balance || 0);
+      $("uSpent").textContent = fmtN(body.points_spent || 0);
+      const statusEl = $("uPointsStatus");
+      if (statusEl) {
+        if (!body.points_charging_enabled) {
+          statusEl.textContent = "free";
+          statusEl.className = "v";
+        } else if (unlimited) {
+          statusEl.textContent = "unlimited";
+          statusEl.className = "v";
+        } else if (Number(body.points_balance || 0) <= 0) {
+          statusEl.textContent = "blocked";
+          statusEl.className = "v";
+          statusEl.style.color = "var(--err)";
+        } else {
+          statusEl.textContent = "active";
+          statusEl.className = "v";
+          statusEl.style.color = "";
+        }
+      }
+      const hint = $("pointsHint");
+      if (hint) {
+        if (!body.points_charging_enabled) {
+          hint.style.display = "none";
+          hint.textContent = "";
+        } else {
+          hint.style.display = "block";
+          hint.textContent =
+            "Rates: " +
+            (body.points_per_1k_prompt || 0) +
+            " / 1k prompt · " +
+            (body.points_per_1k_completion || 0) +
+            " / 1k completion. Balance −1 = unlimited.";
+        }
+      }
+    }
+
+    async function refreshModels() {
+      const wrap = $("modelsWrap");
+      if (!wrap) return;
+      const { res, body } = await api("/api/me/models");
+      if (!res.ok) {
+        wrap.innerHTML = '<div class="empty">' + esc((body.error && body.error.message) || "Failed to load models") + "</div>";
+        return;
+      }
+      const models = body.models || [];
+      if (!models.length) {
+        wrap.innerHTML = '<div class="empty">No models configured</div>';
+        return;
+      }
+      let html =
+        "<table><thead><tr>" +
+        "<th>Model</th><th>Provider</th><th>Type</th><th>Aliases</th><th>Limits</th>" +
+        "</tr></thead><tbody>";
+      models.forEach((m) => {
+        const aliases = (m.aliases || []).join(", ") || "—";
+        let limits = "—";
+        if (m.limits) {
+          const parts = [];
+          if (m.limits.max_output_tokens) parts.push("out " + fmtN(m.limits.max_output_tokens));
+          if (m.limits.max_context_tokens) parts.push("ctx " + fmtN(m.limits.max_context_tokens));
+          limits = parts.join(" · ") || "—";
+        }
+        const aliasNote = m.alias_of ? ' <span class="pill">→ ' + esc(m.alias_of) + "</span>" : "";
+        html +=
+          "<tr>" +
+          "<td><b>" + esc(m.id) + "</b>" + aliasNote + "</td>" +
+          "<td>" + esc(m.provider || "—") + "</td>" +
+          '<td class="mono">' + esc(m.type || "—") + "</td>" +
+          '<td class="mono">' + esc(aliases) + "</td>" +
+          '<td class="mono">' + esc(limits) + "</td>" +
+          "</tr>";
+      });
+      html += "</tbody></table>";
+      wrap.innerHTML = html;
     }
 
     loadMe();

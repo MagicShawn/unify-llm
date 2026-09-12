@@ -411,7 +411,7 @@ Protected by the master gateway key when `UNIFY_GATEWAY_KEY` / `auth.api_key` is
 |--------|------|------|
 | GET | `/api/admin/users` | — |
 | POST | `/api/admin/users` | `{"name","email?","note?","password?","role?","status?"}` |
-| PATCH | `/api/admin/users/{id}` | `{"approve"?,"status"?,"role"?,"enabled"?,"password"?,"display_name"?,"badge"?}` |
+| PATCH | `/api/admin/users/{id}` | `{"approve"?,"status"?,"role"?,"enabled"?,"password"?,"display_name"?,"badge"?,"points_balance"?,"add_points"?}` |
 | POST | `/api/admin/users/{id}/password` | `{"password"}` — resets password and drops that user's sessions |
 | DELETE | `/api/admin/users/{id}` | — |
 | GET | `/api/admin/keys` | — |
@@ -427,6 +427,52 @@ Self-service (session cookie required):
 | POST | `/api/me/password` | `{"old_password","new_password"}` — keeps session |
 | GET/POST | `/api/me/keys` | list / `{"name"?}` create (raw key once) |
 | POST | `/api/me/keys/{id}/revoke` | — |
+| GET | `/api/me/models` | Models the user may call (live config after hot-reload) |
+| GET | `/api/me/usage` | Recent usage + `points_balance` / `points_spent` |
+
+### Models & points
+
+**Available models** (`GET /api/me/models`, session cookie): lists every model a signed-in user may call, read from the live `AppConfig` (updated on config reload). Each entry has `id`, `provider`, `type`, `aliases`, and optional `limits` from `model_limits`. Aliases appear as their own callable ids with `alias_of`.
+
+**Points** are a lean per-user quota on `/v1/*` user API keys (master gateway key is never charged):
+
+| Field | Meaning |
+|-------|---------|
+| `points_balance` | Remaining points. Default `0`. `-1` = unlimited |
+| `points_spent` | Lifetime points deducted |
+
+Rates live in `config.yaml` only (`limits.points_per_1k_prompt`, `limits.points_per_1k_completion`). **Both default to `0` = free** — no invented charges. Set them explicitly to enable billing:
+
+```yaml
+limits:
+  points_per_1k_prompt: 0        # free prompts
+  points_per_1k_completion: 1    # 1 point per 1k completion tokens
+```
+
+**Formula** (after a successful `/v1` response):
+
+```
+cost = floor(prompt_tokens/1000 * points_per_1k_prompt)
+     + floor(completion_tokens/1000 * points_per_1k_completion)
+# min 1 if any tokens and any rate > 0
+```
+
+When rates are non-zero and a user-key caller has `points_balance == 0`, the request is rejected with **HTTP 402** before the upstream call. Unlimited (`-1`) never blocks. Deduction uses actual usage tokens; stream requests deduct after the stream finishes.
+
+Admin manage balances via `PATCH /api/admin/users/{id}`:
+
+```bash
+# set absolute balance (−1 = unlimited)
+curl -X PATCH http://127.0.0.1:8787/api/admin/users/<id> \
+  -H "Authorization: Bearer $UNIFY_GATEWAY_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"points_balance": 1000}'
+
+# or delta (positive top-up / negative adjust)
+curl -X PATCH ... -d '{"add_points": 500}'
+```
+
+The portal shows a **Points** card and **Available models** table; the dashboard Users panel has a Points column with inline Set.
 
 ### Multi-user API keys
 

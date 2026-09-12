@@ -51,6 +51,10 @@ class LimitsConfig(BaseModel):
     max_queue: int = 0
     # Max seconds a request may wait in queue before 429.
     queue_timeout_seconds: float = 30.0
+    # Points charged per 1k prompt tokens on successful /v1 calls. 0 = free.
+    points_per_1k_prompt: float = 0.0
+    # Points charged per 1k completion tokens. 0 = free.
+    points_per_1k_completion: float = 0.0
 
     @field_validator(
         "requests_per_minute", "max_concurrent", "max_queue", mode="before"
@@ -72,6 +76,27 @@ class LimitsConfig(BaseModel):
     @classmethod
     def _timeout_non_negative(cls, v: float) -> float:
         return max(0.0, float(v or 0.0))
+
+    @field_validator("points_per_1k_prompt", "points_per_1k_completion", mode="before")
+    @classmethod
+    def _points_none_is_free(cls, v: Any) -> Any:
+        if v is None:
+            return 0.0
+        return v
+
+    @field_validator("points_per_1k_prompt", "points_per_1k_completion")
+    @classmethod
+    def _points_non_negative(cls, v: float) -> float:
+        if float(v) < 0:
+            raise ValueError("must be >= 0 (0 = free)")
+        return float(v)
+
+    def points_charging_enabled(self) -> bool:
+        """True when any points rate is configured (> 0)."""
+        return (
+            float(self.points_per_1k_prompt or 0.0) > 0
+            or float(self.points_per_1k_completion or 0.0) > 0
+        )
 
 
 class DefaultsConfig(BaseModel):

@@ -24,6 +24,17 @@ server:
 #   max_queue: 32
 #   # Max seconds a request may wait in queue before 429.
 #   queue_timeout_seconds: 60
+#   # Points quota (user API keys only; master gateway key is never charged).
+#   # 0 = free (no deduction, no balance check). Non-zero enables charging:
+#   #   cost = floor(prompt/1000 * points_per_1k_prompt)
+#   #        + floor(completion/1000 * points_per_1k_completion)
+#   #   min 1 point if any tokens and any rate > 0.
+#   # Balance 0 → HTTP 402 before upstream. Balance -1 on a user = unlimited.
+#   points_per_1k_prompt: 0
+#   points_per_1k_completion: 0
+#   # Example (1 point per 1k completion tokens, prompts free):
+#   # points_per_1k_prompt: 0
+#   # points_per_1k_completion: 1
 
 defaults:
   # Idle gap allowed between upstream response chunks (seconds).

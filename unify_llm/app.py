@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import time
 from contextlib import asynccontextmanager
@@ -22,6 +23,7 @@ from .rate_limit import RateLimiter
 from .registry import Registry, ResolvedRoute
 from .store import StatsStore
 from .users import (
+    POINTS_UNLIMITED,
     SESSION_COOKIE,
     SESSION_TTL_SECONDS,
     UserStore,
@@ -325,6 +327,102 @@ def _guess_client_app(user_agent: str) -> str:
     return ua.split("/")[0][:32]
 
 
+def compute_points_cost(
+    prompt_tokens: int,
+    completion_tokens: int,
+    rate_prompt: float,
+    rate_completion: float,
+) -> int:
+    """Points charged for one successful request.
+
+    Formula (config.limits.points_per_1k_*):
+      floor(prompt_tokens/1000 * rate_prompt)
+      + floor(completion_tokens/1000 * rate_completion)
+
+    0 rates = free (no charge). If any rate > 0 and any tokens were used but
+    the floors sum to 0, charge a minimum of 1 point (not free-riding).
+    """
+    rp = float(rate_prompt or 0.0)
+    rc = float(rate_completion or 0.0)
+    if rp <= 0 and rc <= 0:
+        return 0
+    pt = int(prompt_tokens or 0)
+    ct = int(completion_tokens or 0)
+    total = math.floor(pt / 1000.0 * rp) + math.floor(ct / 1000.0 * rc)
+    if total <= 0 and (pt > 0 or ct > 0):
+        return 1
+    return max(0, total)
+
+
+def user_model_catalog(config: AppConfig) -> list[dict[str, Any]]:
+    """Models a signed-in user may call, from the live AppConfig.
+
+    Includes enabled provider models and aliases. Optional model_limits are
+    attached when configured. Reads state.config after hot-reload.
+    """
+    aliases_for: dict[str, list[str]] = {}
+    for alias, target in config.aliases.items():
+        aliases_for.setdefault(target, []).append(alias)
+
+    def _limits(mid: str) -> dict[str, Any] | None:
+        lim = config.model_limits.get(mid)
+        if lim is None:
+            return None
+        return {
+            "max_output_tokens": lim.max_output_tokens,
+            "max_context_tokens": lim.max_context_tokens,
+        }
+
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for pid, p in config.providers.items():
+        if not p.enabled:
+            continue
+        for m in p.models:
+            if m in seen:
+                continue
+            seen.add(m)
+            entry: dict[str, Any] = {
+                "id": m,
+                "provider": pid,
+                "type": p.type,
+                "aliases": sorted(aliases_for.get(m, [])),
+            }
+            lim = _limits(m)
+            if lim is not None:
+                entry["limits"] = lim
+            items.append(entry)
+
+    for alias, target in config.aliases.items():
+        if alias in seen:
+            continue
+        resolved = target
+        if resolved in config.aliases:
+            resolved = config.aliases[resolved]
+        pid = None
+        ptype = None
+        for provider_id, p in config.providers.items():
+            if p.enabled and resolved in p.models:
+                pid = provider_id
+                ptype = p.type
+                break
+        if pid is None:
+            continue
+        entry = {
+            "id": alias,
+            "provider": pid,
+            "type": ptype,
+            "aliases": [],
+            "alias_of": resolved,
+        }
+        lim = _limits(alias) or _limits(resolved)
+        if lim is not None:
+            entry["limits"] = lim
+        items.append(entry)
+        seen.add(alias)
+    return items
+
+
 def _error_payload(exc: ProxyError) -> dict[str, Any]:
     return {"error": {"message": exc.message, "type": exc.__class__.__name__}}
 
@@ -419,6 +517,8 @@ def _public_user(user: dict[str, Any]) -> dict[str, Any]:
         "status": user.get("status") or "active",
         "display_name": user.get("display_name") or "",
         "badge": user.get("badge") or "",
+        "points_balance": int(user.get("points_balance") or 0),
+        "points_spent": int(user.get("points_spent") or 0),
     }
 
 
@@ -798,6 +898,69 @@ def create_app(
     def _users_ready() -> UserStore | None:
         return state.users
 
+    def _points_rates() -> tuple[float, float]:
+        lim = state.config.limits
+        return (
+            float(lim.points_per_1k_prompt or 0.0),
+            float(lim.points_per_1k_completion or 0.0),
+        )
+
+    def _points_charging_enabled() -> bool:
+        return state.config.limits.points_charging_enabled()
+
+    def _points_block_response(balance: int) -> JSONResponse:
+        return JSONResponse(
+            status_code=402,
+            content={
+                "error": {
+                    "message": (
+                        "Insufficient points. Contact an admin to top up your balance "
+                        f"(current balance: {balance})."
+                    ),
+                    "type": "PaymentRequiredError",
+                    "points_balance": balance,
+                }
+            },
+        )
+
+    def _check_points_before_upstream(request: Request) -> JSONResponse | None:
+        """Reject /v1 model calls when a user-key caller has 0 points and charging is on.
+
+        Master-key / open mode is unaffected. Unlimited (-1) always passes.
+        """
+        if not _points_charging_enabled():
+            return None
+        user_id, _username = _request_user_meta(request)
+        if not user_id or state.users is None:
+            return None
+        try:
+            user = state.users.get_user(int(user_id))
+        except (TypeError, ValueError):
+            return None
+        if user is None:
+            return None
+        bal = int(user.get("points_balance") or 0)
+        if bal == POINTS_UNLIMITED:
+            return None
+        if bal <= 0:
+            return _points_block_response(bal)
+        return None
+
+    def _deduct_points_after_success(
+        user_id: str | int, prompt_tokens: int, completion_tokens: int
+    ) -> None:
+        """Persist points spend after a successful upstream response."""
+        if not user_id or state.users is None:
+            return
+        rp, rc = _points_rates()
+        cost = compute_points_cost(prompt_tokens, completion_tokens, rp, rc)
+        if cost <= 0:
+            return
+        try:
+            state.users.deduct_points(int(user_id), cost)
+        except Exception:  # noqa: BLE001 — billing must never break the response
+            pass
+
     @app.get("/api/admin/users")
     async def admin_list_users() -> Response:
         users_store = _users_ready()
@@ -867,7 +1030,17 @@ def create_app(
             return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
         if not isinstance(body, dict):
             return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
-        allowed = {"enabled", "role", "status", "approve", "password", "display_name", "badge"}
+        allowed = {
+            "enabled",
+            "role",
+            "status",
+            "approve",
+            "password",
+            "display_name",
+            "badge",
+            "points_balance",
+            "add_points",
+        }
         if not any(k in body for k in allowed):
             return JSONResponse(
                 {"error": {"message": f"Supported fields: {sorted(allowed)}"}},
@@ -885,13 +1058,17 @@ def create_app(
                 user = users_store.set_role(user_id, str(body["role"]))
             if "password" in body and body["password"]:
                 user = users_store.set_password(user_id, str(body["password"]))
+            if "points_balance" in body:
+                user = users_store.set_points_balance(user_id, int(body["points_balance"]))
+            if "add_points" in body:
+                user = users_store.add_points(user_id, int(body["add_points"]))
             if "display_name" in body or "badge" in body:
                 user = users_store.set_profile(
                     user_id,
                     display_name=body.get("display_name"),
                     badge=body.get("badge"),
                 )
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             return JSONResponse({"error": {"message": str(e)}}, status_code=400)
         if user is None:
             return JSONResponse(
@@ -1303,6 +1480,20 @@ def create_app(
         completion = sum(int(r.get("completion_tokens") or 0) for r in items)
         errors = sum(1 for r in items if r.get("status") != "ok")
         cost = sum(float(r.get("estimated_cost_usd") or 0.0) for r in items)
+        user = session.get("user") or {}
+        balance = int(user.get("points_balance") or 0)
+        spent = int(user.get("points_spent") or 0)
+        # Refresh from store so deducts after login stay visible.
+        users_store = _users_ready()
+        if users_store is not None:
+            try:
+                fresh = users_store.get_user(int(session["user_id"]))
+                if fresh is not None:
+                    balance = int(fresh.get("points_balance") or 0)
+                    spent = int(fresh.get("points_spent") or 0)
+            except (TypeError, ValueError):
+                pass
+        rp, rc = _points_rates()
         return JSONResponse(
             {
                 "ok": True,
@@ -1312,7 +1503,28 @@ def create_app(
                 "prompt_tokens": prompt,
                 "completion_tokens": completion,
                 "estimated_cost_usd": round(cost, 12),
+                "points_balance": balance,
+                "points_spent": spent,
+                "points_unlimited": balance == POINTS_UNLIMITED,
+                "points_charging_enabled": _points_charging_enabled(),
+                "points_per_1k_prompt": rp,
+                "points_per_1k_completion": rc,
                 "items": items[:20],
+            }
+        )
+
+    @app.get("/api/me/models")
+    async def me_models(request: Request) -> Response:
+        """Models the signed-in user may call. Reads live AppConfig (post hot-reload)."""
+        session = _require_me(request)
+        if session is None:
+            return _session_auth_error()
+        models = user_model_catalog(state.config)
+        return JSONResponse(
+            {
+                "ok": True,
+                "models": models,
+                "total": len(models),
             }
         )
 
@@ -1460,6 +1672,11 @@ def create_app(
         """Resolve model, call upstream with monitor + optional fallback, return HTTP response."""
         assert state.http is not None
 
+        # Points gate: user-key callers with 0 balance are rejected before upstream.
+        blocked = _check_points_before_upstream(request)
+        if blocked is not None:
+            return blocked
+
         try:
             route = state.registry.resolve(str(model))
         except ModelNotFoundError as e:
@@ -1569,6 +1786,8 @@ def create_app(
                     prompt_tokens=pt,
                     completion_tokens=ct,
                 )
+                if status < 400:
+                    _deduct_points_after_success(auth_user_id, pt, ct)
                 return JSONResponse(
                     json_body,
                     status_code=status,
@@ -1652,6 +1871,7 @@ def create_app(
                         prompt_tokens=pt,
                         completion_tokens=ct,
                     )
+                    _deduct_points_after_success(auth_user_id, pt, ct)
 
             return StreamingResponse(
                 event_gen(),
