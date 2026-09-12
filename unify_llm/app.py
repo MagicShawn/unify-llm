@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, Callable, Coroutine
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from . import __version__
 from .adapters import create_adapter
@@ -539,8 +539,13 @@ def create_app(
                 if not gateway_key and not has_user_keys:
                     return await call_next(request)
                 return _auth_error()
-            # Other /api/*: open when no master key (existing behavior).
+            # Other /api/*: localhost always works for first-run / local admin.
+            # Once portal accounts exist, non-localhost needs admin session or master key.
             if not gateway_key:
+                if _client_ip(request) in _LOCALHOST_IPS:
+                    return await call_next(request)
+                if users is not None and users.count_users() > 0:
+                    return _auth_error()
                 return await call_next(request)
             return _auth_error()
 
@@ -1241,8 +1246,21 @@ def create_app(
             payload["error"] = result["error"]
         return JSONResponse(payload)
 
+    @app.get("/")
+    async def home(request: Request) -> Response:
+        """Unified entry: admin → dashboard, everyone else → portal."""
+        session = _resolve_session(state, request)
+        if session is not None and session["user"].get("role") == "admin":
+            return RedirectResponse("/dashboard", status_code=302)
+        return RedirectResponse("/portal", status_code=302)
+
     @app.get("/dashboard")
-    async def dashboard() -> Response:
+    async def dashboard(request: Request) -> Response:
+        """Admin-only control plane. Non-admins are sent to /portal."""
+        session = _resolve_session(state, request)
+        if session is None or session["user"].get("role") != "admin":
+            # Prefer portal login; 302 keeps the URL clean for bookmarks.
+            return RedirectResponse("/portal?next=/dashboard", status_code=302)
         html_path = STATIC_DIR / "dashboard.html"
         return Response(html_path.read_text(encoding="utf-8"), media_type="text/html")
 

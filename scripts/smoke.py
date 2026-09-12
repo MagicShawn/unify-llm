@@ -56,6 +56,11 @@ async def run_checks(port: int) -> None:
     from unify_llm.monitor import Monitor, estimate_cost_usd
     from unify_llm.rate_limit import RateLimiter
 
+    def TC(app, **kwargs):
+        """TestClient bound to localhost so /api/* localhost policy matches."""
+        kwargs.setdefault("client", ("127.0.0.1", 50020))
+        return TestClient(app, **kwargs)
+
     # --- unit-ish ---
     cfg = AppConfig(
         providers={
@@ -108,7 +113,7 @@ async def run_checks(port: int) -> None:
 
     # --- HTTP surface (no gateway auth) ---
     app = create_app(config=cfg)
-    with TestClient(app) as client:
+    with TC(app) as client:
         r = client.get("/healthz")
         assert r.status_code == 200 and r.json()["ok"] is True
 
@@ -156,6 +161,23 @@ async def run_checks(port: int) -> None:
         # default pricing is zero — no invented vendor rates
         assert body["totals"]["cost_usd"] == 0.0
 
+        r = client.get("/dashboard", follow_redirects=False)
+        assert r.status_code in (302, 307), r.status_code
+        assert "/portal" in r.headers.get("location", "")
+
+        # Bootstrap admin, then dashboard is available after login.
+        users_store = client.app.state.proxy.users
+        assert users_store is not None
+        adm = users_store.register_user(
+            name="smoke-admin", email="smoke-admin@local", password="smoke-pass-123"
+        )
+        users_store.approve_user(adm["id"])
+        users_store.set_role(adm["id"], "admin")
+        login = client.post(
+            "/api/auth/login",
+            json={"email": "smoke-admin@local", "password": "smoke-pass-123"},
+        )
+        assert login.status_code == 200, login.text
         r = client.get("/dashboard")
         assert r.status_code == 200 and b"Unify LLM" in r.content
         assert b"kpiCost" in r.content
@@ -168,13 +190,14 @@ async def run_checks(port: int) -> None:
         auth=AuthConfig(api_key=secret),
     )
     auth_app = create_app(config=auth_cfg)
-    with TestClient(auth_app) as client:
-        # healthz and dashboard stay open
+    with TC(auth_app) as client:
+        # healthz stays open; dashboard HTML requires admin session
         r = client.get("/healthz")
         assert r.status_code == 200 and r.json()["ok"] is True
 
-        r = client.get("/dashboard")
-        assert r.status_code == 200
+        r = client.get("/dashboard", follow_redirects=False)
+        assert r.status_code in (302, 307)
+        assert "/portal" in r.headers.get("location", "")
 
         # 401 without token
         for path in ("/v1/models", "/api/status", "/api/info", "/api/history", "/api/config"):
@@ -214,7 +237,7 @@ async def run_checks(port: int) -> None:
     os.environ["UNIFY_GATEWAY_KEY"] = env_secret
     try:
         env_app = create_app(config=cfg)
-        with TestClient(env_app) as client:
+        with TC(env_app) as client:
             r = client.get("/healthz")
             assert r.status_code == 200
 
@@ -261,7 +284,7 @@ async def run_checks(port: int) -> None:
         cfg_path = Path(tmp) / "config.yaml"
         cfg_path.write_text(yaml.safe_dump(raw_cfg, sort_keys=False), encoding="utf-8")
         admin_app = create_app(config_path=cfg_path)
-        with TestClient(admin_app) as client:
+        with TC(admin_app) as client:
             # GET /api/providers — redacted keys + monitor totals
             r = client.get("/api/providers")
             assert r.status_code == 200, r.text
@@ -334,7 +357,7 @@ async def run_checks(port: int) -> None:
 
             # reload with no config_path
             bare = create_app(config=cfg)
-            with TestClient(bare) as c2:
+            with TC(bare) as c2:
                 r = c2.post("/api/admin/reload")
                 assert r.status_code == 400
                 r = c2.patch("/api/providers/dummy", json={"enabled": False})
@@ -354,7 +377,7 @@ async def run_checks(port: int) -> None:
         limits=LimitsConfig(requests_per_minute=2, max_concurrent=1),
     )
     limits_app = create_app(config=limits_cfg)
-    with TestClient(limits_app) as client:
+    with TC(limits_app) as client:
         r = client.get("/api/status")
         assert r.status_code == 200
         lim = r.json()["limits"]
@@ -380,7 +403,7 @@ async def run_checks(port: int) -> None:
         limits=LimitsConfig(requests_per_minute=0, max_concurrent=1),
     )
     conc_app = create_app(config=conc_cfg)
-    with TestClient(conc_app) as client:
+    with TC(conc_app) as client:
         assert conc_app.state.proxy.limiter.check("held").allowed is True
         r = client.get("/v1/models")
         assert r.status_code == 429, r.text
@@ -390,7 +413,7 @@ async def run_checks(port: int) -> None:
 
     # disabled limits stay open
     open_app = create_app(config=cfg)
-    with TestClient(open_app) as client:
+    with TC(open_app) as client:
         lim = client.get("/api/status").json()["limits"]
         assert lim["enabled"] is False
         for _ in range(5):
@@ -399,7 +422,7 @@ async def run_checks(port: int) -> None:
     # portal + role separation (ephemeral users DB already set in main)
     portal_cfg = AppConfig(auth=AuthConfig(api_key="smoke-master"), providers=cfg.providers)
     portal_app = create_app(config=portal_cfg)
-    with TestClient(portal_app, client=("127.0.0.1", 50000)) as client:
+    with TC(portal_app) as client:
         r = client.get("/portal")
         assert r.status_code == 200
         assert b"Login" in r.content or b"login" in r.content
