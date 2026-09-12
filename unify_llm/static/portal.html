@@ -59,8 +59,8 @@
       font-family: var(--font);
       background: var(--bg);
       color: var(--ink);
-      font-size: 13px;
-      line-height: 1.45;
+      font-size: 14px;
+      line-height: 1.55;
       background-image:
         radial-gradient(circle at 1px 1px, rgba(0,0,0,.04) 0.6px, transparent 0.8px);
       background-size: 4px 4px;
@@ -91,12 +91,12 @@
       gap: 2px;
     }
     .brand b {
-      font-size: 15px;
+      font-size: 16px;
       letter-spacing: 0.02em;
     }
     .brand span {
       color: var(--ink-3);
-      font-size: 12px;
+      font-size: 13px;
     }
     .top-actions { display: flex; gap: 8px; align-items: center; }
     .card {
@@ -112,7 +112,7 @@
       font-weight: 600;
       letter-spacing: -0.01em;
     }
-    .sub { color: var(--ink-3); margin-bottom: 18px; font-size: 12.5px; }
+    .sub { color: var(--ink-3); margin-bottom: 18px; font-size: 13.5px; line-height: 1.55; }
     .tabs {
       display: flex;
       gap: 6px;
@@ -139,12 +139,11 @@
     }
     label {
       display: block;
-      font-size: 11px;
-      color: var(--ink-3);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-bottom: 4px;
-      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--ink-2);
+      margin-bottom: 5px;
+      font-family: var(--font);
+      font-weight: 500;
     }
     input[type="text"],
     input[type="email"],
@@ -188,7 +187,8 @@
       border-radius: var(--radius-sm);
       border: 1px solid var(--line);
       margin-bottom: 12px;
-      font-size: 12.5px;
+      font-size: 13.5px;
+      line-height: 1.5;
     }
     .msg.show { display: block; }
     .msg.err {
@@ -208,11 +208,11 @@
     }
     .pill {
       display: inline-block;
-      font-family: var(--mono);
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 2px 7px;
+      font-family: var(--font);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 2px 8px;
       border-radius: 999px;
       border: 1px solid var(--line);
       background: var(--bg-soft);
@@ -245,28 +245,26 @@
     }
     .profile-head h2 {
       margin: 0;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 600;
     }
     .profile-head .meta {
       color: var(--ink-3);
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 12.5px;
     }
     .section-title {
       font-family: var(--font);
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--ink-3);
+      color: var(--ink-2);
       margin: 22px 0 10px;
     }
     tbody tr:last-child td { border-bottom: none; }
-    .mono { font-family: var(--mono); font-size: 11.5px; }
+    .mono { font-family: var(--mono); font-size: 12.5px; }
     .key-prefix {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12px;
       background: var(--bg-soft);
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -274,9 +272,9 @@
     }
     .empty {
       color: var(--ink-3);
-      padding: 16px 8px;
+      padding: 18px 8px;
       text-align: center;
-      font-size: 12.5px;
+      font-size: 13.5px;
     }
     .usage-grid {
       display: grid;
@@ -291,47 +289,48 @@
     }
     .usage-card .k {
       font-family: var(--font);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--ink-3);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
       font-weight: 500;
     }
     .usage-card .v {
       font-family: var(--mono);
-      font-size: 22px;
+      font-size: 24px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       margin-top: 4px;
       letter-spacing: -0.02em;
       word-break: break-all;
+      line-height: 1.2;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 13.5px;
     }
     th, td {
-      padding: 10px 12px;
+      padding: 11px 12px;
       text-align: left;
       border-bottom: 1px solid var(--line);
       vertical-align: middle;
     }
     th {
       font-family: var(--font);
-      color: var(--ink-3);
-      font-weight: 500;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      color: var(--ink-2);
+      font-weight: 600;
+      font-size: 12.5px;
       background: var(--bg-soft);
       position: sticky;
       top: 0;
     }
+    td.notes, td.path, .wrap-cell {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     .table-wrap { overflow-x: auto; max-width: 100%; }
     .key-raw {
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 12.5px;
       word-break: break-all;
       background: var(--bg-soft);
       border: 1px solid var(--line);
@@ -343,7 +342,7 @@
     .foot {
       margin-top: 16px;
       color: var(--ink-3);
-      font-size: 12px;
+      font-size: 12.5px;
       display: flex;
       justify-content: space-between;
       gap: 8px;
@@ -375,12 +374,13 @@
     }
     .settings-box .hint {
       color: var(--ink-3);
-      font-size: 11.5px;
+      font-size: 12.5px;
       margin: 0 0 10px;
+      line-height: 1.5;
     }
     .readonly-val {
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 12.5px;
       color: var(--ink-2);
       padding: 8px 0 0;
       min-height: 28px;
@@ -408,10 +408,10 @@
       box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
       padding: 18px;
     }
-    .key-modal h3 { margin: 0 0 6px; font-size: 15px; }
+    .key-modal h3 { margin: 0 0 6px; font-size: 16px; }
     .key-modal .warn {
       color: var(--warn);
-      font-size: 12px;
+      font-size: 13px;
       margin-bottom: 8px;
     }
     .portal-tabs { margin: 14px 0 4px; }
@@ -422,18 +422,20 @@
     .guide-section { margin-bottom: 18px; }
     .guide-section h3 {
       margin: 0 0 6px;
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 600;
     }
     .guide-section p {
       margin: 0 0 8px;
       color: var(--ink-2);
-      font-size: 12.5px;
+      font-size: 13.5px;
+      line-height: 1.55;
     }
     .guide-section .note {
       color: var(--ink-3);
-      font-size: 12px;
+      font-size: 12.5px;
       margin: 0 0 8px;
+      line-height: 1.5;
     }
     .code-block {
       position: relative;
@@ -447,7 +449,7 @@
       margin: 0;
       padding: 12px 72px 12px 12px;
       font-family: var(--mono);
-      font-size: 11.5px;
+      font-size: 12.5px;
       line-height: 1.55;
       color: var(--ink);
       overflow-x: auto;
@@ -458,21 +460,22 @@
       position: absolute;
       top: 6px;
       right: 6px;
-      min-height: 26px;
-      padding: 4px 8px;
-      font-size: 11px;
-      font-family: var(--mono);
+      min-height: 28px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-family: var(--font);
     }
     .guide-checklist {
       margin: 0;
       padding-left: 18px;
       color: var(--ink-2);
-      font-size: 12.5px;
+      font-size: 13.5px;
+      line-height: 1.55;
     }
     .guide-checklist li { margin-bottom: 4px; }
     .guide-checklist code {
       font-family: var(--mono);
-      font-size: 11.5px;
+      font-size: 12.5px;
       background: var(--bg-soft);
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -716,15 +719,15 @@ Model:     deepseek-flash
         <div class="usage-card"><div class="k">status</div><div class="v" id="uPointsStatus" style="font-size:13px">—</div></div>
       </div>
       <div class="card" style="margin-top:10px;padding:12px 14px" id="pointsProgressCard">
-        <div class="k" style="font-size:11px;color:var(--ink-3);margin-bottom:6px">remaining progress · 剩余进度</div>
+        <div class="k" style="font-size:12.5px;color:var(--ink-3);margin-bottom:6px">remaining progress · 剩余进度</div>
         <div style="height:8px;background:var(--bg-soft);border-radius:4px;overflow:hidden">
           <div id="pointsBar" style="height:100%;width:0%;background:#111;transition:width .35s"></div>
         </div>
-        <div class="sub" id="pointsProgressLabel" style="margin-top:6px;font-size:12px">—</div>
+        <div class="sub" id="pointsProgressLabel" style="margin-top:6px;font-size:13px">—</div>
       </div>
       <p class="sub" id="pointsHint" style="margin:8px 0 0;display:none"></p>
       <details id="pointsLogDetails" style="margin-top:12px">
-        <summary style="cursor:pointer;color:var(--ink-3);font-size:12px;padding:6px 0">Recent deductions · 扣费明细</summary>
+        <summary style="cursor:pointer;color:var(--ink-2);font-size:13px;padding:6px 0">Recent deductions · 扣费明细</summary>
         <div class="card table-wrap" style="margin-top:8px;padding:0;box-shadow:none" id="pointsLogWrap">
           <div class="empty">No deductions yet · 暂无扣费记录</div>
         </div>
@@ -1188,12 +1191,12 @@ Model:     deepseek-flash
           iwrap.innerHTML = '<div class="empty">No traffic yet · 暂无请求</div>';
         } else {
           iwrap.innerHTML =
-            '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr>' +
-            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">time</th>' +
-            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">model</th>' +
-            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">status</th>' +
-            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">latency</th>' +
-            '<th style="text-align:left;padding:8px 10px;color:var(--ink-3)">tokens</th>' +
+            '<table style="width:100%;font-size:13px;border-collapse:collapse"><thead><tr>' +
+            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">time</th>' +
+            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">model</th>' +
+            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">status</th>' +
+            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">latency</th>' +
+            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">tokens</th>' +
             "</tr></thead><tbody>" +
             items
               .slice(0, 20)
@@ -1203,17 +1206,17 @@ Model:     deepseek-flash
                   : "";
                 const ok = r.status === "ok";
                 return (
-                  "<tr><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+                  "<tr><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px'>" +
                   esc(t) +
-                  "</td><td style='padding:6px 10px'>" +
+                  "</td><td style='padding:8px 12px'>" +
                   esc(r.model || r.requested_model || "") +
-                  "</td><td style='padding:6px 10px;color:" +
-                  (ok ? "#1a7f37" : "#a00") +
+                  "</td><td style='padding:8px 12px;color:" +
+                  (ok ? "var(--ok)" : "var(--err)") +
                   "'>" +
                   esc(r.status || "") +
-                  "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+                  "</td><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums'>" +
                   esc((r.latency_ms || 0) + "ms") +
-                  "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+                  "</td><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums'>" +
                   esc(fmtN(r.prompt_tokens || 0) + "+" + fmtN(r.completion_tokens || 0)) +
                   "</td></tr>"
                 );
@@ -1291,13 +1294,13 @@ Model:     deepseek-flash
         return;
       }
       wrap.innerHTML =
-        '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+        '<table style="width:100%;font-size:13px;border-collapse:collapse">' +
         "<thead><tr>" +
-        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">time</th>' +
-        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">delta</th>' +
-        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">balance</th>' +
-        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">tokens</th>' +
-        '<th style="text-align:left;padding:8px 10px;color:var(--ink-3);font-weight:500">note</th>' +
+        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">time</th>' +
+        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">delta</th>' +
+        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">balance</th>' +
+        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">tokens</th>' +
+        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">note</th>' +
         "</tr></thead><tbody>" +
         items
           .map((r) => {
@@ -1305,17 +1308,17 @@ Model:     deepseek-flash
               ? new Date(r.created_at * 1000).toLocaleTimeString()
               : "";
             return (
-              "<tr><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+              "<tr><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px'>" +
               esc(t) +
-              "</td><td style='padding:6px 10px;color:#a00'>-" +
+              "</td><td style='padding:8px 12px;color:var(--err)'>-" +
               esc(fmtPts(Math.abs(r.delta || 0))) +
-              "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+              "</td><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums'>" +
               esc(r.balance_after === -1 ? "∞" : fmtPts(r.balance_after)) +
-              "</td><td style='padding:6px 10px;font-family:ui-monospace,monospace'>" +
+              "</td><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums'>" +
               esc(fmtN(r.prompt_tokens || 0)) +
               "+" +
               esc(fmtN(r.completion_tokens || 0)) +
-              "</td><td style='padding:6px 10px;color:var(--ink-3)'>" +
+              "</td><td style='padding:8px 12px;color:var(--ink-2);overflow-wrap:anywhere'>" +
               esc(r.note || "") +
               "</td></tr>"
             );

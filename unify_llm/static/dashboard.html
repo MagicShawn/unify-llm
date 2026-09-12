@@ -116,8 +116,8 @@
       font-family: var(--font);
       background: var(--bg);
       color: var(--ink);
-      font-size: 13px;
-      line-height: 1.45;
+      font-size: 14px;
+      line-height: 1.55;
       overflow: hidden;
       position: relative;
     }
@@ -223,7 +223,7 @@
     }
     .brand-name {
       font-family: var(--font);
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       letter-spacing: -0.01em;
       color: var(--ink);
@@ -231,7 +231,7 @@
     }
     .brand-ver {
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 11.5px;
       color: var(--ink-3);
       white-space: nowrap;
     }
@@ -249,9 +249,9 @@
       background: transparent;
       color: var(--ink-2);
       font: inherit;
-      font-size: 12.5px;
+      font-size: 13.5px;
       text-align: left;
-      padding: 8px 10px;
+      padding: 9px 12px;
       border-radius: var(--radius-sm);
       cursor: pointer;
       display: flex;
@@ -309,7 +309,7 @@
     .nav-label { display: flex; flex-direction: column; gap: 0; min-width: 0; }
     .nav-en { line-height: 1.2; }
     .nav-zh {
-      font-size: 10px;
+      font-size: 11.5px;
       color: var(--ink-3);
       line-height: 1.2;
       font-weight: 400;
@@ -327,11 +327,16 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-family: var(--mono);
-      font-size: 10.5px;
+      font-family: var(--font);
+      font-size: 12px;
       color: var(--ink-3);
     }
-    .side-stat b { color: var(--ink-2); font-weight: 500; }
+    .side-stat b {
+      color: var(--ink-2);
+      font-weight: 600;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+    }
 
     /* ── System bar ── */
     .sysbar {
@@ -342,8 +347,8 @@
       padding: 0 16px;
       background: var(--bg-elev);
       border-bottom: 2px solid var(--line-strong);
-      font-family: var(--mono);
-      font-size: 11px;
+      font-family: var(--font);
+      font-size: 12.5px;
       color: var(--ink-2);
       overflow-x: auto;
       white-space: nowrap;
@@ -356,8 +361,13 @@
       align-items: center;
       gap: 6px;
     }
-    .sys-item .k { color: var(--ink-3); }
-    .sys-item .v { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+    .sys-item .k { color: var(--ink-3); font-size: 12px; }
+    .sys-item .v {
+      color: var(--ink-2);
+      font-family: var(--mono);
+      font-size: 12.5px;
+      font-variant-numeric: tabular-nums;
+    }
     .sys-sep { width: 1px; height: 14px; background: var(--line); flex-shrink: 0; }
 
     .health-pill {
@@ -366,11 +376,10 @@
       gap: 6px;
       padding: 3px 10px;
       border-radius: 999px;
-      font-family: var(--mono);
-      font-size: 10.5px;
+      font-family: var(--font);
+      font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
+      letter-spacing: 0.02em;
       border: 1px solid transparent;
       flex-shrink: 0;
     }
@@ -412,12 +421,12 @@
       border: 1px solid var(--line);
       background: var(--bg-soft);
       color: var(--ink-2);
-      height: 26px;
+      height: 28px;
       padding: 0 10px;
       border-radius: var(--radius-sm);
       cursor: pointer;
-      font-family: var(--mono);
-      font-size: 11px;
+      font-family: var(--font);
+      font-size: 12.5px;
       display: inline-flex;
       align-items: center;
       gap: 5px;
@@ -467,7 +476,7 @@
     .page-title {
       margin: 0;
       font-family: var(--font);
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 600;
       letter-spacing: -0.01em;
       color: var(--ink);
@@ -476,14 +485,14 @@
     .page-title::after { display: none; }
     .page-sub {
       font-family: var(--font);
-      font-size: 12px;
+      font-size: 13px;
       color: var(--ink-3);
       margin-top: var(--sp-1);
       font-weight: 400;
     }
     .page-meta {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--ink-3);
       font-variant-numeric: tabular-nums;
     }
@@ -549,7 +558,7 @@
     .kpi.blue::after { background: var(--ink-3); }
     .kpi .label {
       font-family: var(--font);
-      font-size: 11px;
+      font-size: 12.5px;
       font-weight: 500;
       color: var(--ink-2);
       margin-bottom: var(--sp-2);
@@ -559,7 +568,7 @@
       gap: var(--sp-2);
     }
     .kpi .label .zh {
-      font-size: 10.5px;
+      font-size: 12px;
       color: var(--ink-3);
       font-weight: 400;
     }
@@ -579,7 +588,7 @@
     .kpi .hint {
       margin-top: var(--sp-2);
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--ink-3);
       font-variant-numeric: tabular-nums;
     }
@@ -603,7 +612,7 @@
     .sec-head h2 {
       margin: 0;
       font-family: var(--font);
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 600;
       color: var(--ink-2);
     }
@@ -611,11 +620,11 @@
       font-weight: 400;
       color: var(--ink-3);
       margin-left: var(--sp-2);
-      font-size: 12px;
+      font-size: 13px;
     }
     .sec-head .meta {
       font-family: var(--mono);
-      font-size: 10.5px;
+      font-size: 12px;
       color: var(--ink-3);
       font-variant-numeric: tabular-nums;
     }
@@ -628,7 +637,7 @@
       gap: var(--sp-3) var(--sp-4);
       padding: 0 var(--sp-3) var(--sp-2);
       font-family: var(--font);
-      font-size: 11.5px;
+      font-size: 12.5px;
       color: var(--ink-2);
       align-items: center;
     }
@@ -649,7 +658,7 @@
     .chart-legend .raw .swatch { background: var(--chart-raw); opacity: .7; height: 2px; }
     .chart-legend .unit {
       color: var(--ink-3);
-      font-size: 11px;
+      font-size: 12px;
     }
     canvas#latencyChart {
       width: 100%;
@@ -701,14 +710,14 @@
       gap: 8px;
       flex-wrap: wrap;
       font-family: var(--mono);
-      font-size: 12.5px;
+      font-size: 13px;
       font-weight: 500;
       color: var(--ink);
       min-width: 0;
     }
     .model-chevron {
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 11px;
       color: var(--ink-3);
       width: 12px;
       flex-shrink: 0;
@@ -720,7 +729,7 @@
     }
     .model-lat {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12.5px;
       color: var(--ink-2);
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
@@ -730,7 +739,7 @@
       gap: 14px;
       flex-wrap: wrap;
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--ink-3);
       grid-column: 1 / -1;
     }
@@ -756,16 +765,15 @@
       gap: 10px 16px;
     }
     .model-detail .dt {
-      font-family: var(--mono);
-      font-size: 9.5px;
+      font-family: var(--font);
+      font-size: 11.5px;
       color: var(--ink-3);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      font-weight: 500;
       margin-bottom: 3px;
     }
     .model-detail .dd {
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 12.5px;
       color: var(--ink);
       font-variant-numeric: tabular-nums;
       display: flex;
@@ -773,7 +781,7 @@
       gap: 6px;
       flex-wrap: wrap;
     }
-    .model-detail .dd.sub { color: var(--ink-2); font-size: 11.5px; }
+    .model-detail .dd.sub { color: var(--ink-2); font-size: 12px; }
     .model-spark-row {
       display: flex;
       align-items: center;
@@ -782,7 +790,7 @@
     .model-spark-row .spark { opacity: 1; }
     .model-spark-row .spark-cap {
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 11.5px;
       color: var(--ink-3);
     }
     @media (max-width: 720px) {
@@ -794,12 +802,12 @@
     .chip {
       display: inline-flex;
       align-items: center;
-      font-family: var(--mono);
-      font-size: 10px;
+      font-family: var(--font);
+      font-size: 11.5px;
       font-weight: 600;
-      padding: 2px 7px;
+      padding: 2px 8px;
       border-radius: var(--radius-sm);
-      letter-spacing: 0.02em;
+      letter-spacing: 0.01em;
       line-height: 1.3;
       white-space: nowrap;
     }
@@ -855,7 +863,7 @@
     .prov-name {
       font-family: var(--mono);
       font-weight: 600;
-      font-size: 12.5px;
+      font-size: 13px;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -863,13 +871,12 @@
       min-width: 0;
     }
     .badge {
-      font-family: var(--mono);
-      font-size: 9.5px;
-      padding: 2px 7px;
+      font-family: var(--font);
+      font-size: 11.5px;
+      padding: 2px 8px;
       border-radius: 999px;
       font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      letter-spacing: 0.02em;
       flex-shrink: 0;
     }
     .badge.on {
@@ -884,13 +891,12 @@
     }
     .user-badge-chip {
       display: inline-block;
-      font-family: var(--mono);
-      font-size: 9.5px;
-      padding: 1px 6px;
+      font-family: var(--font);
+      font-size: 11.5px;
+      padding: 1px 7px;
       border-radius: 999px;
       font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      letter-spacing: 0.02em;
       background: var(--accent-soft);
       color: var(--ink-2);
       border: 1px solid var(--line);
@@ -906,7 +912,7 @@
     .prov-body { padding: 10px 14px 12px; }
     .prov-url {
       font-family: var(--mono);
-      font-size: 10.5px;
+      font-size: 11.5px;
       color: var(--ink-3);
       word-break: break-all;
       margin-bottom: 12px;
@@ -920,19 +926,18 @@
     .prov-stats .cell { text-align: center; }
     .prov-stats .n {
       font-family: var(--mono);
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       color: var(--ink);
       line-height: 1.2;
     }
     .prov-stats .t {
-      font-family: var(--mono);
-      font-size: 9px;
+      font-family: var(--font);
+      font-size: 11.5px;
       color: var(--ink-3);
       margin-top: 2px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      font-weight: 500;
     }
     .prov-stats .n.live { color: var(--accent); }
     .prov-stats .n.bad { color: var(--err); }
@@ -1026,12 +1031,12 @@
       border: 1px solid var(--line);
       background: var(--bg-soft);
       color: var(--ink-2);
-      height: 24px;
-      padding: 0 10px;
+      height: 28px;
+      padding: 0 12px;
       border-radius: var(--radius-sm);
       cursor: pointer;
       font-family: var(--font);
-      font-size: 11.5px;
+      font-size: 12.5px;
       font-weight: 500;
       letter-spacing: 0.01em;
       transition: background .12s var(--ease), color .12s var(--ease), border-color .12s var(--ease), transform .08s var(--ease);
@@ -1066,11 +1071,11 @@
     }
     .prov-test-result {
       margin-top: 10px;
-      padding: 6px 8px;
+      padding: 8px 10px;
       border-radius: var(--radius-sm);
       font-family: var(--mono);
-      font-size: 10.5px;
-      line-height: 1.35;
+      font-size: 12px;
+      line-height: 1.4;
       border: 1px solid var(--line);
       background: var(--bg-soft);
       color: var(--ink-2);
@@ -1122,12 +1127,12 @@
       align-items: center;
       gap: 8px;
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--ink-2);
     }
     .key-prefix {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--ink);
       background: var(--bg-soft);
       border: 1px solid var(--line);
@@ -1139,7 +1144,7 @@
       flex-wrap: wrap;
       gap: 6px;
     }
-    .user-actions .btn-ops { height: 22px; padding: 0 8px; font-size: 11px; }
+    .user-actions .btn-ops { height: 26px; padding: 0 10px; font-size: 12px; }
     .key-modal-root[hidden] { display: none !important; }
     .key-modal-root {
       position: fixed;
@@ -1170,17 +1175,17 @@
     }
     .key-modal h3 {
       margin: 0 0 6px;
-      font-size: 14px;
+      font-size: 16px;
       color: var(--ink);
     }
     .key-modal .key-warn {
       color: var(--warn);
-      font-size: 12px;
+      font-size: 13px;
       margin-bottom: 10px;
     }
     .key-modal .key-raw {
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 12.5px;
       word-break: break-all;
       background: var(--bg-soft);
       border: 1px solid var(--line);
@@ -1201,7 +1206,7 @@
       border-radius: var(--radius);
       padding: 10px 12px;
       font-family: var(--font);
-      font-size: 12px;
+      font-size: 13px;
       color: var(--ink);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0,0,0,.2);
       min-width: 220px;
@@ -1217,7 +1222,12 @@
     .toast .t-title { font-weight: 600; margin-bottom: 2px; }
     .toast.ok .t-title { color: var(--ok); }
     .toast.err .t-title { color: var(--err); }
-    .toast .t-body { color: var(--ink-2); word-break: break-word; font-family: var(--mono); font-size: 11px; }
+    .toast .t-body {
+      color: var(--ink-2);
+      word-break: break-word;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
     @keyframes toastIn {
       from { opacity: 0; transform: translateY(10px) scale(.98); }
       to { opacity: 1; transform: translateY(0) scale(1); }
@@ -1232,21 +1242,19 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: 13px;
     }
     th, td {
-      padding: 9px 12px;
+      padding: 10px 12px;
       text-align: left;
       border-bottom: 1px solid var(--line);
       vertical-align: middle;
     }
     th {
-      font-family: var(--mono);
-      color: var(--ink-3);
-      font-weight: 500;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      font-family: var(--font);
+      color: var(--ink-2);
+      font-weight: 600;
+      font-size: 12px;
       background: var(--bg-soft);
       position: sticky;
       top: 0;
@@ -1257,16 +1265,20 @@
     td.mono, .mono {
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
-      font-size: 11.5px;
+      font-size: 12px;
+    }
+    td.notes, td.path, .wrap-cell {
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .pill {
       display: inline-block;
       padding: 2px 8px;
       border-radius: 999px;
-      font-family: var(--mono);
-      font-size: 10px;
+      font-family: var(--font);
+      font-size: 11.5px;
       font-weight: 600;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.01em;
     }
     .pill.ok {
       background: var(--ok-soft);
@@ -1290,7 +1302,7 @@
       text-align: center;
       padding: 40px 16px;
       font-family: var(--font);
-      font-size: 13px;
+      font-size: 13.5px;
       line-height: 1.6;
     }
     .empty .empty-icon {
@@ -1302,7 +1314,7 @@
     .empty .empty-hint {
       display: block;
       margin-top: var(--sp-1);
-      font-size: 12px;
+      font-size: 12.5px;
       color: var(--ink-3);
       opacity: .85;
     }
@@ -1316,7 +1328,7 @@
       padding: 40px 16px;
       color: var(--ink-3);
       font-family: var(--font);
-      font-size: 12.5px;
+      font-size: 13px;
     }
     .connecting .pulse {
       width: 8px; height: 8px;
@@ -1354,7 +1366,7 @@
     }
     .err-text {
       color: var(--err);
-      font-size: 11px;
+      font-size: 12px;
       max-width: 240px;
       font-family: var(--mono);
       word-break: break-all;
@@ -1377,9 +1389,9 @@
       background: var(--bg-soft);
       color: var(--ink);
       font: inherit;
-      font-family: var(--mono);
-      font-size: 12px;
-      height: 30px;
+      font-family: var(--font);
+      font-size: 13px;
+      height: 32px;
       padding: 0 10px;
       border-radius: var(--radius-sm);
       min-width: 180px;
@@ -1408,15 +1420,14 @@
       background: transparent;
       color: var(--ink-3);
       font: inherit;
-      font-family: var(--mono);
-      font-size: 11px;
+      font-family: var(--font);
+      font-size: 12.5px;
       font-weight: 600;
       padding: 0 12px;
-      height: 30px;
+      height: 32px;
       cursor: pointer;
       border-right: 1px solid var(--line);
       transition: background .12s, color .12s;
-      text-transform: lowercase;
     }
     .status-seg button:last-child { border-right: none; }
     .status-seg button:hover {
@@ -1438,7 +1449,7 @@
     .filter-meta {
       margin-left: auto;
       font-family: var(--mono);
-      font-size: 10.5px;
+      font-size: 12px;
       color: var(--ink-3);
       font-variant-numeric: tabular-nums;
     }
@@ -1461,12 +1472,12 @@
       border: 1px solid var(--line);
       background: var(--bg-soft);
       color: var(--ink-3);
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       border-radius: 4px;
       cursor: pointer;
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 11px;
       line-height: 1;
       display: inline-grid;
       place-items: center;
@@ -1525,8 +1536,8 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      font-family: var(--mono);
-      font-size: 10.5px;
+      font-family: var(--font);
+      font-size: 12px;
       color: var(--ink-3);
     }
     footer a {
@@ -1648,15 +1659,15 @@
     .drawer-title {
       margin: 0;
       font-family: var(--font);
-      font-size: 14px;
-      font-weight: 650;
+      font-size: 16px;
+      font-weight: 600;
       color: var(--ink);
       line-height: 1.3;
     }
     .drawer-sub {
       margin-top: 3px;
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--ink-3);
     }
     .drawer-close {
@@ -1709,20 +1720,19 @@
     .detail-row:last-child { border-bottom: none; }
     .detail-row dt {
       margin: 0;
-      font-family: var(--mono);
-      font-size: 10.5px;
+      font-family: var(--font);
+      font-size: 12px;
       color: var(--ink-3);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      font-weight: 500;
       padding-top: 2px;
     }
     .detail-row dd {
       margin: 0;
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 12.5px;
       color: var(--ink);
       word-break: break-all;
-      line-height: 1.45;
+      line-height: 1.5;
       min-width: 0;
     }
     .detail-row dd.wrap {
@@ -1739,7 +1749,7 @@
     }
     .detail-id-row .id-full {
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 12.5px;
       color: var(--ink);
       word-break: break-all;
       min-width: 0;
@@ -1748,8 +1758,8 @@
     .drawer-foot {
       border-top: 1px solid var(--line);
       padding: var(--sp-3) var(--sp-4);
-      font-family: var(--mono);
-      font-size: 10.5px;
+      font-family: var(--font);
+      font-size: 12px;
       color: var(--ink-3);
       flex-shrink: 0;
     }
@@ -1772,16 +1782,16 @@
       color: var(--ink);
       border: 1px solid var(--line);
       border-radius: 6px;
-      font-family: var(--mono);
-      font-size: 11px;
+      font-family: var(--font);
+      font-size: 12.5px;
       padding: 2px 6px;
-      max-width: 110px;
+      max-width: 120px;
     }
     .panel-switch { gap: 6px; }
     .log-stream {
       font-family: var(--mono);
-      font-size: 11px;
-      line-height: 1.45;
+      font-size: 12px;
+      line-height: 1.5;
       max-height: 280px;
       overflow: auto;
       background: var(--bg-soft);
@@ -1809,18 +1819,16 @@
       border: 1px solid var(--line-strong);
       background: var(--bg-elev);
       box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-      font-family: var(--mono);
-      font-size: 11px;
+      font-family: var(--font);
+      font-size: 12.5px;
       color: var(--ink-2);
     }
     .shortcuts-pop[hidden] { display: none !important; }
     .shortcuts-pop h3 {
       margin: 0 0 8px;
       font-family: var(--font);
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
       color: var(--ink-3);
     }
     .shortcuts-pop ul {
@@ -1847,7 +1855,7 @@
       background: var(--bg-soft);
       color: var(--ink);
       font-family: var(--mono);
-      font-size: 10.5px;
+      font-size: 11.5px;
       line-height: 1.4;
       text-align: center;
       flex-shrink: 0;
@@ -1922,7 +1930,7 @@
           <b>2s</b>
         </div>
         <div class="side-stat" style="margin-top:6px">
-          <a href="/portal" style="color:var(--ink-3);text-decoration:none;font-size:11px">portal →</a>
+          <a href="/portal" style="color:var(--ink-3);text-decoration:none;font-size:12px">portal →</a>
         </div>
       </div>
     </aside>
@@ -2180,7 +2188,7 @@
             <span>Connecting to gateway…</span>
           </div>
         </div>
-        <h2 class="page-sub" style="margin: 16px 0 8px; font-size: 12px; color: var(--ink-3)">
+        <h2 class="page-sub" style="margin: 16px 0 8px; font-size: 13px; color: var(--ink-3)">
           Just finished · 最近完成
         </h2>
         <div class="card tight table-wrap" id="trafficRecentWrap">
@@ -2560,8 +2568,8 @@
       const cRaw = cssVar("--chart-raw", "#5c6370");
       const ink3 = cssVar("--ink-3", "#8b929c");
       const bgElev = cssVar("--bg-panel", "#0f1114");
-      const mono = '11px ui-monospace, "Cascadia Code", Consolas, monospace';
-      const monoSm = '10px ui-monospace, "Cascadia Code", Consolas, monospace';
+      const mono = '12px ui-monospace, "Cascadia Code", Consolas, monospace';
+      const monoSm = '11px ui-monospace, "Cascadia Code", Consolas, monospace';
 
       const pad = { l: 54, r: 20, t: 14, b: 32 };
       const w = cssW - pad.l - pad.r;
@@ -2570,7 +2578,7 @@
       const series = lastLatency.series || [];
       if (!series.length) {
         ctx.fillStyle = ink3;
-        ctx.font = '13px "Segoe UI", system-ui, sans-serif';
+        ctx.font = '14px "Segoe UI", system-ui, sans-serif';
         ctx.textAlign = "center";
         ctx.fillText("No successful requests yet", cssW / 2, cssH / 2 - 6);
         ctx.font = monoSm;
@@ -3275,13 +3283,13 @@
                   <td class="mono">${esc(t)}</td>
                   <td>${idCellHtml(r.id)}</td>
                   <td>
-                    <div class="mono" style="font-size:12px;color:var(--ink)">${esc(modelKey)}</div>
+                    <div class="mono" style="font-size:12.5px;color:var(--ink)">${esc(modelKey)}</div>
                     <div class="chip-path-row">
                       <span class="chip provider" style="background:${pc.bg};color:${pc.fg}">${esc(r.provider_id)}</span>
                       <span class="pill proto">${esc(r.protocol)}</span>
                       <span class="chip path" title="${esc(r.path)}">${esc(r.path)}</span>
-                      <span class="mono" style="font-size:11px;color:var(--ink-3)" title="${esc(r.app || r.user_agent || "")}">${esc(r.client || "—")}</span>
-                      ${r.username || r.display_label ? `<span class="mono" style="font-size:11px;color:var(--ink-2)" title="account">@${esc(r.display_label || r.username)}</span>${badgeChipHtml(r.badge)}` : ""}
+                      <span class="mono" style="font-size:12px;color:var(--ink-3)" title="${esc(r.app || r.user_agent || "")}">${esc(r.client || "—")}</span>
+                      ${r.username || r.display_label ? `<span class="mono" style="font-size:12px;color:var(--ink-2)" title="account">@${esc(r.display_label || r.username)}</span>${badgeChipHtml(r.badge)}` : ""}
                     </div>
                   </td>
                   <td>${pill}</td>
@@ -3805,7 +3813,7 @@
               : '<span class="pill err">disabled</span>';
         const role = u.role || "user";
         const roleSel =
-          '<select class="filter-input" style="height:24px;padding:0 6px;font-size:11px;max-width:90px" data-set-role="' +
+          '<select class="filter-input" style="height:26px;padding:0 6px;font-size:12px;max-width:90px" data-set-role="' +
           Number(u.id) +
           '" aria-label="Role for ' +
           esc(u.name) +
@@ -3823,9 +3831,9 @@
         const spent = Number(u.points_spent || 0);
         const balLabel = bal === -1 ? "∞" : String(bal);
         const pointsHtml =
-          '<div class="mono" style="font-size:10px;color:var(--ink-3)">spent ' + esc(String(spent)) + "</div>" +
+          '<div class="mono" style="font-size:11.5px;color:var(--ink-3)">spent ' + esc(String(spent)) + "</div>" +
           '<div style="display:flex;gap:4px;align-items:center;margin-top:4px">' +
-          '<input class="filter-input" style="height:24px;padding:0 6px;font-size:11px;max-width:72px" ' +
+          '<input class="filter-input" style="height:26px;padding:0 6px;font-size:12px;max-width:72px" ' +
           'type="number" step="1" data-set-points="' + Number(u.id) + '" value="' + esc(balLabel === "∞" ? "-1" : balLabel) + '" ' +
           'title="-1 = unlimited" aria-label="Points balance for ' + esc(u.name) + '" />' +
           '<button type="button" class="btn-ops" data-save-points="' + Number(u.id) + '">Set</button>' +
@@ -3835,13 +3843,13 @@
           "<td><b>" + esc(dn || u.name) + '</b> ' +
           badgeChipHtml(bg) +
           (dn && dn !== u.name
-            ? '<div class="mono" style="color:var(--ink-3);font-size:10px">@' + esc(u.name) + " #" + Number(u.id) + "</div>"
+            ? '<div class="mono" style="color:var(--ink-3);font-size:11.5px">@' + esc(u.name) + " #" + Number(u.id) + "</div>"
             : ' <span class="mono" style="color:var(--ink-3)">#' + Number(u.id) + "</span>") +
           '<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">' +
-          '<input class="filter-input" style="height:24px;padding:0 6px;font-size:11px;max-width:110px" ' +
+          '<input class="filter-input" style="height:26px;padding:0 6px;font-size:12px;max-width:110px" ' +
           'data-set-display-name="' + Number(u.id) + '" value="' + esc(dn) + '" placeholder="display name" ' +
           'maxlength="64" aria-label="Display name for ' + esc(u.name) + '" />' +
-          '<input class="filter-input" style="height:24px;padding:0 6px;font-size:11px;max-width:72px" ' +
+          '<input class="filter-input" style="height:26px;padding:0 6px;font-size:12px;max-width:72px" ' +
           'data-set-badge="' + Number(u.id) + '" value="' + esc(bg) + '" placeholder="badge" ' +
           'maxlength="16" aria-label="Badge for ' + esc(u.name) + '" />' +
           "</div></td>" +
