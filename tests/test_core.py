@@ -7,6 +7,7 @@ Run from repo root:
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -43,6 +44,13 @@ from unify_llm.monitor import (
 )
 from unify_llm.rate_limit import RateLimiter
 from unify_llm.registry import Registry
+
+# Isolate user-key store from any production data/unify_users.db during tests.
+_TEST_USERS_DIR = tempfile.mkdtemp(prefix="unify-users-core-")
+os.environ.setdefault("UNIFY_USERS_DB", str(Path(_TEST_USERS_DIR) / "users.db"))
+# Isolate stats totals so lifetime counters do not leak from data/unify_stats.db.
+_TEST_STATS_DIR = tempfile.mkdtemp(prefix="unify-stats-core-")
+os.environ.setdefault("UNIFY_STATS_DB", str(Path(_TEST_STATS_DIR) / "stats.db"))
 
 
 # ---------------------------------------------------------------------------

@@ -21,9 +21,13 @@ from .monitor import Monitor, StreamUsageSniffer, extract_usage
 from .rate_limit import RateLimiter
 from .registry import Registry, ResolvedRoute
 from .store import StatsStore
+from .users import UserStore
 
 STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_STATS_DB = Path("data") / "unify_stats.db"
+DEFAULT_USERS_DB = Path("data") / "unify_users.db"
+
+_LOCALHOST_IPS = frozenset({"127.0.0.1", "::1", "localhost", ""})
 
 PROBE_TIMEOUT_SECONDS = 10.0
 
@@ -75,6 +79,7 @@ class AppState:
         config: AppConfig,
         config_path: str | Path | None = None,
         stats_db: Path | None = None,
+        users_db: Path | None = None,
     ):
         self.config = config
         self.config_path: Path | None = Path(config_path) if config_path is not None else None
@@ -87,6 +92,14 @@ class AppState:
             self.store = StatsStore(db_path)
         except Exception:  # noqa: BLE001
             self.store = None
+        users_path = Path(users_db) if users_db is not None else None
+        if users_path is None:
+            env_users = os.environ.get("UNIFY_USERS_DB") or ""
+            users_path = Path(env_users) if env_users else DEFAULT_USERS_DB
+        try:
+            self.users = UserStore(users_path)
+        except Exception:  # noqa: BLE001
+            self.users = None  # type: ignore[assignment]
         self.monitor = Monitor(pricing=config.pricing, store=self.store)
         self.limiter = RateLimiter(
             requests_per_minute=config.limits.requests_per_minute,
@@ -326,10 +339,36 @@ def _extract_client_key(request: Request) -> str:
     return ""
 
 
-def create_app(config_path: str | Path | None = None, config: AppConfig | None = None) -> FastAPI:
+def _auth_error(message: str | None = None) -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        content={
+            "error": {
+                "message": message
+                or "Invalid or missing API key. "
+                "Send Authorization: Bearer <key> or x-api-key: <key>.",
+                "type": "AuthenticationError",
+            }
+        },
+    )
+
+
+def _request_user_meta(request: Request) -> tuple[str, str]:
+    """Best-effort (user_id, username) attached by auth middleware."""
+    user_id = getattr(request.state, "user_id", "") or ""
+    username = getattr(request.state, "username", "") or ""
+    return str(user_id), str(username)
+
+
+def create_app(
+    config_path: str | Path | None = None,
+    config: AppConfig | None = None,
+    *,
+    users_db: Path | str | None = None,
+) -> FastAPI:
     if config is None:
         config = load_config(config_path or "config.yaml")
-    state = AppState(config, config_path=config_path)
+    state = AppState(config, config_path=config_path, users_db=Path(users_db) if users_db else None)
     gateway_key = config.gateway_api_key()
 
     @asynccontextmanager
@@ -358,24 +397,72 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
             allow_headers=["*"],
         )
 
-    if gateway_key:
+    # Auth: master gateway key and/or per-user API keys.
+    # - /v1/*: master key OR a valid user key. Open when neither is configured.
+    # - /api/admin/users* and /api/admin/keys*: master key if set; else localhost-only.
+    # - other /api/*: master key when set (user keys never grant admin/status access).
+    @app.middleware("http")
+    async def gateway_auth(request: Request, call_next):
+        path = request.url.path
+        protected = path.startswith(("/v1/", "/api/"))
+        if not protected:
+            return await call_next(request)
 
-        @app.middleware("http")
-        async def gateway_auth(request: Request, call_next):
-            path = request.url.path
-            protected = path.startswith(("/v1/", "/api/"))
-            if protected and _extract_client_key(request) != gateway_key:
+        client_key = _extract_client_key(request)
+        is_v1 = path.startswith("/v1/")
+        is_user_admin = path.startswith(("/api/admin/users", "/api/admin/keys"))
+
+        # Master gateway key always grants full access.
+        if gateway_key and client_key == gateway_key:
+            return await call_next(request)
+
+        # User/key admin without a master key → localhost only (v1 policy).
+        if is_user_admin and not gateway_key:
+            if _client_ip(request) not in _LOCALHOST_IPS:
                 return JSONResponse(
-                    status_code=401,
+                    status_code=403,
                     content={
                         "error": {
-                            "message": "Invalid or missing gateway API key. "
-                            "Send Authorization: Bearer <key> or x-api-key: <key>.",
-                            "type": "AuthenticationError",
+                            "message": "Admin user API is localhost-only when no gateway key is set.",
+                            "type": "ForbiddenError",
                         }
                     },
                 )
             return await call_next(request)
+
+        users = state.users
+        has_user_keys = bool(users is not None and users.has_any_active_key())
+
+        # User API keys authenticate /v1/* only.
+        if is_v1 and client_key:
+            if users is not None:
+                auth = users.authenticate_key(client_key)
+                if auth is not None:
+                    request.state.user_id = auth["user_id"]
+                    request.state.username = auth["username"]
+                    request.state.api_key_id = auth["key_id"]
+                    try:
+                        users.touch_last_used(auth["key_id"])
+                    except Exception:  # noqa: BLE001
+                        pass
+                    return await call_next(request)
+            # Provided but unknown/revoked/disabled key.
+            return _auth_error()
+
+        # No credentials.
+        if not client_key:
+            if is_v1:
+                # Open when no master key and no user keys (backward compatible).
+                if not gateway_key and not has_user_keys:
+                    return await call_next(request)
+                return _auth_error()
+            # Other /api/*: open when no master key (existing behavior).
+            if not gateway_key:
+                return await call_next(request)
+            return _auth_error()
+
+        # Wrong key on non-/v1 protected path.
+        return _auth_error()
 
     # Rate limit /v1/* only (token bucket per client IP + optional concurrency cap).
     # Always registered so admin reload can turn limits on without restart.
@@ -577,6 +664,165 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
         state.monitor.log("info", "stats cleared (tokens/cost/history)")
         return {"ok": True, "cleared": "stats"}
 
+    # ---------- multi-user API keys (LAN ops) ----------
+
+    def _users_ready() -> UserStore | None:
+        return state.users
+
+    @app.get("/api/admin/users")
+    async def admin_list_users() -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        items = []
+        for u in users_store.list_users():
+            entry = dict(u)
+            entry["keys"] = users_store.list_keys_for_user(u["id"])
+            items.append(entry)
+        return JSONResponse({"ok": True, "users": items, "total": len(items)})
+
+    @app.post("/api/admin/users")
+    async def admin_create_user(request: Request) -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        name = body.get("name")
+        if not name or not str(name).strip():
+            return JSONResponse(
+                {"error": {"message": "Field 'name' is required"}},
+                status_code=400,
+            )
+        try:
+            user = users_store.create_user(
+                name=str(name),
+                email=body.get("email"),
+                note=str(body.get("note") or ""),
+            )
+        except ValueError as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=400)
+        state.monitor.log("info", f"user created id={user['id']} name={user['name']}")
+        return JSONResponse({"ok": True, "user": user}, status_code=201)
+
+    @app.patch("/api/admin/users/{user_id}")
+    async def admin_patch_user(user_id: int, request: Request) -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if "enabled" not in body:
+            return JSONResponse(
+                {"error": {"message": "Only field 'enabled' is supported"}},
+                status_code=400,
+            )
+        user = users_store.set_user_enabled(user_id, bool(body["enabled"]))
+        if user is None:
+            return JSONResponse(
+                {"error": {"message": f"Unknown user id: {user_id}"}},
+                status_code=404,
+            )
+        state.monitor.log(
+            "info",
+            f"user {user_id} {'enabled' if user['enabled'] else 'disabled'}",
+        )
+        return JSONResponse({"ok": True, "user": user})
+
+    @app.delete("/api/admin/users/{user_id}")
+    async def admin_delete_user(user_id: int) -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        if not users_store.delete_user(user_id):
+            return JSONResponse(
+                {"error": {"message": f"Unknown user id: {user_id}"}},
+                status_code=404,
+            )
+        state.monitor.log("info", f"user deleted id={user_id}")
+        return JSONResponse({"ok": True, "deleted": user_id})
+
+    @app.get("/api/admin/keys")
+    async def admin_list_keys() -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        keys = users_store.list_keys()
+        return JSONResponse({"ok": True, "keys": keys, "total": len(keys)})
+
+    @app.post("/api/admin/keys")
+    async def admin_create_key(request: Request) -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if not isinstance(body, dict) or body.get("user_id") is None:
+            return JSONResponse(
+                {"error": {"message": "Field 'user_id' is required"}},
+                status_code=400,
+            )
+        try:
+            user_id = int(body["user_id"])
+        except (TypeError, ValueError):
+            return JSONResponse(
+                {"error": {"message": "Field 'user_id' must be an integer"}},
+                status_code=400,
+            )
+        try:
+            meta = users_store.create_api_key(user_id, name=str(body.get("name") or ""))
+        except ValueError as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=400)
+        # raw_key is present only in this response — never logged, never re-listed.
+        state.monitor.log(
+            "info",
+            f"api key issued user_id={user_id} prefix={meta.get('key_prefix', '')}",
+        )
+        return JSONResponse({"ok": True, "key": meta}, status_code=201)
+
+    @app.post("/api/admin/keys/{key_id}/revoke")
+    async def admin_revoke_key(key_id: int) -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        meta = users_store.revoke_key(key_id)
+        if meta is None:
+            return JSONResponse(
+                {"error": {"message": f"Unknown key id: {key_id}"}},
+                status_code=404,
+            )
+        state.monitor.log("info", f"api key revoked id={key_id}")
+        return JSONResponse({"ok": True, "key": meta})
+
     @app.get("/api/providers")
     async def list_providers() -> dict[str, Any]:
         items = []
@@ -721,6 +967,7 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
         user_agent = request.headers.get("user-agent", "")
         client_app = _guess_client_app(user_agent)
         hdrs = _sanitize_headers(request)
+        auth_user_id, auth_username = _request_user_meta(request)
         for idx, rt in enumerate(attempts):
             rid = state.monitor.begin(
                 provider_id=rt.provider_id,
@@ -732,6 +979,8 @@ def create_app(config_path: str | Path | None = None, config: AppConfig | None =
                 user_agent=user_agent,
                 app=client_app,
                 headers=hdrs,
+                user_id=auth_user_id,
+                username=auth_username,
             )
             started = time.time()
             model_limit = state.config.resolve_max_output_tokens(rt.model, rt.requested_model)

@@ -405,6 +405,10 @@ def main() -> None:
     Path(os.environ["UNIFY_STATS_DB"]).parent.mkdir(parents=True, exist_ok=True)
     if Path(os.environ["UNIFY_STATS_DB"]).exists():
         Path(os.environ["UNIFY_STATS_DB"]).unlink()
+    # Isolate from production users DB (do not touch real LAN keys).
+    os.environ.setdefault("UNIFY_USERS_DB", str(ROOT / "data" / "smoke_users.db"))
+    Path(os.environ["UNIFY_USERS_DB"]).parent.mkdir(parents=True, exist_ok=True)
+    Path(os.environ["UNIFY_USERS_DB"]).unlink(missing_ok=True)
     server, port = start_dummy()
     try:
         asyncio.run(run_checks(port))
@@ -412,6 +416,10 @@ def main() -> None:
         server.shutdown()
         try:
             Path(os.environ["UNIFY_STATS_DB"]).unlink(missing_ok=True)
+        except OSError:
+            pass
+        try:
+            Path(os.environ["UNIFY_USERS_DB"]).unlink(missing_ok=True)
         except OSError:
             pass
 

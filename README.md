@@ -32,9 +32,10 @@ Monochrome print-style UI (paper grain + stipple) with Overview / Providers / Tr
 - Watch live concurrency, in-flight requests, latency (rolling p50/p95), and token totals on the dashboard.
 - Optional token cost estimation (USD) from configured rates — defaults stay at 0; no vendor prices are invented.
 - Optional LAN gateway key (`UNIFY_GATEWAY_KEY`) for multi-machine access on a private network.
+- Multi-user API keys: issue per-user `sk-unify-…` keys for LAN machines (hashed at rest, shown once).
 - Optional gateway rate limits: per-client requests/minute and a global concurrency cap on `/v1/*` (HTTP 429 + `Retry-After`).
 - Provider admin API: list, enable/disable, upstream test, config hot-reload.
-- Dashboard ops: toggle providers, test upstream, reload config, filter logs.
+- Dashboard ops: toggle providers, test upstream, reload config, filter logs, manage users and keys.
 
 ## Requirements
 
@@ -315,6 +316,42 @@ python scripts/print_lan_urls.py
 ```
 
 Full multi-machine guide (firewall, env vars, IDE tools, troubleshooting): [docs/LAN.md](./docs/LAN.md).
+
+## Multi-user API keys
+
+When several machines share one gateway, give each person their own key instead of the master `UNIFY_GATEWAY_KEY`.
+
+Keys are stored only as SHA-256 hashes in SQLite (`data/unify_users.db`, override with `UNIFY_USERS_DB`). The raw key is returned once at creation and never listed again. Format: `sk-unify-<32 hex>`.
+
+### Dashboard
+
+Open **Users** (shortcut `5`):
+
+1. **Create user** (name, optional email/note).
+2. **Issue key** — copy the raw key from the one-time modal.
+3. **Revoke** or **Disable** when a machine is retired.
+
+### Admin API
+
+Protected by the master gateway key when `UNIFY_GATEWAY_KEY` / `auth.api_key` is set. Without a master key, these endpoints are **localhost-only**.
+
+| Method | Path | Body |
+|--------|------|------|
+| GET | `/api/admin/users` | — |
+| POST | `/api/admin/users` | `{"name","email?","note?"}` |
+| PATCH | `/api/admin/users/{id}` | `{"enabled": true\|false}` |
+| DELETE | `/api/admin/users/{id}` | — |
+| GET | `/api/admin/keys` | — |
+| POST | `/api/admin/keys` | `{"user_id","name?"}` → returns `raw_key` once |
+| POST | `/api/admin/keys/{id}/revoke` | — |
+
+### Client auth
+
+User keys work on `/v1/*` only (`Authorization: Bearer sk-unify-…` or `x-api-key`). They do **not** open `/api/status` or admin routes.
+
+- Disabled user or revoked key → `401`.
+- If no master key and no user keys exist, `/v1/*` stays open (backward compatible).
+- Once any active user key exists, `/v1/*` requires a key (master or user).
 
 ## Project layout
 

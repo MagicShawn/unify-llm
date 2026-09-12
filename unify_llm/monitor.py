@@ -197,6 +197,8 @@ class InFlightRequest:
     user_agent: str = ""
     app: str = ""
     headers: dict[str, str] = field(default_factory=dict)
+    user_id: str = ""
+    username: str = ""
 
     def to_dict(self, now: float | None = None) -> dict[str, Any]:
         now = now or time.time()
@@ -225,6 +227,8 @@ class CompletedRequest:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     estimated_cost_usd: float = 0.0
+    user_id: str = ""
+    username: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -398,6 +402,8 @@ class Monitor:
         user_agent: str = "",
         app: str = "",
         headers: dict[str, str] | None = None,
+        user_id: str = "",
+        username: str = "",
     ) -> str:
         rid = uuid.uuid4().hex[:12]
         rec = InFlightRequest(
@@ -412,6 +418,8 @@ class Monitor:
             user_agent=user_agent or "",
             app=app or "",
             headers=dict(headers or {}),
+            user_id=str(user_id or ""),
+            username=str(username or ""),
         )
         with self._lock:
             stats = self._providers.get(provider_id)
@@ -474,10 +482,13 @@ class Monitor:
                 user_agent = rec.user_agent
                 app = rec.app
                 headers = rec.headers
+                user_id = rec.user_id
+                username = rec.username
             else:
                 model = requested = protocol = path = client = ""
                 user_agent = app = ""
                 headers = {}
+                user_id = username = ""
             status = "error" if error or http_status >= 400 else "ok"
             prompt_tokens = int(prompt_tokens or 0)
             completion_tokens = int(completion_tokens or 0)
@@ -508,6 +519,8 @@ class Monitor:
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 estimated_cost_usd=cost,
+                user_id=user_id,
+                username=username,
             )
             stats.active = max(0, stats.active - 1)
             stats.total += 1

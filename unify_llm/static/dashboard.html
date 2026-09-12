@@ -1080,6 +1080,99 @@
       z-index: 1000;
       pointer-events: none;
     }
+
+    /* ── Users panel ── */
+    .users-toolbar {
+      margin-bottom: var(--gap);
+      padding: 10px 12px;
+    }
+    .users-toolbar .filter-input { max-width: 220px; min-width: 140px; }
+    .user-keys {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .user-keys li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-2);
+    }
+    .key-prefix {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink);
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 1px 6px;
+    }
+    .user-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .user-actions .btn-ops { height: 22px; padding: 0 8px; font-size: 11px; }
+    .key-modal-root[hidden] { display: none !important; }
+    .key-modal-root {
+      position: fixed;
+      inset: 0;
+      z-index: 2100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .key-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      border: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+    }
+    .key-modal {
+      position: relative;
+      width: min(440px, calc(100% - 32px));
+      background: var(--bg-panel);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+      padding: 16px;
+      z-index: 1;
+    }
+    .key-modal h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .key-modal .key-warn {
+      color: var(--warn);
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    .key-modal .key-raw {
+      font-family: var(--mono);
+      font-size: 12px;
+      word-break: break-all;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      color: var(--ink);
+      margin-bottom: 12px;
+    }
+    .key-modal .key-modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
     .toast {
       pointer-events: auto;
       background: var(--bg-elev);
@@ -1782,6 +1875,13 @@
             <span class="nav-zh">日志</span>
           </span>
         </button>
+        <button class="nav-item" data-panel="users" role="tab" aria-selected="false" aria-keyshortcuts="5" title="Users (5)">
+          <span class="nav-icon">☺</span>
+          <span class="nav-label">
+            <span class="nav-en">Users</span>
+            <span class="nav-zh">用户</span>
+          </span>
+        </button>
       </nav>
       <div class="sidebar-foot">
         <div class="side-stat">
@@ -1833,6 +1933,7 @@
           <option value="providers">Providers</option>
           <option value="traffic">Traffic</option>
           <option value="logs">Logs</option>
+          <option value="users">Users</option>
         </select>
       </label>
       <span class="sys-item">
@@ -1852,7 +1953,7 @@
         <div class="shortcuts-pop" id="shortcutsPop" role="dialog" aria-label="Keyboard shortcuts" hidden>
           <h3>Shortcuts · 快捷键</h3>
           <ul>
-            <li><span>Overview / Providers / Traffic / Logs</span><span><kbd>1</kbd>–<kbd>4</kbd></span></li>
+            <li><span>Overview / Providers / Traffic / Logs / Users</span><span><kbd>1</kbd>–<kbd>5</kbd></span></li>
             <li><span>Refresh · 刷新</span><kbd>r</kbd></li>
             <li><span>Theme · 主题</span><kbd>t</kbd></li>
             <li><span>Log model filter</span><kbd>/</kbd></li>
@@ -2118,10 +2219,54 @@
         </div>
       </div>
 
+      <!-- ══ USERS ══ -->
+      <div class="panel" id="panel-users" role="tabpanel">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Users</h1>
+            <div class="page-sub">LAN accounts &amp; API keys · 多用户密钥</div>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn-ops" id="usersRefreshBtn" title="Reload users and keys" aria-label="Refresh users">Refresh</button>
+            <div class="page-meta" id="usersMeta">—</div>
+          </div>
+        </div>
+
+        <div class="card users-toolbar">
+          <div class="filter-row">
+            <input id="newUserName" class="filter-input" type="text" placeholder="Name · 姓名" aria-label="User name" autocomplete="off" />
+            <input id="newUserEmail" class="filter-input" type="email" placeholder="Email (optional)" aria-label="User email" autocomplete="off" />
+            <input id="newUserNote" class="filter-input" type="text" placeholder="Note (optional)" aria-label="User note" autocomplete="off" />
+            <button type="button" class="btn-ops primary" id="createUserBtn" aria-label="Create user">Create user</button>
+          </div>
+        </div>
+
+        <div class="card tight table-wrap" id="usersWrap">
+          <div class="connecting" aria-live="polite">
+            <span class="pulse" aria-hidden="true"></span>
+            <span>Loading users…</span>
+          </div>
+        </div>
+      </div>
+
     </main>
   </div>
 
   <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- One-time API key modal -->
+  <div class="key-modal-root" id="keyModal" hidden>
+    <button type="button" class="key-modal-backdrop" id="keyModalBackdrop" tabindex="-1" aria-label="Close"></button>
+    <div class="key-modal" role="dialog" aria-modal="true" aria-labelledby="keyModalTitle">
+      <h3 id="keyModalTitle">API key issued · 密钥已签发</h3>
+      <div class="key-warn">Copy now — this is shown only once.</div>
+      <div class="key-raw" id="keyModalRaw"></div>
+      <div class="key-modal-actions">
+        <button type="button" class="btn-ops" id="keyModalCopy">Copy</button>
+        <button type="button" class="btn-ops primary" id="keyModalClose">Done</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Request detail drawer -->
   <div class="drawer-root" id="reqDrawer" hidden>
@@ -2187,6 +2332,7 @@
       });
       const sel = $("panelSelect");
       if (sel && sel.value !== target) sel.value = target;
+      if (target === "users" && typeof refreshUsers === "function") refreshUsers();
     }
     document.querySelectorAll(".nav-item").forEach((btn) => {
       btn.addEventListener("click", () => switchPanel(btn.dataset.panel));
@@ -3491,6 +3637,283 @@
       );
     }
 
+    /* ── Users / API keys ── */
+    let lastUsers = [];
+
+    function fmtTs(ts) {
+      if (ts == null || ts === "") return "—";
+      try {
+        return new Date(Number(ts) * 1000).toISOString().slice(0, 16).replace("T", " ");
+      } catch (_) {
+        return "—";
+      }
+    }
+
+    function openKeyModal(raw) {
+      const root = $("keyModal");
+      const rawEl = $("keyModalRaw");
+      if (!root || !rawEl) return;
+      rawEl.textContent = raw || "";
+      root.hidden = false;
+      const closeBtn = $("keyModalClose");
+      if (closeBtn) closeBtn.focus();
+    }
+
+    function closeKeyModal() {
+      const root = $("keyModal");
+      if (!root) return;
+      root.hidden = true;
+      const rawEl = $("keyModalRaw");
+      if (rawEl) rawEl.textContent = "";
+    }
+
+    (function bindKeyModal() {
+      const closeBtn = $("keyModalClose");
+      const backdrop = $("keyModalBackdrop");
+      const copyBtn = $("keyModalCopy");
+      if (closeBtn) closeBtn.addEventListener("click", closeKeyModal);
+      if (backdrop) backdrop.addEventListener("click", closeKeyModal);
+      if (copyBtn) {
+        copyBtn.addEventListener("click", async () => {
+          const text = $("keyModalRaw") ? $("keyModalRaw").textContent : "";
+          const ok = await copyText(text);
+          showToast(ok ? "ok" : "err", ok ? "Copied" : "Copy failed");
+        });
+      }
+    })();
+
+    function keyStatusPill(k) {
+      if (k.revoked_at) return '<span class="pill err">revoked</span>';
+      if (!k.enabled) return '<span class="pill err">disabled</span>';
+      return '<span class="pill ok">active</span>';
+    }
+
+    function renderUsers(users) {
+      lastUsers = users || [];
+      const wrap = $("usersWrap");
+      if (!wrap) return;
+      const meta = $("usersMeta");
+      if (meta) meta.textContent = lastUsers.length + " user(s)";
+      if (!lastUsers.length) {
+        wrap.innerHTML =
+          '<div class="empty">' +
+          '<span class="empty-icon" aria-hidden="true">☺</span>' +
+          "<span>No users yet</span>" +
+          '<span class="empty-hint">Create a user, then issue an API key for LAN machines</span>' +
+          "</div>";
+        return;
+      }
+      let html =
+        "<table><thead><tr>" +
+        "<th>User</th><th>Email</th><th>Enabled</th><th>Keys</th><th>Actions</th>" +
+        "</tr></thead><tbody>";
+      lastUsers.forEach((u) => {
+        const keys = u.keys || [];
+        let keysHtml = "";
+        if (!keys.length) {
+          keysHtml = '<span class="mono" style="color:var(--ink-3)">none</span>';
+        } else {
+          keysHtml = '<ul class="user-keys">';
+          keys.forEach((k) => {
+            keysHtml +=
+              "<li>" +
+              '<span class="key-prefix">sk-unify-' + esc(k.key_prefix) + "…</span>" +
+              (k.name ? esc(k.name) : "") +
+              keyStatusPill(k) +
+              '<span style="color:var(--ink-3)">used ' + esc(fmtTs(k.last_used_at)) + "</span>" +
+              (k.revoked_at
+                ? ""
+                : '<button type="button" class="btn-ops" data-revoke-key="' +
+                  Number(k.id) +
+                  '" aria-label="Revoke key">Revoke</button>') +
+              "</li>";
+          });
+          keysHtml += "</ul>";
+        }
+        html +=
+          "<tr>" +
+          "<td><b>" + esc(u.name) + '</b> <span class="mono" style="color:var(--ink-3)">#' + Number(u.id) + "</span></td>" +
+          '<td class="mono">' + esc(u.email || "—") + "</td>" +
+          "<td>" +
+          (u.enabled
+            ? '<span class="pill ok">on</span>'
+            : '<span class="pill err">off</span>') +
+          "</td>" +
+          "<td>" + keysHtml + "</td>" +
+          '<td><div class="user-actions">' +
+          '<button type="button" class="btn-ops" data-toggle-user="' + Number(u.id) + '" data-next="' + (u.enabled ? "0" : "1") + '">' +
+          (u.enabled ? "Disable" : "Enable") +
+          "</button>" +
+          '<button type="button" class="btn-ops" data-issue-key="' + Number(u.id) + '">Issue key</button>' +
+          '<button type="button" class="btn-ops" data-delete-user="' + Number(u.id) + '">Delete</button>' +
+          "</div></td>" +
+          "</tr>";
+      });
+      html += "</tbody></table>";
+      wrap.innerHTML = html;
+    }
+
+    async function refreshUsers() {
+      const wrap = $("usersWrap");
+      try {
+        const res = await apiFetch("/api/admin/users");
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            if (wrap) {
+              wrap.innerHTML =
+                '<div class="empty"><span class="empty-icon" aria-hidden="true">⚿</span>' +
+                "<span>Admin key required</span>" +
+                '<span class="empty-hint">Set UNIFY_GATEWAY_KEY, or open from the gateway host when no key is set</span></div>';
+            }
+            return;
+          }
+          throw new Error("HTTP " + res.status);
+        }
+        const data = await res.json();
+        renderUsers(data.users || []);
+      } catch (e) {
+        if (wrap) {
+          wrap.innerHTML =
+            '<div class="empty"><span class="empty-icon" aria-hidden="true">!</span>' +
+            "<span>Failed to load users</span>" +
+            '<span class="empty-hint">' + esc(e.message || String(e)) + "</span></div>";
+        }
+      }
+    }
+
+    async function createUser() {
+      const nameEl = $("newUserName");
+      const emailEl = $("newUserEmail");
+      const noteEl = $("newUserNote");
+      const name = nameEl ? nameEl.value.trim() : "";
+      if (!name) {
+        showToast("err", "Name required");
+        if (nameEl) nameEl.focus();
+        return;
+      }
+      try {
+        const res = await apiFetch("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name,
+            email: emailEl ? emailEl.value.trim() : "",
+            note: noteEl ? noteEl.value.trim() : "",
+          }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        showToast("ok", "User created", body.user && body.user.name);
+        if (nameEl) nameEl.value = "";
+        if (emailEl) emailEl.value = "";
+        if (noteEl) noteEl.value = "";
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Create failed", e.message || String(e));
+      }
+    }
+
+    async function issueKey(userId, keyName) {
+      try {
+        const res = await apiFetch("/api/admin/keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: Number(userId), name: keyName || "" }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        const raw = body.key && body.key.raw_key;
+        if (raw) openKeyModal(raw);
+        showToast("ok", "Key issued", "prefix sk-unify-" + ((body.key && body.key.key_prefix) || "") + "…");
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Issue failed", e.message || String(e));
+      }
+    }
+
+    async function revokeKey(keyId) {
+      if (!confirm("Revoke this API key?")) return;
+      try {
+        const res = await apiFetch("/api/admin/keys/" + Number(keyId) + "/revoke", { method: "POST" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        showToast("ok", "Key revoked");
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Revoke failed", e.message || String(e));
+      }
+    }
+
+    async function toggleUser(userId, nextEnabled) {
+      try {
+        const res = await apiFetch("/api/admin/users/" + Number(userId), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: !!nextEnabled }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        showToast("ok", nextEnabled ? "User enabled" : "User disabled");
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Update failed", e.message || String(e));
+      }
+    }
+
+    async function deleteUser(userId) {
+      if (!confirm("Delete this user and all their keys?")) return;
+      try {
+        const res = await apiFetch("/api/admin/users/" + Number(userId), { method: "DELETE" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        showToast("ok", "User deleted");
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Delete failed", e.message || String(e));
+      }
+    }
+
+    (function bindUsersPanel() {
+      const createBtn = $("createUserBtn");
+      if (createBtn) createBtn.addEventListener("click", createUser);
+      const refreshBtn = $("usersRefreshBtn");
+      if (refreshBtn) refreshBtn.addEventListener("click", refreshUsers);
+      const nameInput = $("newUserName");
+      if (nameInput) {
+        nameInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            createUser();
+          }
+        });
+      }
+      const wrap = $("usersWrap");
+      if (wrap) {
+        wrap.addEventListener("click", (e) => {
+          const revoke = e.target.closest("[data-revoke-key]");
+          if (revoke) {
+            revokeKey(Number(revoke.getAttribute("data-revoke-key")));
+            return;
+          }
+          const issue = e.target.closest("[data-issue-key]");
+          if (issue) {
+            issueKey(Number(issue.getAttribute("data-issue-key")), "");
+            return;
+          }
+          const toggle = e.target.closest("[data-toggle-user]");
+          if (toggle) {
+            toggleUser(
+              Number(toggle.getAttribute("data-toggle-user")),
+              toggle.getAttribute("data-next") === "1"
+            );
+            return;
+          }
+          const del = e.target.closest("[data-delete-user]");
+          if (del) deleteUser(Number(del.getAttribute("data-delete-user")));
+        });
+      }
+    })();
+
     /* ── Shortcuts popover + keyboard ── */
     let shortcutsPopOpen = false;
     const shortcutsBtn = $("shortcutsBtn");
@@ -3548,6 +3971,12 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        const keyModal = $("keyModal");
+        if (keyModal && !keyModal.hidden) {
+          e.preventDefault();
+          closeKeyModal();
+          return;
+        }
         if (drawerOpen) {
           e.preventDefault();
           closeRequestDrawer();
@@ -3575,6 +4004,7 @@
       else if (key === "2") { e.preventDefault(); switchPanel("providers"); }
       else if (key === "3") { e.preventDefault(); switchPanel("traffic"); }
       else if (key === "4") { e.preventDefault(); switchPanel("logs"); }
+      else if (key === "5") { e.preventDefault(); switchPanel("users"); refreshUsers(); }
       else if (key === "r" || key === "R") { e.preventDefault(); refresh(); }
       else if (key === "t" || key === "T") { e.preventDefault(); toggleTheme(); }
       else if (key === "/") { e.preventDefault(); focusLogFilter(); }
