@@ -396,6 +396,54 @@ async def run_checks(port: int) -> None:
         for _ in range(5):
             assert client.get("/v1/models").status_code == 200
 
+    # portal + role separation (ephemeral users DB already set in main)
+    portal_cfg = AppConfig(auth=AuthConfig(api_key="smoke-master"), providers=cfg.providers)
+    portal_app = create_app(config=portal_cfg)
+    with TestClient(portal_app, client=("127.0.0.1", 50000)) as client:
+        r = client.get("/portal")
+        assert r.status_code == 200
+        assert b"Login" in r.content or b"login" in r.content
+        r = client.post(
+            "/api/auth/register",
+            json={"name": "smoke-u", "email": "smoke@example.com", "password": "password123"},
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["user"]["status"] == "pending"
+        r = client.post(
+            "/api/auth/login",
+            json={"email": "smoke@example.com", "password": "password123"},
+        )
+        assert r.status_code == 403
+        r = client.post(
+            "/api/admin/users",
+            json={
+                "name": "smoke-admin",
+                "email": "admin-smoke@example.com",
+                "password": "admin-pass-1",
+                "role": "admin",
+            },
+            headers={"Authorization": "Bearer smoke-master"},
+        )
+        assert r.status_code == 201, r.text
+        uid = client.get(
+            "/api/admin/users",
+            headers={"Authorization": "Bearer smoke-master"},
+        ).json()["users"]
+        pending_id = next(u["id"] for u in uid if u["email"] == "smoke@example.com")
+        r = client.patch(
+            f"/api/admin/users/{pending_id}",
+            json={"approve": True},
+            headers={"Authorization": "Bearer smoke-master"},
+        )
+        assert r.json()["user"]["status"] == "active"
+        r = client.post(
+            "/api/auth/login",
+            json={"email": "admin-smoke@example.com", "password": "admin-pass-1"},
+        )
+        assert r.status_code == 200
+        assert client.get("/api/auth/me").json()["user"]["role"] == "admin"
+        assert client.get("/api/admin/users").status_code == 200
+
     print("SMOKE OK")
 
 

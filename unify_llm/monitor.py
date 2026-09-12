@@ -437,9 +437,10 @@ class Monitor:
             self._global_active += 1
             self._global_total += 1
         src = app or (user_agent[:48] if user_agent else client or "?")
+        who = f" user={username}" if username else ""
         self.logs.add(
             "info",
-            f"→ {path} {protocol} model={requested_model} via {provider_id} from {src}",
+            f"→ {path} {protocol} model={requested_model} via {provider_id} from {src}{who}",
             rid=rid,
             provider=provider_id,
             model=model,
@@ -449,6 +450,8 @@ class Monitor:
             user_agent=user_agent,
             app=app,
             headers=headers or {},
+            user_id=user_id,
+            username=username,
         )
         return rid
 
@@ -541,11 +544,12 @@ class Monitor:
             self._persist_locked()
         level = "error" if status == "error" else "info"
         src = app or (user_agent[:48] if user_agent else client or "?")
+        who = f" user={username}" if username else ""
         self.logs.add(
             level,
             (
                 f"← {path} {http_status} {latency_ms}ms model={model or requested} "
-                f"from {src} tok={prompt_tokens}+{completion_tokens}"
+                f"from {src}{who} tok={prompt_tokens}+{completion_tokens}"
                 + (f" err={error}" if error else "")
             ),
             rid=request_id,
@@ -561,6 +565,8 @@ class Monitor:
             user_agent=user_agent,
             app=app,
             headers=headers,
+            user_id=user_id,
+            username=username,
         )
 
     def _latency_series_locked(self) -> dict[str, Any]:

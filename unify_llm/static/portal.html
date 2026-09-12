@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unify LLM · Portal</title>
+  <style>
+    :root {
+      --font: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+        "PingFang SC", "Microsoft YaHei", sans-serif;
+      --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+      --radius: 10px;
+      --radius-sm: 8px;
+      --gap: 12px;
+    }
+    [data-theme="light"] {
+      --bg: #f5f5f5;
+      --bg-panel: #ffffff;
+      --bg-elev: #ffffff;
+      --bg-soft: #f0f0f0;
+      --bg-hover: #e8e8e8;
+      --ink: #111111;
+      --ink-2: #444444;
+      --ink-3: #777777;
+      --line: #e2e2e2;
+      --line-strong: #cccccc;
+      --ok: #1a7f37;
+      --ok-soft: rgba(26, 127, 55, 0.1);
+      --err: #c62828;
+      --err-soft: rgba(198, 40, 40, 0.08);
+      --warn: #9a6700;
+      --warn-soft: rgba(154, 103, 0, 0.1);
+      --accent-soft: rgba(0, 0, 0, 0.06);
+      --shadow-card: 2px 2px 0 rgba(0, 0, 0, 0.06);
+    }
+    [data-theme="dark"] {
+      --bg: #0e0e0e;
+      --bg-panel: #161616;
+      --bg-elev: #1c1c1c;
+      --bg-soft: #222222;
+      --bg-hover: #2c2c2c;
+      --ink: #f2f2f2;
+      --ink-2: #cfcfcf;
+      --ink-3: #8a8a8a;
+      --line: #2e2e2e;
+      --line-strong: #444444;
+      --ok: #6fcf97;
+      --ok-soft: rgba(111, 207, 151, 0.12);
+      --err: #f07171;
+      --err-soft: rgba(240, 113, 113, 0.12);
+      --warn: #e0c36a;
+      --warn-soft: rgba(224, 195, 106, 0.12);
+      --accent-soft: rgba(255, 255, 255, 0.08);
+      --shadow-card: 2px 2px 0 rgba(0, 0, 0, 0.45);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100%; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.45;
+      background-image:
+        radial-gradient(circle at 1px 1px, rgba(0,0,0,.04) 0.6px, transparent 0.8px);
+      background-size: 4px 4px;
+    }
+    [data-theme="dark"] body {
+      background-image:
+        radial-gradient(circle at 1px 1px, rgba(255,255,255,.03) 0.6px, transparent 0.8px);
+    }
+    a { color: var(--ink); }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 16px 48px;
+    }
+    .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .brand b {
+      font-size: 15px;
+      letter-spacing: 0.02em;
+    }
+    .brand span {
+      color: var(--ink-3);
+      font-size: 12px;
+    }
+    .top-actions { display: flex; gap: 8px; align-items: center; }
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-card);
+      padding: 18px;
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .sub { color: var(--ink-3); margin-bottom: 18px; font-size: 12.5px; }
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0;
+    }
+    .tab {
+      appearance: none;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--ink-3);
+      font: inherit;
+      padding: 8px 12px;
+      cursor: pointer;
+      border-radius: 4px 4px 0 0;
+    }
+    .tab:hover { color: var(--ink); background: var(--bg-soft); }
+    .tab.active {
+      color: var(--ink);
+      border-bottom-color: var(--ink);
+      font-weight: 600;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+      font-family: var(--mono);
+    }
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      border: 1px solid var(--line-strong);
+      background: var(--bg-panel);
+      color: var(--ink);
+      border-radius: var(--radius-sm);
+      padding: 9px 10px;
+      font: inherit;
+      margin-bottom: 12px;
+    }
+    input:focus {
+      outline: 2px solid var(--ink);
+      outline-offset: 1px;
+    }
+    .btn {
+      appearance: none;
+      border: 1px solid var(--line-strong);
+      background: var(--bg-soft);
+      color: var(--ink);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+      min-height: 32px;
+    }
+    .btn:hover { background: var(--bg-hover); }
+    .btn.primary {
+      background: var(--ink);
+      color: var(--bg-panel);
+      border-color: var(--ink);
+    }
+    .btn.primary:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .msg {
+      display: none;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      margin-bottom: 12px;
+      font-size: 12.5px;
+    }
+    .msg.show { display: block; }
+    .msg.err {
+      background: var(--err-soft);
+      border-color: color-mix(in srgb, var(--err) 35%, transparent);
+      color: var(--err);
+    }
+    .msg.ok {
+      background: var(--ok-soft);
+      border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+      color: var(--ok);
+    }
+    .msg.warn {
+      background: var(--warn-soft);
+      border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+      color: var(--warn);
+    }
+    .pill {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink-2);
+      vertical-align: middle;
+    }
+    .pill.ok {
+      color: var(--ok);
+      background: var(--ok-soft);
+      border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+    }
+    .pill.err {
+      color: var(--err);
+      background: var(--err-soft);
+      border-color: color-mix(in srgb, var(--err) 30%, transparent);
+    }
+    .pill.warn {
+      color: var(--warn);
+      background: var(--warn-soft);
+      border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+    }
+    .profile-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      align-items: baseline;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .profile-head h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .profile-head .meta {
+      color: var(--ink-3);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    .section-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-3);
+      margin: 18px 0 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+    th {
+      font-family: var(--mono);
+      color: var(--ink-3);
+      font-weight: 500;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: var(--bg-soft);
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    .mono { font-family: var(--mono); font-size: 11.5px; }
+    .key-prefix {
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+    .empty {
+      color: var(--ink-3);
+      padding: 16px 8px;
+      text-align: center;
+      font-size: 12.5px;
+    }
+    .usage-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    .usage-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--bg-soft);
+      padding: 10px 12px;
+    }
+    .usage-card .k {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .usage-card .v {
+      font-size: 18px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
+    }
+    .key-raw {
+      font-family: var(--mono);
+      font-size: 12px;
+      word-break: break-all;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      margin: 8px 0 12px;
+    }
+    .hidden { display: none !important; }
+    .foot {
+      margin-top: 16px;
+      color: var(--ink-3);
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .foot a { color: var(--ink-2); }
+    .inline-form {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      margin-bottom: 8px;
+    }
+    .inline-form .field { flex: 1 1 160px; min-width: 140px; }
+    .inline-form .field input { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <b>Unify LLM</b>
+        <span>User portal · 用户门户</span>
+      </div>
+      <div class="top-actions">
+        <button type="button" class="btn" id="themeBtn" title="Toggle theme">◐</button>
+      </div>
+    </div>
+
+    <!-- Auth card -->
+    <div class="card" id="authCard">
+      <h1>Welcome</h1>
+      <div class="sub">Sign in to manage your API keys · 登录以管理密钥</div>
+      <div class="msg" id="authMsg" role="status"></div>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" data-tab="login" role="tab" aria-selected="true">Login · 登录</button>
+        <button type="button" class="tab" data-tab="register" role="tab" aria-selected="false">Register · 注册</button>
+      </div>
+
+      <form id="loginForm" autocomplete="on">
+        <label for="loginEmail">Email</label>
+        <input id="loginEmail" name="email" type="email" required autocomplete="username" />
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" name="password" type="password" required autocomplete="current-password" />
+        <div class="btn-row">
+          <button type="submit" class="btn primary">Sign in</button>
+        </div>
+      </form>
+
+      <form id="registerForm" class="hidden" autocomplete="on">
+        <label for="regName">Name</label>
+        <input id="regName" name="name" type="text" required autocomplete="name" />
+        <label for="regEmail">Email</label>
+        <input id="regEmail" name="email" type="email" required autocomplete="username" />
+        <label for="regPassword">Password (min 8)</label>
+        <input id="regPassword" name="password" type="password" required minlength="8" autocomplete="new-password" />
+        <div class="btn-row">
+          <button type="submit" class="btn primary">Create account</button>
+        </div>
+        <p class="sub" style="margin:12px 0 0">New accounts start as <b>pending</b>. An admin must approve before you can sign in.</p>
+      </form>
+    </div>
+
+    <!-- Home card -->
+    <div class="card hidden" id="homeCard">
+      <div class="profile-head">
+        <h2 id="userName">—</h2>
+        <span class="pill" id="userRole">user</span>
+        <span class="pill" id="userStatus">active</span>
+        <span class="meta" id="userEmail"></span>
+      </div>
+
+      <div class="btn-row" style="margin-bottom:8px">
+        <a class="btn hidden" id="dashLink" href="/dashboard">Open admin dashboard</a>
+        <button type="button" class="btn" id="logoutBtn">Sign out</button>
+      </div>
+
+      <div class="msg warn" id="pendingMsg">Your account is not active. An admin must approve it before keys work.</div>
+
+      <div class="section-title">API keys · 我的密钥</div>
+      <div class="msg ok hidden" id="newKeyBox">
+        <div><b>Copy this key now — shown only once.</b></div>
+        <div class="key-raw" id="newKeyRaw"></div>
+        <button type="button" class="btn" id="copyNewKey">Copy</button>
+      </div>
+      <div class="inline-form">
+        <div class="field">
+          <label for="keyName">Key name (optional)</label>
+          <input id="keyName" type="text" placeholder="laptop / ide / phone" />
+        </div>
+        <button type="button" class="btn primary" id="createKeyBtn">Create key</button>
+      </div>
+      <div class="card" style="padding:0;box-shadow:none" id="keysWrap">
+        <div class="empty">Loading…</div>
+      </div>
+
+      <div class="section-title">Recent usage · 近期用量</div>
+      <div class="usage-grid" id="usageGrid">
+        <div class="usage-card"><div class="k">requests</div><div class="v" id="uReq">—</div></div>
+        <div class="usage-card"><div class="k">tokens in</div><div class="v" id="uIn">—</div></div>
+        <div class="usage-card"><div class="k">tokens out</div><div class="v" id="uOut">—</div></div>
+        <div class="usage-card"><div class="k">errors</div><div class="v" id="uErr">—</div></div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span>Unify LLM gateway</span>
+      <span>
+        <a href="/healthz">health</a>
+        ·
+        <a href="/api/info">info</a>
+      </span>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const THEME_KEY = "cp-theme";
+
+    function applyTheme(t) {
+      document.documentElement.setAttribute("data-theme", t);
+      try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
+      $("themeBtn").textContent = t === "dark" ? "☀" : "◐";
+    }
+    (function initTheme() {
+      let saved = null;
+      try { saved = localStorage.getItem(THEME_KEY); } catch (_) {}
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      applyTheme(saved || (prefersDark ? "dark" : "light"));
+    })();
+    $("themeBtn").addEventListener("click", () => {
+      const cur = document.documentElement.getAttribute("data-theme");
+      applyTheme(cur === "dark" ? "light" : "dark");
+    });
+
+    function showMsg(el, kind, text) {
+      if (!el) return;
+      el.className = "msg show " + kind;
+      el.textContent = text || "";
+    }
+    function hideMsg(el) {
+      if (!el) return;
+      el.className = "msg";
+      el.textContent = "";
+    }
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[c]);
+    }
+    function fmtN(n) {
+      n = Number(n) || 0;
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
+      return String(Math.round(n));
+    }
+    function fmtTs(ts) {
+      if (ts == null) return "—";
+      try {
+        return new Date(Number(ts) * 1000).toISOString().slice(0, 16).replace("T", " ");
+      } catch (_) { return "—"; }
+    }
+
+    async function api(url, opts = {}) {
+      const init = {
+        credentials: "same-origin",
+        ...opts,
+        headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      };
+      if (init.body && typeof init.body !== "string") init.body = JSON.stringify(init.body);
+      const res = await fetch(url, init);
+      let body = {};
+      try { body = await res.json(); } catch (_) {}
+      return { res, body };
+    }
+
+    /* Tabs */
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach((t) => {
+          const on = t === tab;
+          t.classList.toggle("active", on);
+          t.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        const which = tab.dataset.tab;
+        $("loginForm").classList.toggle("hidden", which !== "login");
+        $("registerForm").classList.toggle("hidden", which !== "register");
+        hideMsg($("authMsg"));
+      });
+    });
+
+    function showAuth() {
+      $("authCard").classList.remove("hidden");
+      $("homeCard").classList.add("hidden");
+    }
+    function showHome(user) {
+      $("authCard").classList.add("hidden");
+      $("homeCard").classList.remove("hidden");
+      $("userName").textContent = user.name || "—";
+      $("userEmail").textContent = user.email || "";
+      const roleEl = $("userRole");
+      roleEl.textContent = user.role || "user";
+      roleEl.className = "pill" + (user.role === "admin" ? " ok" : "");
+      const stEl = $("userStatus");
+      stEl.textContent = user.status || "active";
+      stEl.className = "pill" + (user.status === "active" ? " ok" : user.status === "pending" ? " warn" : " err");
+      $("pendingMsg").classList.toggle("hidden", user.status === "active");
+      $("dashLink").classList.toggle("hidden", user.role !== "admin");
+      $("createKeyBtn").disabled = user.status !== "active";
+      hideMsg($("newKeyBox"));
+      refreshKeys();
+      refreshUsage();
+    }
+
+    async function loadMe() {
+      const { res, body } = await api("/api/auth/me");
+      if (res.ok && body.user) {
+        showHome(body.user);
+        return true;
+      }
+      showAuth();
+      return false;
+    }
+
+    $("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideMsg($("authMsg"));
+      const email = $("loginEmail").value.trim();
+      const password = $("loginPassword").value;
+      const { res, body } = await api("/api/auth/login", {
+        method: "POST",
+        body: { email, password },
+      });
+      if (!res.ok) {
+        const msg = (body.error && body.error.message) || ("HTTP " + res.status);
+        showMsg($("authMsg"), res.status === 403 ? "warn" : "err", msg);
+        return;
+      }
+      $("loginPassword").value = "";
+      showHome(body.user);
+    });
+
+    $("registerForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideMsg($("authMsg"));
+      const name = $("regName").value.trim();
+      const email = $("regEmail").value.trim();
+      const password = $("regPassword").value;
+      const { res, body } = await api("/api/auth/register", {
+        method: "POST",
+        body: { name, email, password },
+      });
+      if (!res.ok) {
+        showMsg($("authMsg"), "err", (body.error && body.error.message) || ("HTTP " + res.status));
+        return;
+      }
+      showMsg(
+        $("authMsg"),
+        "ok",
+        body.message || "Account created. Wait for admin approval, then sign in."
+      );
+      $("registerForm").reset();
+      document.querySelector('.tab[data-tab="login"]').click();
+      $("loginEmail").value = email;
+    });
+
+    $("logoutBtn").addEventListener("click", async () => {
+      await api("/api/auth/logout", { method: "POST", body: {} });
+      showAuth();
+    });
+
+    async function refreshKeys() {
+      const wrap = $("keysWrap");
+      const { res, body } = await api("/api/me/keys");
+      if (!res.ok) {
+        wrap.innerHTML = '<div class="empty">' + esc((body.error && body.error.message) || "Failed to load keys") + "</div>";
+        return;
+      }
+      const keys = body.keys || [];
+      if (!keys.length) {
+        wrap.innerHTML = '<div class="empty">No keys yet · 创建一个密钥以调用 /v1</div>';
+        return;
+      }
+      let html = "<table><thead><tr><th>Prefix</th><th>Name</th><th>Status</th><th>Last used</th><th></th></tr></thead><tbody>";
+      keys.forEach((k) => {
+        const pill = k.revoked_at
+          ? '<span class="pill err">revoked</span>'
+          : k.enabled
+            ? '<span class="pill ok">active</span>'
+            : '<span class="pill err">disabled</span>';
+        html +=
+          "<tr>" +
+          '<td><span class="key-prefix">sk-unify-' + esc(k.key_prefix) + "…</span></td>" +
+          "<td>" + esc(k.name || "—") + "</td>" +
+          "<td>" + pill + "</td>" +
+          '<td class="mono">' + esc(fmtTs(k.last_used_at)) + "</td>" +
+          "<td>" +
+          (k.revoked_at
+            ? ""
+            : '<button type="button" class="btn" data-revoke="' + Number(k.id) + '">Revoke</button>') +
+          "</td></tr>";
+      });
+      html += "</tbody></table>";
+      wrap.innerHTML = html;
+    }
+
+    $("keysWrap").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-revoke]");
+      if (!btn) return;
+      const id = Number(btn.getAttribute("data-revoke"));
+      if (!confirm("Revoke this API key?")) return;
+      const { res, body } = await api("/api/me/keys/" + id + "/revoke", { method: "POST", body: {} });
+      if (!res.ok) {
+        alert((body.error && body.error.message) || "Revoke failed");
+        return;
+      }
+      refreshKeys();
+    });
+
+    $("createKeyBtn").addEventListener("click", async () => {
+      const name = $("keyName").value.trim();
+      const { res, body } = await api("/api/me/keys", { method: "POST", body: { name } });
+      if (!res.ok) {
+        alert((body.error && body.error.message) || "Create failed");
+        return;
+      }
+      const raw = body.key && body.key.raw_key;
+      if (raw) {
+        $("newKeyRaw").textContent = raw;
+        $("newKeyBox").classList.remove("hidden");
+      }
+      $("keyName").value = "";
+      refreshKeys();
+    });
+
+    $("copyNewKey").addEventListener("click", async () => {
+      const text = $("newKeyRaw").textContent || "";
+      try {
+        await navigator.clipboard.writeText(text);
+        $("copyNewKey").textContent = "Copied";
+      } catch (_) {
+        $("copyNewKey").textContent = "Copy failed";
+      }
+      setTimeout(() => { $("copyNewKey").textContent = "Copy"; }, 1500);
+    });
+
+    async function refreshUsage() {
+      const { res, body } = await api("/api/me/usage");
+      if (!res.ok) return;
+      $("uReq").textContent = fmtN(body.recent_requests || 0);
+      $("uIn").textContent = fmtN(body.prompt_tokens || 0);
+      $("uOut").textContent = fmtN(body.completion_tokens || 0);
+      $("uErr").textContent = fmtN(body.errors || 0);
+    }
+
+    loadMe();
+  </script>
+</body>
+</html>

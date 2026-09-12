@@ -1255,6 +1255,10 @@
       background: var(--err-soft);
       color: var(--err);
     }
+    .pill.warn {
+      background: var(--warn-soft);
+      color: var(--warn);
+    }
     .pill.proto {
       background: var(--blue-soft);
       color: var(--blue);
@@ -1895,6 +1899,9 @@
         <div class="side-stat">
           <span>poll</span>
           <b>2s</b>
+        </div>
+        <div class="side-stat" style="margin-top:6px">
+          <a href="/portal" style="color:var(--ink-3);text-decoration:none;font-size:11px">portal →</a>
         </div>
       </div>
     </aside>
@@ -3086,17 +3093,21 @@
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Client IP</th><th>Provider</th><th>Model</th>
+              <th>ID</th><th>Client IP</th><th>Account</th><th>Provider</th><th>Model</th>
               <th>Endpoint</th><th>Elapsed</th>
             </tr>
           </thead>
           <tbody>
             ${rows.map((r, i) => {
               const pc = provColor(r.provider_id);
+              const acct = r.username
+                ? `<span class="mono" title="user_id ${esc(r.user_id || "")}">${esc(r.username)}</span>`
+                : '<span style="color:var(--ink-3)">—</span>';
               return `
               <tr class="req-detail-row" data-row-index="${i}" tabindex="0" role="button" aria-label="Open request details for ${esc(r.id)}">
                 <td>${idCellHtml(r.id)}</td>
                 <td class="mono" title="${esc(r.app || r.user_agent || "")}">${esc(r.client || "—")}</td>
+                <td>${acct}</td>
                 <td><span class="chip provider" style="background:${pc.bg};color:${pc.fg}">${esc(r.provider_id)}</span></td>
                 <td><span class="chip model">${esc(r.model)}</span></td>
                 <td>
@@ -3124,7 +3135,7 @@
         <table>
           <thead>
             <tr>
-              <th>Time</th><th>Client IP</th><th>Provider</th><th>Model</th>
+              <th>Time</th><th>Client IP</th><th>Account</th><th>Provider</th><th>Model</th>
               <th>Status</th><th>Latency</th><th>Tokens</th>
             </tr>
           </thead>
@@ -3139,10 +3150,14 @@
                 r.prompt_tokens || r.completion_tokens
                   ? fmtN(r.prompt_tokens) + "+" + fmtN(r.completion_tokens)
                   : "—";
+              const acct = r.username
+                ? esc(r.username)
+                : '<span style="color:var(--ink-3)">—</span>';
               return `
               <tr>
                 <td class="mono">${esc(t)}</td>
                 <td class="mono" title="${esc(r.app || r.user_agent || "")}">${esc(r.client || "—")}</td>
+                <td>${acct}</td>
                 <td>${esc(r.provider_id)}</td>
                 <td><span class="chip model">${esc(r.model || r.requested_model)}</span></td>
                 <td>${pill}</td>
@@ -3167,7 +3182,7 @@
         if (logStatus === "error" && r.status === "ok") return false;
         if (!q) return true;
         const hay = [
-          r.model, r.requested_model, r.provider_id, r.path, r.id, r.protocol
+          r.model, r.requested_model, r.provider_id, r.path, r.id, r.protocol, r.username, r.user_id
         ].join(" ").toLowerCase();
         return hay.includes(q);
       });
@@ -3249,6 +3264,7 @@
                       <span class="pill proto">${esc(r.protocol)}</span>
                       <span class="chip path" title="${esc(r.path)}">${esc(r.path)}</span>
                       <span class="mono" style="font-size:11px;color:var(--ink-3)" title="${esc(r.app || r.user_agent || "")}">${esc(r.client || "—")}</span>
+                      ${r.username ? `<span class="mono" style="font-size:11px;color:var(--ink-2)" title="account">@${esc(r.username)}</span>` : ""}
                     </div>
                   </td>
                   <td>${pill}</td>
@@ -3381,6 +3397,13 @@
           cls: rec.error ? "err" : "muted",
         }),
         detailRow("Client", esc(rec.client || "—"), { cls: rec.client ? "" : "muted" }),
+        detailRow(
+          "Account",
+          rec.username
+            ? esc(rec.username) + (rec.user_id ? ' <span class="mono" style="color:var(--ink-3)">#' + esc(rec.user_id) + "</span>" : "")
+            : "—",
+          { cls: rec.username ? "" : "muted" }
+        ),
         detailRow("App", esc(rec.app || "—"), { cls: rec.app ? "" : "muted" }),
         detailRow("User-Agent", esc(rec.user_agent || "—"), {
           wrap: true,
@@ -3705,7 +3728,7 @@
       }
       let html =
         "<table><thead><tr>" +
-        "<th>User</th><th>Email</th><th>Enabled</th><th>Keys</th><th>Actions</th>" +
+        "<th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Keys</th><th>Actions</th>" +
         "</tr></thead><tbody>";
       lastUsers.forEach((u) => {
         const keys = u.keys || [];
@@ -3730,17 +3753,36 @@
           });
           keysHtml += "</ul>";
         }
+        const status = u.status || (u.enabled ? "active" : "disabled");
+        const statusPill =
+          status === "active"
+            ? '<span class="pill ok">active</span>'
+            : status === "pending"
+              ? '<span class="pill warn">pending</span>'
+              : '<span class="pill err">disabled</span>';
+        const role = u.role || "user";
+        const roleSel =
+          '<select class="filter-input" style="height:24px;padding:0 6px;font-size:11px;max-width:90px" data-set-role="' +
+          Number(u.id) +
+          '" aria-label="Role for ' +
+          esc(u.name) +
+          '">' +
+          '<option value="user"' + (role === "user" ? " selected" : "") + ">user</option>" +
+          '<option value="admin"' + (role === "admin" ? " selected" : "") + ">admin</option>" +
+          "</select>";
+        const approveBtn =
+          status === "pending"
+            ? '<button type="button" class="btn-ops primary" data-approve-user="' + Number(u.id) + '">Approve</button>'
+            : "";
         html +=
           "<tr>" +
           "<td><b>" + esc(u.name) + '</b> <span class="mono" style="color:var(--ink-3)">#' + Number(u.id) + "</span></td>" +
           '<td class="mono">' + esc(u.email || "—") + "</td>" +
-          "<td>" +
-          (u.enabled
-            ? '<span class="pill ok">on</span>'
-            : '<span class="pill err">off</span>') +
-          "</td>" +
+          "<td>" + roleSel + "</td>" +
+          "<td>" + statusPill + "</td>" +
           "<td>" + keysHtml + "</td>" +
           '<td><div class="user-actions">' +
+          approveBtn +
           '<button type="button" class="btn-ops" data-toggle-user="' + Number(u.id) + '" data-next="' + (u.enabled ? "0" : "1") + '">' +
           (u.enabled ? "Disable" : "Enable") +
           "</button>" +
@@ -3860,6 +3902,38 @@
       }
     }
 
+    async function approveUser(userId) {
+      try {
+        const res = await apiFetch("/api/admin/users/" + Number(userId), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approve: true }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        showToast("ok", "User approved");
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Approve failed", e.message || String(e));
+      }
+    }
+
+    async function setUserRole(userId, role) {
+      try {
+        const res = await apiFetch("/api/admin/users/" + Number(userId), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: role }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        showToast("ok", "Role set to " + role);
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Role update failed", e.message || String(e));
+      }
+    }
+
     async function deleteUser(userId) {
       if (!confirm("Delete this user and all their keys?")) return;
       try {
@@ -3900,6 +3974,11 @@
             issueKey(Number(issue.getAttribute("data-issue-key")), "");
             return;
           }
+          const approve = e.target.closest("[data-approve-user]");
+          if (approve) {
+            approveUser(Number(approve.getAttribute("data-approve-user")));
+            return;
+          }
           const toggle = e.target.closest("[data-toggle-user]");
           if (toggle) {
             toggleUser(
@@ -3910,6 +3989,12 @@
           }
           const del = e.target.closest("[data-delete-user]");
           if (del) deleteUser(Number(del.getAttribute("data-delete-user")));
+        });
+        wrap.addEventListener("change", (e) => {
+          const sel = e.target.closest("[data-set-role]");
+          if (sel) {
+            setUserRole(Number(sel.getAttribute("data-set-role")), sel.value || "user");
+          }
         });
       }
     })();
@@ -4200,6 +4285,23 @@
     }
 
     window.addEventListener("resize", () => drawChart(lastLatency));
+
+    /* Best-effort: non-admin session users are sent to the portal.
+       Server APIs still enforce roles; this only improves UX. */
+    (async function maybeRedirectNonAdmin() {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "same-origin" });
+        if (!res.ok) return;
+        const body = await res.json().catch(() => ({}));
+        const u = body && body.user;
+        if (!u) return;
+        if (u.role !== "admin") {
+          // Logged in as a regular user — portal is the right home.
+          window.location.replace("/portal");
+        }
+      } catch (_) { /* no session or offline — stay on dashboard */ }
+    })();
+
     fetchInfo();
     refresh();
     setInterval(refresh, 2000);

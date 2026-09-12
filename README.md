@@ -33,6 +33,7 @@ Monochrome print-style UI (paper grain + stipple) with Overview / Providers / Tr
 - Optional token cost estimation (USD) from configured rates — defaults stay at 0; no vendor prices are invented.
 - Optional LAN gateway key (`UNIFY_GATEWAY_KEY`) for multi-machine access on a private network.
 - Multi-user API keys: issue per-user `sk-unify-…` keys for LAN machines (hashed at rest, shown once).
+- User portal at `/portal`: password login, self-registration (pending approval), role separation (`admin`/`user`), own-key management.
 - Optional gateway rate limits: per-client requests/minute and a global concurrency cap on `/v1/*` (HTTP 429 + `Retry-After`).
 - Provider admin API: list, enable/disable, upstream test, config hot-reload.
 - Dashboard ops: toggle providers, test upstream, reload config, filter logs, manage users and keys.
@@ -173,7 +174,8 @@ List the same model id under only one enabled provider. The first match wins.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/healthz` | Liveness |
-| GET | `/dashboard` | Web UI |
+| GET | `/dashboard` | Admin web UI |
+| GET | `/portal` | User portal (login / register / keys) |
 | GET | `/api/info` | Service name, version, host, auth_required |
 | GET | `/api/status` | Concurrency, latency series, tokens, models |
 | GET | `/api/history` | Recent completed requests |
@@ -182,6 +184,14 @@ List the same model id under only one enabled provider. The first match wins.
 | PATCH | `/api/providers/{id}` | Toggle `enabled` (YAML write-back + in-memory) |
 | POST | `/api/providers/{id}/test` | Upstream ping (`status_code`, `latency_ms`) |
 | POST | `/api/admin/reload` | Hot-reload config from startup path |
+| POST | `/api/auth/register` | Self-service signup (pending) |
+| POST | `/api/auth/login` | Password login → session cookie |
+| POST | `/api/auth/logout` | Clear session |
+| GET | `/api/auth/me` | Current session user |
+| GET | `/api/me/keys` | List own API keys |
+| POST | `/api/me/keys` | Create own API key (raw once) |
+| POST | `/api/me/keys/{id}/revoke` | Revoke own key |
+| GET | `/api/me/usage` | Recent personal token/request totals |
 | GET | `/v1/models` | Combined model catalog |
 | POST | `/v1/chat/completions` | OpenAI chat (supports `stream`) |
 | POST | `/v1/messages` | Anthropic messages (supports `stream`) |
@@ -317,41 +327,108 @@ python scripts/print_lan_urls.py
 
 Full multi-machine guide (firewall, env vars, IDE tools, troubleshooting): [docs/LAN.md](./docs/LAN.md).
 
-## Multi-user API keys
+## Accounts & portal
 
-When several machines share one gateway, give each person their own key instead of the master `UNIFY_GATEWAY_KEY`.
+LAN accounts support password login, roles (`admin` / `user`), and approval workflow. Per-user API keys remain hashed at rest (SHA-256) and are shown once.
 
-Keys are stored only as SHA-256 hashes in SQLite (`data/unify_users.db`, override with `UNIFY_USERS_DB`). The raw key is returned once at creation and never listed again. Format: `sk-unify-<32 hex>`.
+### Roles and status
 
-### Dashboard
+| Field | Values | Notes |
+|-------|--------|--------|
+| `role` | `admin`, `user` (default) | Admins can open `/dashboard` and `/api/admin/*` via session |
+| `status` | `pending`, `active`, `disabled` | Pending/disabled cannot login or use API keys |
 
-Open **Users** (shortcut `5`):
+Passwords are stored as scrypt hashes (`scrypt$n$r$p$salt$hash`). Sessions live in SQLite (`sessions` table) and are delivered as an `HttpOnly` + `SameSite=Lax` cookie named `unify_session` (7-day expiry).
 
-1. **Create user** (name, optional email/note).
-2. **Issue key** — copy the raw key from the one-time modal.
-3. **Revoke** or **Disable** when a machine is retired.
+### User portal
+
+Open [http://127.0.0.1:8787/portal](http://127.0.0.1:8787/portal):
+
+1. **Register** — creates a `pending` account.
+2. An admin **approves** the account (dashboard Users panel → Approve).
+3. **Login** — session cookie; manage own API keys and view recent usage.
+4. Admins see a link back to `/dashboard`. Non-admin sessions are redirected off the admin UI (client-side; APIs still enforce roles).
+
+### Bootstrap the first admin
+
+When the users DB is empty, pick one:
+
+```bash
+# CLI (recommended)
+python scripts/create_admin.py --name alice --email alice@example.com
+# password is prompted; or pass --password 'min-8-chars'
+```
+
+```bash
+# Localhost admin API (no gateway key set)
+curl -X POST http://127.0.0.1:8787/api/admin/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"alice","email":"alice@example.com","password":"change-me-1","role":"admin"}'
+```
+
+With a master gateway key set, create the first admin using that key:
+
+```bash
+curl -X POST http://127.0.0.1:8787/api/admin/users \
+  -H "Authorization: Bearer $UNIFY_GATEWAY_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"alice","email":"alice@example.com","password":"change-me-1","role":"admin"}'
+```
+
+### How to approve a user
+
+1. Open **Users** on the dashboard (shortcut `5`), or call the API.
+2. Find the row with status `pending`.
+3. Click **Approve** — or PATCH:
+
+```bash
+curl -X PATCH http://127.0.0.1:8787/api/admin/users/<id> \
+  -H "Authorization: Bearer $UNIFY_GATEWAY_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"approve": true}'
+```
+
+Also supported on the same PATCH: `{"role":"admin"|"user"}`, `{"status":"pending"|"active"|"disabled"}`, `{"enabled":true|false}`, `{"password":"..."}`.
 
 ### Admin API
 
-Protected by the master gateway key when `UNIFY_GATEWAY_KEY` / `auth.api_key` is set. Without a master key, these endpoints are **localhost-only**.
+Protected by the master gateway key when `UNIFY_GATEWAY_KEY` / `auth.api_key` is set, **or** by an `admin` session cookie. Without a master key, these endpoints are **localhost-only** (bootstrap).
 
 | Method | Path | Body |
 |--------|------|------|
 | GET | `/api/admin/users` | — |
-| POST | `/api/admin/users` | `{"name","email?","note?"}` |
-| PATCH | `/api/admin/users/{id}` | `{"enabled": true\|false}` |
+| POST | `/api/admin/users` | `{"name","email?","note?","password?","role?","status?"}` |
+| PATCH | `/api/admin/users/{id}` | `{"approve"?,"status"?,"role"?,"enabled"?,"password"?}` |
 | DELETE | `/api/admin/users/{id}` | — |
 | GET | `/api/admin/keys` | — |
 | POST | `/api/admin/keys` | `{"user_id","name?"}` → returns `raw_key` once |
 | POST | `/api/admin/keys/{id}/revoke` | — |
 
+### Multi-user API keys
+
+When several machines share one gateway, give each person their own key instead of the master `UNIFY_GATEWAY_KEY`.
+
+Keys are stored only as SHA-256 hashes in SQLite (`data/unify_users.db`, override with `UNIFY_USERS_DB`). The raw key is returned once at creation and never listed again. Format: `sk-unify-<32 hex>`.
+
+Users can also create/revoke their own keys from `/portal` (`/api/me/keys`). API keys are only issued for `active` accounts.
+
+### Dashboard Users panel
+
+Open **Users** (shortcut `5`):
+
+1. **Create user** (name, optional email/note; add `password`/`role` via API if they need portal login).
+2. **Approve** pending accounts; set **Role** (`user`/`admin`); **Disable** or **Delete**.
+3. **Issue key** — copy the raw key from the one-time modal.
+4. Traffic/Logs tables show an **Account** column when the request was made with a user key.
+
 ### Client auth
 
 User keys work on `/v1/*` only (`Authorization: Bearer sk-unify-…` or `x-api-key`). They do **not** open `/api/status` or admin routes.
 
-- Disabled user or revoked key → `401`.
+- Pending or disabled user, or revoked key → `401`.
 - If no master key and no user keys exist, `/v1/*` stays open (backward compatible).
 - Once any active user key exists, `/v1/*` requires a key (master or user).
+- `/api/auth/*` stays open so the portal login page works behind a gateway key.
 
 ## Project layout
 
@@ -362,11 +439,14 @@ unify_llm/
   registry.py         # Model → provider routing
   monitor.py          # Concurrency, tokens, latency series
   convert.py          # OpenAI ↔ Anthropic conversion
+  users.py            # Users, passwords, sessions, API keys
   adapters/           # Upstream HTTP adapters
   static/dashboard.html
+  static/portal.html
 scripts/
   smoke.py
   bench.py
+  create_admin.py
   print_lan_urls.py
 main.py
 config.example.yaml

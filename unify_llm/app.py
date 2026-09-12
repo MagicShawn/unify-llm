@@ -21,7 +21,11 @@ from .monitor import Monitor, StreamUsageSniffer, extract_usage
 from .rate_limit import RateLimiter
 from .registry import Registry, ResolvedRoute
 from .store import StatsStore
-from .users import UserStore
+from .users import (
+    SESSION_COOKIE,
+    SESSION_TTL_SECONDS,
+    UserStore,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_STATS_DB = Path("data") / "unify_stats.db"
@@ -360,6 +364,62 @@ def _request_user_meta(request: Request) -> tuple[str, str]:
     return str(user_id), str(username)
 
 
+def _session_auth_error(message: str | None = None) -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        content={
+            "error": {
+                "message": message or "Not signed in. Log in at /portal.",
+                "type": "AuthenticationError",
+            }
+        },
+    )
+
+
+def _resolve_session(state: AppState, request: Request) -> dict[str, Any] | None:
+    """Look up the session cookie and attach user meta onto request.state."""
+    cookie = request.cookies.get(SESSION_COOKIE) or ""
+    if not cookie or state.users is None:
+        return None
+    try:
+        session = state.users.get_session(cookie)
+    except Exception:  # noqa: BLE001
+        return None
+    if session is None:
+        return None
+    request.state.session = session
+    request.state.user_id = session["user_id"]
+    request.state.username = session["user"]["name"]
+    request.state.role = session["user"].get("role") or "user"
+    return session
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        samesite="lax",
+        path="/",
+        secure=False,  # LAN HTTP gateway
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(key=SESSION_COOKIE, path="/")
+
+
+def _public_user(user: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": user.get("id"),
+        "name": user.get("name"),
+        "email": user.get("email") or "",
+        "role": user.get("role") or "user",
+        "status": user.get("status") or "active",
+    }
+
+
 def create_app(
     config_path: str | Path | None = None,
     config: AppConfig | None = None,
@@ -397,15 +457,28 @@ def create_app(
             allow_headers=["*"],
         )
 
-    # Auth: master gateway key and/or per-user API keys.
+    # Auth: master gateway key, per-user API keys, and session cookies.
+    # - /api/auth/*: open (login/register/logout/me-by-session).
+    # - /api/me/*: requires an active session cookie (any role).
     # - /v1/*: master key OR a valid user key. Open when neither is configured.
-    # - /api/admin/users* and /api/admin/keys*: master key if set; else localhost-only.
-    # - other /api/*: master key when set (user keys never grant admin/status access).
+    # - /api/admin/*: master key OR admin session OR localhost when no master key.
+    # - other /api/*: master key, or admin session, when one is set.
     @app.middleware("http")
     async def gateway_auth(request: Request, call_next):
         path = request.url.path
         protected = path.startswith(("/v1/", "/api/"))
         if not protected:
+            return await call_next(request)
+
+        # Portal auth endpoints must stay reachable without a gateway key.
+        if path.startswith("/api/auth/"):
+            _resolve_session(state, request)
+            return await call_next(request)
+
+        # Self-service endpoints: any active session.
+        if path.startswith("/api/me/") or path == "/api/me":
+            if _resolve_session(state, request) is None:
+                return _session_auth_error()
             return await call_next(request)
 
         client_key = _extract_client_key(request)
@@ -414,6 +487,16 @@ def create_app(
 
         # Master gateway key always grants full access.
         if gateway_key and client_key == gateway_key:
+            return await call_next(request)
+
+        # Admin session cookie grants dashboard + admin API access.
+        # Not applied to /v1/* — model calls still need a master or user API key.
+        session = _resolve_session(state, request)
+        if (
+            session is not None
+            and not is_v1
+            and session["user"].get("role") == "admin"
+        ):
             return await call_next(request)
 
         # User/key admin without a master key → localhost only (v1 policy).
@@ -704,15 +787,24 @@ def create_app(
                 {"error": {"message": "Field 'name' is required"}},
                 status_code=400,
             )
+        role = str(body.get("role") or "user")
+        status = str(body.get("status") or "active")
+        password = body.get("password")
         try:
             user = users_store.create_user(
                 name=str(name),
                 email=body.get("email"),
                 note=str(body.get("note") or ""),
+                password=str(password) if password else None,
+                role=role,
+                status=status,
             )
         except ValueError as e:
             return JSONResponse({"error": {"message": str(e)}}, status_code=400)
-        state.monitor.log("info", f"user created id={user['id']} name={user['name']}")
+        state.monitor.log(
+            "info",
+            f"user created id={user['id']} name={user['name']} role={user['role']} status={user['status']}",
+        )
         return JSONResponse({"ok": True, "user": user}, status_code=201)
 
     @app.patch("/api/admin/users/{user_id}")
@@ -727,20 +819,42 @@ def create_app(
             body = await request.json()
         except Exception:
             return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
-        if "enabled" not in body:
+        if not isinstance(body, dict):
+            return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        allowed = {"enabled", "role", "status", "approve", "password"}
+        if not any(k in body for k in allowed):
             return JSONResponse(
-                {"error": {"message": "Only field 'enabled' is supported"}},
+                {"error": {"message": f"Supported fields: {sorted(allowed)}"}},
                 status_code=400,
             )
-        user = users_store.set_user_enabled(user_id, bool(body["enabled"]))
+        user: dict[str, Any] | None = None
+        try:
+            if body.get("approve"):
+                user = users_store.approve_user(user_id)
+            elif "status" in body:
+                user = users_store.set_status(user_id, str(body["status"]))
+            elif "enabled" in body:
+                user = users_store.set_user_enabled(user_id, bool(body["enabled"]))
+            if "role" in body:
+                user = users_store.set_role(user_id, str(body["role"]))
+            if "password" in body and body["password"]:
+                user = users_store.set_password(user_id, str(body["password"]))
+        except ValueError as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=400)
         if user is None:
             return JSONResponse(
                 {"error": {"message": f"Unknown user id: {user_id}"}},
                 status_code=404,
             )
+        # Invalidate sessions when the account is no longer active.
+        if user.get("status") != "active":
+            try:
+                users_store.delete_sessions_for_user(user_id)
+            except Exception:  # noqa: BLE001
+                pass
         state.monitor.log(
             "info",
-            f"user {user_id} {'enabled' if user['enabled'] else 'disabled'}",
+            f"user {user_id} role={user.get('role')} status={user.get('status')}",
         )
         return JSONResponse({"ok": True, "user": user})
 
@@ -822,6 +936,211 @@ def create_app(
             )
         state.monitor.log("info", f"api key revoked id={key_id}")
         return JSONResponse({"ok": True, "key": meta})
+
+    # ---------- session auth + user portal ----------
+
+    @app.post("/api/auth/register")
+    async def auth_register(request: Request) -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        name = str(body.get("name") or "").strip()
+        email = str(body.get("email") or "").strip()
+        password = str(body.get("password") or "")
+        if not name or not email or not password:
+            return JSONResponse(
+                {"error": {"message": "Fields 'name', 'email', and 'password' are required"}},
+                status_code=400,
+            )
+        try:
+            user = users_store.register_user(name, email, password)
+        except ValueError as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=400)
+        state.monitor.log("info", f"user registered id={user['id']} email={user['email']}")
+        return JSONResponse(
+            {
+                "ok": True,
+                "user": _public_user(user),
+                "message": "Account created. Wait for an admin to approve before signing in.",
+            },
+            status_code=201,
+        )
+
+    @app.post("/api/auth/login")
+    async def auth_login(request: Request) -> Response:
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        login = str(body.get("email") or body.get("login") or "").strip()
+        password = str(body.get("password") or "")
+        if not login or not password:
+            return JSONResponse(
+                {"error": {"message": "Fields 'email' and 'password' are required"}},
+                status_code=400,
+            )
+        user = users_store.authenticate_password(login, password)
+        if user is None:
+            # Distinguish pending vs bad credentials without leaking password state.
+            by_email = users_store.get_user_by_email(login)
+            if by_email is not None and by_email.get("status") == "pending":
+                return JSONResponse(
+                    {
+                        "error": {
+                            "message": "Account pending approval. An admin must activate it first.",
+                            "type": "ForbiddenError",
+                        }
+                    },
+                    status_code=403,
+                )
+            return JSONResponse(
+                {
+                    "error": {
+                        "message": "Invalid email or password.",
+                        "type": "AuthenticationError",
+                    }
+                },
+                status_code=401,
+            )
+        token = users_store.create_session(user["id"])
+        resp = JSONResponse({"ok": True, "user": _public_user(user)})
+        _set_session_cookie(resp, token)
+        state.monitor.log("info", f"user login id={user['id']} name={user['name']}")
+        return resp
+
+    @app.post("/api/auth/logout")
+    async def auth_logout(request: Request) -> Response:
+        users_store = _users_ready()
+        cookie = request.cookies.get(SESSION_COOKIE) or ""
+        if users_store is not None and cookie:
+            try:
+                users_store.delete_session(cookie)
+            except Exception:  # noqa: BLE001
+                pass
+        resp = JSONResponse({"ok": True})
+        _clear_session_cookie(resp)
+        return resp
+
+    @app.get("/api/auth/me")
+    async def auth_me(request: Request) -> Response:
+        session = _resolve_session(state, request)
+        if session is None:
+            return _session_auth_error()
+        return JSONResponse({"ok": True, "user": _public_user(session["user"])})
+
+    def _require_me(request: Request) -> dict[str, Any] | None:
+        return getattr(request.state, "session", None) or None
+
+    @app.get("/api/me/keys")
+    async def me_list_keys(request: Request) -> Response:
+        session = _require_me(request)
+        if session is None:
+            return _session_auth_error()
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        keys = users_store.list_keys_for_user(session["user_id"])
+        return JSONResponse({"ok": True, "keys": keys, "total": len(keys)})
+
+    @app.post("/api/me/keys")
+    async def me_create_key(request: Request) -> Response:
+        session = _require_me(request)
+        if session is None:
+            return _session_auth_error()
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        name = ""
+        if isinstance(body, dict):
+            name = str(body.get("name") or "")
+        try:
+            meta = users_store.create_api_key(session["user_id"], name=name)
+        except ValueError as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=400)
+        state.monitor.log(
+            "info",
+            f"api key issued user_id={session['user_id']} prefix={meta.get('key_prefix', '')}",
+        )
+        return JSONResponse({"ok": True, "key": meta}, status_code=201)
+
+    @app.post("/api/me/keys/{key_id}/revoke")
+    async def me_revoke_key(key_id: int, request: Request) -> Response:
+        session = _require_me(request)
+        if session is None:
+            return _session_auth_error()
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        keys = users_store.list_keys_for_user(session["user_id"])
+        if not any(int(k["id"]) == int(key_id) for k in keys):
+            return JSONResponse(
+                {"error": {"message": f"Unknown key id: {key_id}"}},
+                status_code=404,
+            )
+        meta = users_store.revoke_key(key_id)
+        if meta is None:
+            return JSONResponse(
+                {"error": {"message": f"Unknown key id: {key_id}"}},
+                status_code=404,
+            )
+        state.monitor.log("info", f"api key revoked id={key_id} by user={session['user_id']}")
+        return JSONResponse({"ok": True, "key": meta})
+
+    @app.get("/api/me/usage")
+    async def me_usage(request: Request) -> Response:
+        """Cheap personal usage: filter recent monitor history by user_id."""
+        session = _require_me(request)
+        if session is None:
+            return _session_auth_error()
+        uid = str(session["user_id"])
+        hist = state.monitor.history(limit=200)
+        items = [r for r in hist.get("items") or [] if str(r.get("user_id") or "") == uid]
+        prompt = sum(int(r.get("prompt_tokens") or 0) for r in items)
+        completion = sum(int(r.get("completion_tokens") or 0) for r in items)
+        errors = sum(1 for r in items if r.get("status") != "ok")
+        cost = sum(float(r.get("estimated_cost_usd") or 0.0) for r in items)
+        return JSONResponse(
+            {
+                "ok": True,
+                "user_id": session["user_id"],
+                "recent_requests": len(items),
+                "errors": errors,
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "estimated_cost_usd": round(cost, 12),
+                "items": items[:20],
+            }
+        )
 
     @app.get("/api/providers")
     async def list_providers() -> dict[str, Any]:
@@ -925,6 +1244,16 @@ def create_app(
     @app.get("/dashboard")
     async def dashboard() -> Response:
         html_path = STATIC_DIR / "dashboard.html"
+        return Response(html_path.read_text(encoding="utf-8"), media_type="text/html")
+
+    @app.get("/portal")
+    async def portal() -> Response:
+        html_path = STATIC_DIR / "portal.html"
+        if not html_path.exists():
+            return JSONResponse(
+                {"error": {"message": "Portal UI not installed", "type": "ConfigError"}},
+                status_code=404,
+            )
         return Response(html_path.read_text(encoding="utf-8"), media_type="text/html")
 
     # ---------- shared proxy executor ----------
