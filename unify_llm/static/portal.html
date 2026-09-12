@@ -286,6 +286,15 @@
       border-radius: var(--radius-sm);
       background: var(--bg-soft);
       padding: 14px 16px;
+      transition: transform .2s ease, box-shadow .25s ease, border-color .25s ease;
+    }
+    .usage-card.meter-tile:hover {
+      transform: translateY(-1px);
+      border-color: color-mix(in srgb, var(--ink) 12%, var(--line));
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07);
+    }
+    [data-theme="dark"] .usage-card.meter-tile:hover {
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
     }
     .usage-card .k {
       font-family: var(--font);
@@ -302,6 +311,260 @@
       letter-spacing: -0.02em;
       word-break: break-all;
       line-height: 1.2;
+      transition: color .3s ease;
+    }
+    .usage-card.tone-ok .v { color: var(--ok); }
+    .usage-card.tone-warn .v { color: var(--warn); }
+    .usage-card.tone-err .v { color: var(--err); }
+    .usage-card.tone-free .v { color: var(--ink-3); }
+
+    /* ── Points product meter ── */
+    .points-hero {
+      margin-top: 4px;
+      padding: 18px 18px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--bg-panel);
+      box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 10px 28px rgba(0, 0, 0, 0.06);
+      transition: box-shadow .3s ease, border-color .3s ease;
+      --meter: var(--ink-3);
+    }
+    [data-theme="dark"] .points-hero {
+      box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.35),
+        0 12px 32px rgba(0, 0, 0, 0.45);
+    }
+    .points-hero:hover {
+      border-color: color-mix(in srgb, var(--meter) 28%, var(--line));
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.05),
+        0 14px 36px rgba(0, 0, 0, 0.08);
+    }
+    [data-theme="dark"] .points-hero:hover {
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.4),
+        0 16px 40px rgba(0, 0, 0, 0.55);
+    }
+    .points-hero[data-tone="ok"] { --meter: var(--ok); }
+    .points-hero[data-tone="warn"] { --meter: var(--warn); }
+    .points-hero[data-tone="err"] { --meter: var(--err); }
+    .points-hero[data-tone="free"] { --meter: var(--ink-3); }
+    .points-hero-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .points-hero-head .k {
+      font-family: var(--font);
+      font-size: 12.5px;
+      color: var(--ink-3);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .points-hero-main {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 2px 0 12px;
+    }
+    .points-remaining-val {
+      font-family: var(--mono);
+      font-size: 36px;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+      color: var(--meter);
+      transition: color .3s ease;
+    }
+    .points-remaining-pct {
+      font-size: 13px;
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+    .meter {
+      height: 12px;
+      border-radius: 999px;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      overflow: hidden;
+      position: relative;
+    }
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: var(--meter);
+      transition:
+        width .38s cubic-bezier(.22, .61, .36, 1),
+        background-color .3s ease;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    }
+    [data-theme="dark"] .meter-fill {
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .meter-fill::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        100deg,
+        transparent 20%,
+        rgba(255, 255, 255, 0.22) 50%,
+        transparent 80%
+      );
+      transform: translateX(-100%);
+      animation: meter-shine 3.2s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes meter-shine {
+      0% { transform: translateX(-100%); opacity: 0; }
+      35% { opacity: 1; }
+      70%, 100% { transform: translateX(100%); opacity: 0; }
+    }
+    .points-label-row {
+      margin-top: 8px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .points-split {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .split-head {
+      font-size: 12px;
+      color: var(--ink-3);
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .split-bar {
+      display: flex;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+    }
+    .split-spent {
+      width: 0%;
+      background: color-mix(in srgb, var(--ink) 68%, var(--ink-3));
+      transition: width .38s cubic-bezier(.22, .61, .36, 1);
+    }
+    .split-remain {
+      width: 0%;
+      background: var(--meter);
+      transition:
+        width .38s cubic-bezier(.22, .61, .36, 1),
+        background-color .3s ease;
+    }
+    .split-legend {
+      display: flex;
+      gap: 16px 22px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--ink-2);
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .legend-item b {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .dot.spent {
+      background: color-mix(in srgb, var(--ink) 68%, var(--ink-3));
+    }
+    .dot.remain { background: var(--meter); }
+
+    /* status chip (matches meter tone) */
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink-2);
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .status-chip::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+      flex-shrink: 0;
+    }
+    .status-chip.ok {
+      color: var(--ok);
+      background: var(--ok-soft);
+      border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+    }
+    .status-chip.warn {
+      color: var(--warn);
+      background: var(--warn-soft);
+      border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+    }
+    .status-chip.err {
+      color: var(--err);
+      background: var(--err-soft);
+      border-color: color-mix(in srgb, var(--err) 35%, transparent);
+    }
+    .status-chip.err::before {
+      animation: pulse-dot 1.6s ease-in-out infinite;
+    }
+    .status-chip.free {
+      color: var(--ink-3);
+      background: var(--accent-soft);
+      border-color: var(--line);
+    }
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 40%, transparent); }
+      55% { box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 0%, transparent); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .meter-fill,
+      .split-spent,
+      .split-remain,
+      .usage-card,
+      .usage-card .v,
+      .points-remaining-val {
+        transition: none !important;
+      }
+      .meter-fill::after,
+      .status-chip.err::before {
+        animation: none !important;
+      }
     }
     table {
       width: 100%;
@@ -558,10 +821,10 @@
       <!-- Overview -->
       <div class="portal-panel active" id="panel-overview">
         <div class="usage-grid" style="margin:12px 0">
-          <div class="usage-card"><div class="k">requests (recent)</div><div class="v" id="ovReq">—</div></div>
-          <div class="usage-card"><div class="k">tokens total</div><div class="v" id="ovTok">—</div></div>
-          <div class="usage-card"><div class="k">points left</div><div class="v" id="ovPoints">—</div></div>
-          <div class="usage-card"><div class="k">status</div><div class="v" id="ovStatus" style="font-size:13px">—</div></div>
+          <div class="usage-card meter-tile"><div class="k">requests (recent)</div><div class="v" id="ovReq">—</div></div>
+          <div class="usage-card meter-tile"><div class="k">tokens total</div><div class="v" id="ovTok">—</div></div>
+          <div class="usage-card meter-tile" id="ovPointsCard"><div class="k">points left</div><div class="v" id="ovPoints">—</div></div>
+          <div class="usage-card meter-tile" id="ovStatusCard"><div class="k">status</div><div class="v" id="ovStatus" style="font-size:13px">—</div></div>
         </div>
         <div class="section-title">Available models · 可用模型</div>
         <div class="card" style="padding:0;box-shadow:none" id="modelsWrap">
@@ -713,19 +976,59 @@ Model:     deepseek-flash
 
       <div class="portal-panel" id="panel-points">
       <div class="section-title">Points · 积分</div>
-      <div class="usage-grid" id="pointsGrid">
-        <div class="usage-card"><div class="k">balance</div><div class="v" id="uPoints">—</div></div>
-        <div class="usage-card"><div class="k">spent</div><div class="v" id="uSpent">—</div></div>
-        <div class="usage-card"><div class="k">status</div><div class="v" id="uPointsStatus" style="font-size:13px">—</div></div>
-      </div>
-      <div class="card" style="margin-top:10px;padding:12px 14px" id="pointsProgressCard">
-        <div class="k" style="font-size:12.5px;color:var(--ink-3);margin-bottom:6px">remaining progress · 剩余进度</div>
-        <div style="height:8px;background:var(--bg-soft);border-radius:4px;overflow:hidden">
-          <div id="pointsBar" style="height:100%;width:0%;background:#111;transition:width .35s"></div>
+
+      <!-- Product-style quota meter -->
+      <div class="points-hero" id="pointsProgressCard" data-tone="free">
+        <div class="points-hero-head">
+          <div class="k">remaining · 剩余</div>
+          <span class="status-chip free" id="uPointsStatus">—</span>
         </div>
-        <div class="sub" id="pointsProgressLabel" style="margin-top:6px;font-size:13px">—</div>
+        <div class="points-hero-main">
+          <div class="points-remaining-val" id="uPoints">—</div>
+          <div class="points-remaining-pct" id="pointsRemainingPct"></div>
+        </div>
+        <div
+          class="meter"
+          id="pointsMeter"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+          aria-label="Points remaining"
+        >
+          <div class="meter-fill" id="pointsBar"></div>
+        </div>
+        <div class="points-label-row">
+          <div class="sub" id="pointsProgressLabel" style="margin:0;font-size:13px">—</div>
+        </div>
+        <div class="points-split">
+          <div class="split-head">spent vs remaining · 已用 / 剩余</div>
+          <div class="split-bar" aria-hidden="true">
+            <div class="split-spent" id="pointsSpentBar"></div>
+            <div class="split-remain" id="pointsRemainBar"></div>
+          </div>
+          <div class="split-legend">
+            <div class="legend-item">
+              <i class="dot spent" aria-hidden="true"></i>
+              <span>spent · 已用</span>
+              <b id="uSpent">—</b>
+            </div>
+            <div class="legend-item">
+              <i class="dot remain" aria-hidden="true"></i>
+              <span>balance · 余额</span>
+              <b id="uPointsBalance">—</b>
+            </div>
+          </div>
+        </div>
       </div>
-      <p class="sub" id="pointsHint" style="margin:8px 0 0;display:none"></p>
+
+      <div class="usage-grid" id="pointsGrid" style="margin-top:10px">
+        <div class="usage-card meter-tile" id="tileGranted"><div class="k">granted</div><div class="v" id="uGranted" style="font-size:20px">—</div></div>
+        <div class="usage-card meter-tile" id="tileUsedPct"><div class="k">used</div><div class="v" id="uUsedPct" style="font-size:20px">—</div></div>
+        <div class="usage-card meter-tile" id="tileRemainPct"><div class="k">remaining %</div><div class="v" id="uRemainPct" style="font-size:20px">—</div></div>
+      </div>
+
+      <p class="sub" id="pointsHint" style="margin:10px 0 0;display:none"></p>
       <details id="pointsLogDetails" style="margin-top:12px">
         <summary style="cursor:pointer;color:var(--ink-2);font-size:13px;padding:6px 0">Recent deductions · 扣费明细</summary>
         <div class="card table-wrap" style="margin-top:8px;padding:0;box-shadow:none" id="pointsLogWrap">
@@ -1150,6 +1453,37 @@ Model:     deepseek-flash
       });
     });
 
+    /* Points health: green >30% remaining, amber 10–30%, red <10% or blocked; gray free/unlimited */
+    function pointsHealth(bal, spent, chargingEnabled, unlimited) {
+      if (!chargingEnabled) {
+        return { tone: "free", label: "free", remainPct: null, usedPct: null, grant: null };
+      }
+      if (unlimited) {
+        return { tone: "free", label: "unlimited", remainPct: null, usedPct: null, grant: null };
+      }
+      const b = Number(bal) || 0;
+      const s = Number(spent) || 0;
+      const grant = Math.max(0, b) + s;
+      const remainPct = grant > 0 ? Math.min(100, (Math.max(0, b) / grant) * 100) : 0;
+      const usedPct = grant > 0 ? Math.min(100, 100 - remainPct) : 0;
+      let tone = "ok";
+      let label = "active";
+      if (b <= 0) {
+        tone = "err";
+        label = "blocked";
+      } else if (remainPct < 10) {
+        tone = "err";
+      } else if (remainPct < 30) {
+        tone = "warn";
+      }
+      return { tone, label, remainPct, usedPct, grant };
+    }
+    function setToneClass(el, tone) {
+      if (!el) return;
+      el.classList.remove("tone-ok", "tone-warn", "tone-err", "tone-free");
+      el.classList.add("tone-" + tone);
+    }
+
     async function refreshUsage() {
       const { res, body } = await api("/api/me/usage");
       if (!res.ok) return;
@@ -1166,23 +1500,24 @@ Model:     deepseek-flash
         const usd = Number(body.estimated_cost_usd || 0);
         uc.textContent = usd > 0 ? "$" + usd.toFixed(usd < 0.01 ? 4 : 2) : "—";
       }
+      // Points health (shared by hero meter + overview tiles)
+      const bal = Number(body.points_balance || 0);
+      const spent = Number(body.points_spent || 0);
+      const charging = !!body.points_charging_enabled;
+      const health = pointsHealth(bal, spent, charging, unlimited);
+      const freeOrUnlimited = !charging || unlimited;
+      const balLabel = unlimited ? "∞" : fmtPts(Math.max(0, bal));
       // Overview tiles
       const ovR = $("ovReq");
       if (ovR) ovR.textContent = fmtN(body.recent_requests || 0);
       const ovT = $("ovTok");
       if (ovT) ovT.textContent = fmtN(tokTotal);
       const ovP = $("ovPoints");
-      if (ovP) ovP.textContent = unlimited ? "∞" : fmtPts(body.points_balance || 0);
+      if (ovP) ovP.textContent = balLabel;
+      setToneClass($("ovPointsCard"), health.tone);
       const ovS = $("ovStatus");
-      if (ovS) {
-        ovS.textContent = !body.points_charging_enabled
-          ? "free"
-          : unlimited
-            ? "unlimited"
-            : Number(body.points_balance || 0) <= 0
-              ? "blocked"
-              : "active";
-      }
+      if (ovS) ovS.textContent = health.label;
+      setToneClass($("ovStatusCard"), health.tone);
       // request table
       const iwrap = $("usageItemsWrap");
       if (iwrap) {
@@ -1225,25 +1560,23 @@ Model:     deepseek-flash
             "</tbody></table>";
         }
       }
-      $("uPoints").textContent = unlimited ? "∞" : fmtPts(body.points_balance || 0);
-      $("uSpent").textContent = fmtPts(body.points_spent || 0);
+      // Hero product meter
+      const hero = $("pointsProgressCard");
+      if (hero) hero.setAttribute("data-tone", health.tone);
+      $("uPoints").textContent = balLabel;
+      const uBalEl = $("uPointsBalance");
+      if (uBalEl) uBalEl.textContent = balLabel;
+      $("uSpent").textContent = fmtPts(spent);
       const statusEl = $("uPointsStatus");
       if (statusEl) {
-        if (!body.points_charging_enabled) {
-          statusEl.textContent = "free";
-          statusEl.className = "v";
-        } else if (unlimited) {
-          statusEl.textContent = "unlimited";
-          statusEl.className = "v";
-        } else if (Number(body.points_balance || 0) <= 0) {
-          statusEl.textContent = "blocked";
-          statusEl.className = "v";
-          statusEl.style.color = "var(--err)";
-        } else {
-          statusEl.textContent = "active";
-          statusEl.className = "v";
-          statusEl.style.color = "";
-        }
+        statusEl.textContent = health.label;
+        statusEl.className = "status-chip " + health.tone;
+      }
+      const remainPctEl = $("pointsRemainingPct");
+      if (remainPctEl) {
+        remainPctEl.textContent = freeOrUnlimited
+          ? ""
+          : Math.round(health.remainPct) + "% of grant remaining";
       }
       const hint = $("pointsHint");
       if (hint) {
@@ -1260,27 +1593,48 @@ Model:     deepseek-flash
             " / 1k completion. Balance −1 = unlimited.";
         }
       }
-      // remaining progress: spent / (balance + spent) when finite
+      // remaining meter: width = % remaining vs granted (balance + spent)
       const bar = $("pointsBar");
       const plabel = $("pointsProgressLabel");
+      const meter = $("pointsMeter");
       if (bar && plabel) {
-        const bal = Number(body.points_balance || 0);
-        const spent = Number(body.points_spent || 0);
-        if (unlimited || !body.points_charging_enabled) {
+        if (freeOrUnlimited) {
           bar.style.width = "100%";
-          bar.style.background = "#888";
+          if (meter) meter.setAttribute("aria-valuenow", "100");
           plabel.textContent = unlimited ? "Unlimited · 不限量" : "Charging off · 未开启计费";
         } else {
-          const grant = Math.max(0, bal) + spent;
-          const pct = grant > 0 ? Math.min(100, Math.round((spent / grant) * 100)) : 0;
-          bar.style.width = pct + "%";
-          bar.style.background = bal <= 0 ? "#a00" : bal < grant * 0.15 ? "#c60" : "#111";
+          const remainW = Math.max(0, Math.min(100, health.remainPct));
+          bar.style.width = remainW + "%";
+          if (meter) meter.setAttribute("aria-valuenow", String(Math.round(remainW)));
           plabel.textContent =
-            pct + "% used · remaining " + fmtPts(Math.max(0, bal)) +
-            " / granted " + fmtPts(grant) +
-            (bal <= 0 ? " · blocked" : "");
+            fmtPts(Math.max(0, bal)) +
+            " / " +
+            fmtPts(health.grant) +
+            " granted" +
+            (health.label === "blocked" ? " · blocked" : health.tone === "warn" ? " · low" : "");
         }
       }
+      // spent (dark) vs remaining (tone) two-tone bar
+      const spentSeg = $("pointsSpentBar");
+      const remainSeg = $("pointsRemainBar");
+      if (spentSeg && remainSeg) {
+        if (freeOrUnlimited) {
+          spentSeg.style.width = "0%";
+          remainSeg.style.width = "100%";
+        } else {
+          spentSeg.style.width = Math.max(0, Math.min(100, health.usedPct)) + "%";
+          remainSeg.style.width = Math.max(0, Math.min(100, health.remainPct)) + "%";
+        }
+      }
+      // compact tiles
+      const uGranted = $("uGranted");
+      if (uGranted) uGranted.textContent = freeOrUnlimited ? (unlimited ? "∞" : "—") : fmtPts(health.grant);
+      const uUsedPct = $("uUsedPct");
+      if (uUsedPct) uUsedPct.textContent = freeOrUnlimited ? "—" : Math.round(health.usedPct) + "%";
+      const uRemainPct = $("uRemainPct");
+      if (uRemainPct) uRemainPct.textContent = freeOrUnlimited ? "—" : Math.round(health.remainPct) + "%";
+      setToneClass($("tileRemainPct"), health.tone);
+      setToneClass($("tileUsedPct"), health.tone === "err" ? "err" : health.tone === "warn" ? "warn" : "ok");
     }
 
     async function refreshPointsLog() {
