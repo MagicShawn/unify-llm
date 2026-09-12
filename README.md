@@ -460,7 +460,7 @@ limits:
 ```
 cost = floor(prompt_tokens/1000 * points_per_1k_prompt)
      + floor(completion_tokens/1000 * points_per_1k_completion)
-# min 1 if any tokens and any rate > 0
+# pure floor — small requests may round down to 0
 ```
 
 When rates are non-zero and a user-key caller has `points_balance == 0`, the request is rejected with **HTTP 402** before the upstream call. Unlimited (`-1`) never blocks. Deduction uses actual usage tokens; stream requests deduct after the stream finishes.

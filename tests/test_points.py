@@ -136,21 +136,17 @@ def test_compute_points_cost_free_when_rates_zero():
 
 
 def test_compute_points_cost_floors():
-    # 1500 prompt @ 1/1k → floor(1.5)=1; 2500 completion @ 2/1k → floor(5)=5
+    # Proportional floor math only — no minimum charge.
     assert compute_points_cost(1500, 2500, 1, 2) == 6
-    # exact multiples
     assert compute_points_cost(2000, 1000, 1, 1) == 3
-    # fractional floors to 0 then min-1 because tokens > 0 and rates > 0
-    assert compute_points_cost(100, 100, 1, 1) == 1
-    # prompt rate only
+    assert compute_points_cost(100, 100, 1, 1) == 0
     assert compute_points_cost(3000, 0, 1, 0) == 3
-    # completion rate only
     assert compute_points_cost(0, 3000, 0, 1) == 3
 
 
-def test_compute_points_cost_min_one_when_any_tokens_and_rates():
-    assert compute_points_cost(1, 0, 0.001, 0) == 1
-    assert compute_points_cost(0, 1, 0, 0.001) == 1
+def test_compute_points_cost_small_requests_round_down():
+    assert compute_points_cost(1, 0, 0.001, 0) == 0
+    assert compute_points_cost(0, 1, 0, 0.001) == 0
     assert compute_points_cost(0, 0, 1, 1) == 0
 
 

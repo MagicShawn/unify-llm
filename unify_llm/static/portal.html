@@ -71,9 +71,12 @@
     }
     a { color: var(--ink); }
     .wrap {
-      max-width: 720px;
+      max-width: 1280px;
       margin: 0 auto;
-      padding: 32px 16px 48px;
+      padding: 24px 24px 48px;
+    }
+    @media (max-width: 720px) {
+      .wrap { padding: 16px 12px 40px; }
     }
     .top {
       display: flex;
@@ -251,32 +254,13 @@
       font-size: 12px;
     }
     .section-title {
-      font-family: var(--mono);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--ink-3);
-      margin: 18px 0 8px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
+      font-family: var(--font);
       font-size: 12px;
-    }
-    th, td {
-      padding: 8px 10px;
-      text-align: left;
-      border-bottom: 1px solid var(--line);
-      vertical-align: middle;
-    }
-    th {
-      font-family: var(--mono);
-      color: var(--ink-3);
-      font-weight: 500;
-      font-size: 10px;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      background: var(--bg-soft);
+      color: var(--ink-3);
+      margin: 22px 0 10px;
     }
     tbody tr:last-child td { border-bottom: none; }
     .mono { font-family: var(--mono); font-size: 11.5px; }
@@ -296,28 +280,55 @@
     }
     .usage-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
     }
     .usage-card {
       border: 1px solid var(--line);
       border-radius: var(--radius-sm);
       background: var(--bg-soft);
-      padding: 10px 12px;
+      padding: 14px 16px;
     }
     .usage-card .k {
-      font-family: var(--mono);
-      font-size: 10px;
+      font-family: var(--font);
+      font-size: 11px;
       color: var(--ink-3);
       text-transform: uppercase;
       letter-spacing: 0.04em;
+      font-weight: 500;
     }
     .usage-card .v {
-      font-size: 18px;
+      font-family: var(--mono);
+      font-size: 22px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
-      margin-top: 2px;
+      margin-top: 4px;
+      letter-spacing: -0.02em;
+      word-break: break-all;
     }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+    th {
+      font-family: var(--font);
+      color: var(--ink-3);
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: var(--bg-soft);
+      position: sticky;
+      top: 0;
+    }
+    .table-wrap { overflow-x: auto; max-width: 100%; }
     .key-raw {
       font-family: var(--mono);
       font-size: 12px;
@@ -541,9 +552,12 @@
         <div class="sub" id="pointsProgressLabel" style="margin-top:6px;font-size:12px">—</div>
       </div>
       <p class="sub" id="pointsHint" style="margin:8px 0 0;display:none"></p>
-      <div class="card" style="margin-top:10px;padding:0;box-shadow:none" id="pointsLogWrap">
-        <div class="empty">No deductions yet · 暂无扣费记录</div>
-      </div>
+      <details id="pointsLogDetails" style="margin-top:12px">
+        <summary style="cursor:pointer;color:var(--ink-3);font-size:12px;padding:6px 0">Recent deductions · 扣费明细</summary>
+        <div class="card table-wrap" style="margin-top:8px;padding:0;box-shadow:none" id="pointsLogWrap">
+          <div class="empty">No deductions yet · 暂无扣费记录</div>
+        </div>
+      </details>
       </div><!-- /points -->
 
       <div class="portal-panel" id="panel-keys">

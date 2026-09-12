@@ -340,12 +340,11 @@ def compute_points_cost(
 ) -> int:
     """Points charged for one successful request.
 
-    Formula (config.limits.points_per_1k_*):
+    Proportional to token usage (config.limits.points_per_1k_*):
       floor(prompt_tokens/1000 * rate_prompt)
       + floor(completion_tokens/1000 * rate_completion)
 
-    0 rates = free (no charge). If any rate > 0 and any tokens were used but
-    the floors sum to 0, charge a minimum of 1 point (not free-riding).
+    0 rates = free. Small requests may round down to 0 (no minimum charge).
     """
     rp = float(rate_prompt or 0.0)
     rc = float(rate_completion or 0.0)
@@ -354,8 +353,6 @@ def compute_points_cost(
     pt = int(prompt_tokens or 0)
     ct = int(completion_tokens or 0)
     total = math.floor(pt / 1000.0 * rp) + math.floor(ct / 1000.0 * rc)
-    if total <= 0 and (pt > 0 or ct > 0):
-        return 1
     return max(0, total)
 
 
