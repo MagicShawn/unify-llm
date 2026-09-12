@@ -273,10 +273,16 @@ python scripts/smoke.py
 # Proxy overhead bench against a local dummy upstream
 python scripts/bench.py mock --requests 200 --concurrency 1,10,30
 
+# Product-readiness concurrency matrix (open / user-key / queue / points)
+# Uses ephemeral port + temp DBs; never touches production :8787
+python scripts/bench_gateway.py --port 8799 --requests 48 --concurrency 1,8,32,64
+
 # Live bench (uses real quota; keep counts small)
 python scripts/bench.py live --model deepseek-flash --protocol openai \
   --concurrency 1,4,8 --requests 8 --max-tokens 8
 ```
+
+Measured numbers and how to interpret them: see [PERFORMANCE.md](PERFORMANCE.md).
 
 ## Security
 

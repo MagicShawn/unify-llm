@@ -233,6 +233,11 @@ class AppState:
                 )
             except (asyncio.TimeoutError, TimeoutError):
                 pass
+        # Flush debounced lifetime totals so a restart does not lose recent counts.
+        try:
+            self.monitor.flush()
+        except Exception:  # noqa: BLE001
+            pass
         if self.http is not None:
             await self.http.aclose()
             self.http = None
@@ -803,6 +808,17 @@ def create_app(
             "lan_ready": state.config.server.host,
             "auth_required": bool(state.config.gateway_api_key()),
         }
+
+    @app.get("/api/limits")
+    async def api_limits() -> dict[str, Any]:
+        """Cheap rate-limit + in-flight snapshot for ops / load tests."""
+        body = state.limiter.status()
+        body["monitor_active"] = state.monitor.active_count()
+        body["effective_active"] = max(
+            int(body.get("active") or 0),
+            int(body.get("monitor_active") or 0),
+        )
+        return body
 
     @app.get("/api/status")
     async def api_status() -> dict[str, Any]:

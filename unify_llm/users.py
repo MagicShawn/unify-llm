@@ -212,6 +212,9 @@ class UserStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        # Throttle last_used_at SQLite commits (auth path runs on the event loop).
+        self._touch_interval = 60.0
+        self._touch_at: dict[int, float] = {}
         self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -771,12 +774,27 @@ class UserStore:
         return _row_key(row) if row else None
 
     def touch_last_used(self, key_id: int) -> None:
+        """Mark a key as recently used. Commits are throttled per key.
+
+        Auth middleware calls this on every /v1/* request; an unthrottled
+        UPDATE+commit serializes the event loop under concurrency.
+        """
+        kid = int(key_id)
+        now = _now()
+        last = self._touch_at.get(kid)
+        if last is not None and (now - last) < self._touch_interval:
+            return
         with self._lock:
             self._conn.execute(
                 "UPDATE api_keys SET last_used_at=? WHERE id=?",
-                (_now(), int(key_id)),
+                (now, kid),
             )
             self._conn.commit()
+        # Cap cache size for LAN-scale key counts.
+        if len(self._touch_at) > 4096:
+            cutoff = now - self._touch_interval
+            self._touch_at = {k: v for k, v in self._touch_at.items() if v >= cutoff}
+        self._touch_at[kid] = now
 
     def authenticate_key(self, raw: str) -> dict[str, Any] | None:
         """Validate a raw API key. Returns user+key meta or None.

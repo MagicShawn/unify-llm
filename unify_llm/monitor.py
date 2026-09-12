@@ -285,6 +285,7 @@ class Monitor:
         series_buckets: int = 60,
         pricing: PricingConfig | None = None,
         store: Any | None = None,
+        persist_interval_seconds: float = 2.0,
     ):
         self._lock = threading.Lock()
         self.started_at = time.time()
@@ -301,6 +302,11 @@ class Monitor:
         self._pricing = pricing
         self.logs = LogBuffer(size=200)
         self._store = store
+        # Debounce SQLite totals writes. Persisting on every request blocks the
+        # event loop under concurrency (WAL commit + lock held in end()).
+        self._persist_interval = max(0.0, float(persist_interval_seconds or 0.0))
+        self._last_persist = time.monotonic()
+        self._dirty_totals = False
         if store is not None:
             self._load_persisted()
 
@@ -318,9 +324,14 @@ class Monitor:
             self._completion_tokens = int(t.get("completion_tokens") or 0)
             self._cost_usd = float(t.get("cost_usd") or 0.0)
 
-    def _persist_locked(self) -> None:
+    def _persist_locked(self, force: bool = False) -> None:
         if self._store is None:
             return
+        now = time.monotonic()
+        if not force and self._persist_interval > 0:
+            if (now - self._last_persist) < self._persist_interval:
+                self._dirty_totals = True
+                return
         try:
             self._store.save_totals(
                 {
@@ -331,8 +342,16 @@ class Monitor:
                     "cost_usd": self._cost_usd,
                 }
             )
+            self._last_persist = now
+            self._dirty_totals = False
         except Exception:  # noqa: BLE001
-            pass
+            self._dirty_totals = True
+
+    def flush(self) -> None:
+        """Force any dirty lifetime totals to the stats store (shutdown / admin)."""
+        with self._lock:
+            if self._dirty_totals or self._store is not None:
+                self._persist_locked(force=True)
 
     def clear_stats(self) -> None:
         """Zero lifetime totals (tokens/cost/errors) and per-provider counters."""
@@ -352,7 +371,7 @@ class Monitor:
                 s.recent.clear()
                 s.last_error = None
                 s.last_error_at = None
-            self._persist_locked()
+            self._persist_locked(force=True)
 
     def clear_logs(self) -> None:
         self.logs.clear()
@@ -666,6 +685,11 @@ class Monitor:
                 "providers": [p.snapshot() for p in self._providers.values()],
                 "logs": self.logs.tail(80),
             }
+
+    def active_count(self) -> int:
+        """Cheap in-flight count for /api/limits (no history/enrichment)."""
+        with self._lock:
+            return self._global_active
 
     def provider_totals(self, provider_id: str) -> dict[str, Any] | None:
         """Counter snapshot for one provider, or None if unknown."""
