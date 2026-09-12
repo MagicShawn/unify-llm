@@ -349,6 +349,19 @@ Open [http://127.0.0.1:8787/portal](http://127.0.0.1:8787/portal):
 3. **Login** — session cookie; manage own API keys and view recent usage.
 4. Admins see a link back to `/dashboard`. Non-admin sessions are redirected off the admin UI (client-side; APIs still enforce roles).
 
+### Account settings
+
+From `/portal` (any signed-in user):
+
+| Setting | Who | Endpoint |
+|---------|-----|----------|
+| Display name | self | `PATCH /api/me` `{"display_name":"..."}` (empty string clears; UI falls back to login name) |
+| Badge (`admin`/`vip`/`beta`/…, max 16 chars) | admin only | `PATCH /api/admin/users/{id}` `{"badge":"..."}` |
+| Change password | self | `POST /api/me/password` `{"old_password","new_password"}` — **session is kept** on the current device |
+| Reset password | admin | `POST /api/admin/users/{id}/password` `{"password":"..."}` — **all sessions** for that user are dropped |
+
+Traffic / Logs **Account** columns show `display_name` (fallback: login name) plus a badge chip when set. `/api/auth/me` returns `display_name` and `badge`.
+
 ### Bootstrap the first admin
 
 When the users DB is empty, pick one:
@@ -388,7 +401,7 @@ curl -X PATCH http://127.0.0.1:8787/api/admin/users/<id> \
   -d '{"approve": true}'
 ```
 
-Also supported on the same PATCH: `{"role":"admin"|"user"}`, `{"status":"pending"|"active"|"disabled"}`, `{"enabled":true|false}`, `{"password":"..."}`.
+Also supported on the same PATCH: `{"role":"admin"|"user"}`, `{"status":"pending"|"active"|"disabled"}`, `{"enabled":true|false}`, `{"password":"..."}`, `{"display_name":"..."}`, `{"badge":"..."}` (badge max 16 chars).
 
 ### Admin API
 
@@ -398,11 +411,22 @@ Protected by the master gateway key when `UNIFY_GATEWAY_KEY` / `auth.api_key` is
 |--------|------|------|
 | GET | `/api/admin/users` | — |
 | POST | `/api/admin/users` | `{"name","email?","note?","password?","role?","status?"}` |
-| PATCH | `/api/admin/users/{id}` | `{"approve"?,"status"?,"role"?,"enabled"?,"password"?}` |
+| PATCH | `/api/admin/users/{id}` | `{"approve"?,"status"?,"role"?,"enabled"?,"password"?,"display_name"?,"badge"?}` |
+| POST | `/api/admin/users/{id}/password` | `{"password"}` — resets password and drops that user's sessions |
 | DELETE | `/api/admin/users/{id}` | — |
 | GET | `/api/admin/keys` | — |
 | POST | `/api/admin/keys` | `{"user_id","name?"}` → returns `raw_key` once |
 | POST | `/api/admin/keys/{id}/revoke` | — |
+
+Self-service (session cookie required):
+
+| Method | Path | Body |
+|--------|------|------|
+| GET | `/api/auth/me` | — |
+| PATCH | `/api/me` | `{"display_name"}` |
+| POST | `/api/me/password` | `{"old_password","new_password"}` — keeps session |
+| GET/POST | `/api/me/keys` | list / `{"name"?}` create (raw key once) |
+| POST | `/api/me/keys/{id}/revoke` | — |
 
 ### Multi-user API keys
 
@@ -419,7 +443,8 @@ Open **Users** (shortcut `5`):
 1. **Create user** (name, optional email/note; add `password`/`role` via API if they need portal login).
 2. **Approve** pending accounts; set **Role** (`user`/`admin`); **Disable** or **Delete**.
 3. **Issue key** — copy the raw key from the one-time modal.
-4. Traffic/Logs tables show an **Account** column when the request was made with a user key.
+4. Edit **display name** / **badge** inline, then **Save profile**.
+5. Traffic/Logs tables show an **Account** column (display name + badge) when the request was made with a user key.
 
 ### Client auth
 

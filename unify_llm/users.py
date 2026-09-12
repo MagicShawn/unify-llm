@@ -32,6 +32,10 @@ SESSION_TOKEN_BYTES = 32
 ROLES = ("admin", "user")
 STATUSES = ("pending", "active", "disabled")
 
+DISPLAY_NAME_MAX_LEN = 64
+BADGE_MAX_LEN = 16
+PASSWORD_MIN_LEN = 8
+
 
 def _now() -> float:
     return time.time()
@@ -114,6 +118,30 @@ def _status_to_enabled(status: str) -> int:
     return 1 if status == "active" else 0
 
 
+def _normalize_display_name(value: str | None) -> str | None:
+    """Nullable display name. Empty string clears the override (fallback to name)."""
+    if value is None:
+        return None
+    v = str(value).strip()
+    if not v:
+        return ""
+    if len(v) > DISPLAY_NAME_MAX_LEN:
+        raise ValueError(f"display_name must be at most {DISPLAY_NAME_MAX_LEN} characters")
+    return v
+
+
+def _normalize_badge(value: str | None) -> str | None:
+    """Short admin-set badge. Empty string clears it."""
+    if value is None:
+        return None
+    v = str(value).strip().lower()
+    if not v:
+        return ""
+    if len(v) > BADGE_MAX_LEN:
+        raise ValueError(f"badge must be at most {BADGE_MAX_LEN} characters")
+    return v
+
+
 def _row_user(row: sqlite3.Row) -> dict[str, Any]:
     keys = set(row.keys())
     # Prefer explicit status/role columns; fall back for pre-migration rows.
@@ -122,6 +150,8 @@ def _row_user(row: sqlite3.Row) -> dict[str, Any]:
     else:
         status = "active" if bool(row["enabled"]) else "disabled"
     role = str(row["role"]) if "role" in keys and row["role"] else "user"
+    display_name = (row["display_name"] or "") if "display_name" in keys else ""
+    badge = (row["badge"] or "") if "badge" in keys else ""
     return {
         "id": int(row["id"]),
         "name": row["name"],
@@ -130,6 +160,8 @@ def _row_user(row: sqlite3.Row) -> dict[str, Any]:
         "enabled": bool(row["enabled"]),
         "role": role,
         "status": status,
+        "display_name": display_name,
+        "badge": badge,
         "created_at": float(row["created_at"]),
     }
 
@@ -221,6 +253,10 @@ class UserStore:
                     "UPDATE users SET status = CASE WHEN enabled=1 THEN 'active' "
                     "ELSE 'disabled' END WHERE status IS NULL OR status=''"
                 )
+            if "display_name" not in cols:
+                self._conn.execute("ALTER TABLE users ADD COLUMN display_name TEXT")
+            if "badge" not in cols:
+                self._conn.execute("ALTER TABLE users ADD COLUMN badge TEXT")
             self._conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -288,8 +324,8 @@ class UserStore:
         email_v = (email or "").strip()
         if not email_v:
             raise ValueError("email is required")
-        if not password or len(password) < 8:
-            raise ValueError("password must be at least 8 characters")
+        if not password or len(password) < PASSWORD_MIN_LEN:
+            raise ValueError(f"password must be at least {PASSWORD_MIN_LEN} characters")
         return self.create_user(
             name=name,
             email=email_v,
@@ -362,13 +398,75 @@ class UserStore:
         return _row_user(row) if row else None
 
     def set_password(self, user_id: int, password: str) -> dict[str, Any] | None:
-        if not password or len(password) < 8:
-            raise ValueError("password must be at least 8 characters")
+        if not password or len(password) < PASSWORD_MIN_LEN:
+            raise ValueError(f"password must be at least {PASSWORD_MIN_LEN} characters")
         pw_hash = hash_password(password)
         with self._lock:
             cur = self._conn.execute(
                 "UPDATE users SET password_hash=? WHERE id=?",
                 (pw_hash, int(user_id)),
+            )
+            self._conn.commit()
+            if cur.rowcount == 0:
+                return None
+            row = self._conn.execute("SELECT * FROM users WHERE id=?", (int(user_id),)).fetchone()
+        return _row_user(row) if row else None
+
+    def change_password(
+        self, user_id: int, old_password: str, new_password: str
+    ) -> dict[str, Any]:
+        """Self-service password change. Verifies the current password first.
+
+        Does not invalidate sessions (caller keeps the current session).
+        Returns the updated user meta.
+        """
+        if not old_password:
+            raise ValueError("old_password is required")
+        if not new_password or len(new_password) < PASSWORD_MIN_LEN:
+            raise ValueError(f"password must be at least {PASSWORD_MIN_LEN} characters")
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM users WHERE id=?", (int(user_id),)
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"unknown user_id: {user_id}")
+        if not verify_password(old_password, row["password_hash"]):
+            raise ValueError("old_password is incorrect")
+        if verify_password(new_password, row["password_hash"]):
+            raise ValueError("new_password must differ from the current password")
+        updated = self.set_password(user_id, new_password)
+        if updated is None:
+            raise ValueError(f"unknown user_id: {user_id}")
+        return updated
+
+    def set_profile(
+        self,
+        user_id: int,
+        *,
+        display_name: str | None = None,
+        badge: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Update display_name and/or badge. None leaves the field unchanged.
+
+        Empty string clears the field (display_name then falls back to name).
+        """
+        dn = _normalize_display_name(display_name)
+        bg = _normalize_badge(badge)
+        if dn is None and bg is None:
+            return self.get_user(user_id)
+        sets: list[str] = []
+        args: list[Any] = []
+        if dn is not None:
+            sets.append("display_name=?")
+            args.append(dn or None)
+        if bg is not None:
+            sets.append("badge=?")
+            args.append(bg or None)
+        args.append(int(user_id))
+        with self._lock:
+            cur = self._conn.execute(
+                f"UPDATE users SET {', '.join(sets)} WHERE id=?",
+                tuple(args),
             )
             self._conn.commit()
             if cur.rowcount == 0:
@@ -593,7 +691,8 @@ class UserStore:
                 """
                 SELECT k.*, u.name AS user_name, u.email AS user_email,
                        u.enabled AS user_enabled, u.note AS user_note,
-                       u.role AS user_role, u.status AS user_status
+                       u.role AS user_role, u.status AS user_status,
+                       u.display_name AS user_display_name, u.badge AS user_badge
                 FROM api_keys k
                 JOIN users u ON u.id = k.user_id
                 WHERE k.key_hash=?
@@ -619,6 +718,14 @@ class UserStore:
                 "enabled": True,
                 "role": (row["user_role"] or "user"),
                 "status": "active",
+                "display_name": (
+                    (row["user_display_name"] or "")
+                    if "user_display_name" in row.keys()
+                    else ""
+                ),
+                "badge": (
+                    (row["user_badge"] or "") if "user_badge" in row.keys() else ""
+                ),
             },
             "key": {
                 "id": int(row["id"]),

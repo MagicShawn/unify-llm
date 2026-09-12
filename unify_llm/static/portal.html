@@ -348,6 +348,61 @@
     }
     .inline-form .field { flex: 1 1 160px; min-width: 140px; }
     .inline-form .field input { margin-bottom: 0; }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 640px) {
+      .settings-grid { grid-template-columns: 1fr; }
+    }
+    .settings-box {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--bg-soft);
+      padding: 12px;
+    }
+    .settings-box .hint {
+      color: var(--ink-3);
+      font-size: 11.5px;
+      margin: 0 0 10px;
+    }
+    .readonly-val {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ink-2);
+      padding: 8px 0 0;
+      min-height: 28px;
+    }
+    .key-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      border: 0;
+      padding: 0;
+      margin: 0;
+      background: rgba(0, 0, 0, 0.35);
+      cursor: pointer;
+      z-index: 40;
+    }
+    .key-modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 41;
+      width: min(480px, calc(100vw - 32px));
+      background: var(--bg-panel);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
+      padding: 18px;
+    }
+    .key-modal h3 { margin: 0 0 6px; font-size: 15px; }
+    .key-modal .warn {
+      color: var(--warn);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
@@ -400,6 +455,7 @@
     <div class="card hidden" id="homeCard">
       <div class="profile-head">
         <h2 id="userName">—</h2>
+        <span class="pill" id="userBadge" hidden></span>
         <span class="pill" id="userRole">user</span>
         <span class="pill" id="userStatus">active</span>
         <span class="meta" id="userEmail"></span>
@@ -412,12 +468,35 @@
 
       <div class="msg warn" id="pendingMsg">Your account is not active. An admin must approve it before keys work.</div>
 
-      <div class="section-title">API keys · 我的密钥</div>
-      <div class="msg ok hidden" id="newKeyBox">
-        <div><b>Copy this key now — shown only once.</b></div>
-        <div class="key-raw" id="newKeyRaw"></div>
-        <button type="button" class="btn" id="copyNewKey">Copy</button>
+      <div class="section-title">Account settings · 账户设置</div>
+      <div class="settings-grid">
+        <div class="settings-box">
+          <p class="hint">Display name shown on traffic / logs. Badge is set by an admin.</p>
+          <label for="profileDisplayName">Display name</label>
+          <input id="profileDisplayName" type="text" maxlength="64" placeholder="optional" autocomplete="nickname" />
+          <label>Badge (admin-set)</label>
+          <div class="readonly-val" id="profileBadge">—</div>
+          <div class="btn-row">
+            <button type="button" class="btn primary" id="saveProfileBtn">Save</button>
+          </div>
+          <div class="msg" id="profileMsg" role="status"></div>
+        </div>
+        <div class="settings-box">
+          <p class="hint">You stay signed in on this device after changing the password.</p>
+          <form id="passwordForm" autocomplete="on">
+            <label for="oldPassword">Current password</label>
+            <input id="oldPassword" type="password" required autocomplete="current-password" />
+            <label for="newPassword">New password (min 8)</label>
+            <input id="newPassword" type="password" required minlength="8" autocomplete="new-password" />
+            <div class="btn-row">
+              <button type="submit" class="btn primary">Change password</button>
+            </div>
+          </form>
+          <div class="msg" id="passwordMsg" role="status"></div>
+        </div>
       </div>
+
+      <div class="section-title">API keys · 我的密钥</div>
       <div class="inline-form">
         <div class="field">
           <label for="keyName">Key name (optional)</label>
@@ -445,6 +524,20 @@
         ·
         <a href="/api/info">info</a>
       </span>
+    </div>
+  </div>
+
+  <!-- One-time raw key modal -->
+  <div id="keyModalRoot" hidden>
+    <button type="button" class="key-modal-backdrop" id="keyModalBackdrop" tabindex="-1" aria-label="Close"></button>
+    <div class="key-modal" role="dialog" aria-modal="true" aria-labelledby="keyModalTitle">
+      <h3 id="keyModalTitle">API key issued · 密钥已签发</h3>
+      <div class="warn">Copy now — this is shown only once.</div>
+      <div class="key-raw" id="newKeyRaw"></div>
+      <div class="btn-row">
+        <button type="button" class="btn primary" id="copyNewKey">Copy</button>
+        <button type="button" class="btn" id="closeKeyModal">Close</button>
+      </div>
     </div>
   </div>
 
@@ -528,11 +621,42 @@
     function showAuth() {
       $("authCard").classList.remove("hidden");
       $("homeCard").classList.add("hidden");
+      closeKeyModal();
+    }
+    function closeKeyModal() {
+      const root = $("keyModalRoot");
+      if (root) root.hidden = true;
+      const rawEl = $("newKeyRaw");
+      if (rawEl) rawEl.textContent = "";
+    }
+    function openKeyModal(raw) {
+      const root = $("keyModalRoot");
+      const rawEl = $("newKeyRaw");
+      if (!root || !rawEl) return;
+      rawEl.textContent = raw || "";
+      root.hidden = false;
+      const copyBtn = $("copyNewKey");
+      if (copyBtn) {
+        copyBtn.textContent = "Copy";
+        copyBtn.focus();
+      }
     }
     function showHome(user) {
       $("authCard").classList.add("hidden");
       $("homeCard").classList.remove("hidden");
-      $("userName").textContent = user.name || "—";
+      const dn = (user.display_name || "").trim();
+      $("userName").textContent = dn || user.name || "—";
+      $("userName").title = dn && user.name ? user.name : "";
+      const badgeEl = $("userBadge");
+      const badge = (user.badge || "").trim();
+      if (badge) {
+        badgeEl.hidden = false;
+        badgeEl.textContent = badge;
+        badgeEl.className = "pill";
+      } else {
+        badgeEl.hidden = true;
+        badgeEl.textContent = "";
+      }
       $("userEmail").textContent = user.email || "";
       const roleEl = $("userRole");
       roleEl.textContent = user.role || "user";
@@ -543,7 +667,11 @@
       $("pendingMsg").classList.toggle("hidden", user.status === "active");
       $("dashLink").classList.toggle("hidden", user.role !== "admin");
       $("createKeyBtn").disabled = user.status !== "active";
-      hideMsg($("newKeyBox"));
+      $("profileDisplayName").value = dn;
+      $("profileBadge").textContent = badge || "—";
+      hideMsg($("profileMsg"));
+      hideMsg($("passwordMsg"));
+      closeKeyModal();
       refreshKeys();
       refreshUsage();
     }
@@ -617,7 +745,10 @@
         wrap.innerHTML = '<div class="empty">No keys yet · 创建一个密钥以调用 /v1</div>';
         return;
       }
-      let html = "<table><thead><tr><th>Prefix</th><th>Name</th><th>Status</th><th>Last used</th><th></th></tr></thead><tbody>";
+      let html =
+        "<table><thead><tr>" +
+        "<th>Prefix</th><th>Name</th><th>Created</th><th>Status</th><th>Last used</th><th></th>" +
+        "</tr></thead><tbody>";
       keys.forEach((k) => {
         const pill = k.revoked_at
           ? '<span class="pill err">revoked</span>'
@@ -628,6 +759,7 @@
           "<tr>" +
           '<td><span class="key-prefix">sk-unify-' + esc(k.key_prefix) + "…</span></td>" +
           "<td>" + esc(k.name || "—") + "</td>" +
+          '<td class="mono">' + esc(fmtTs(k.created_at)) + "</td>" +
           "<td>" + pill + "</td>" +
           '<td class="mono">' + esc(fmtTs(k.last_used_at)) + "</td>" +
           "<td>" +
@@ -661,10 +793,7 @@
         return;
       }
       const raw = body.key && body.key.raw_key;
-      if (raw) {
-        $("newKeyRaw").textContent = raw;
-        $("newKeyBox").classList.remove("hidden");
-      }
+      if (raw) openKeyModal(raw);
       $("keyName").value = "";
       refreshKeys();
     });
@@ -678,6 +807,43 @@
         $("copyNewKey").textContent = "Copy failed";
       }
       setTimeout(() => { $("copyNewKey").textContent = "Copy"; }, 1500);
+    });
+    $("closeKeyModal").addEventListener("click", closeKeyModal);
+    $("keyModalBackdrop").addEventListener("click", closeKeyModal);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeKeyModal();
+    });
+
+    $("saveProfileBtn").addEventListener("click", async () => {
+      hideMsg($("profileMsg"));
+      const display_name = $("profileDisplayName").value.trim();
+      const { res, body } = await api("/api/me", {
+        method: "PATCH",
+        body: { display_name },
+      });
+      if (!res.ok) {
+        showMsg($("profileMsg"), "err", (body.error && body.error.message) || ("HTTP " + res.status));
+        return;
+      }
+      showMsg($("profileMsg"), "ok", "Saved.");
+      if (body.user) showHome(body.user);
+    });
+
+    $("passwordForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideMsg($("passwordMsg"));
+      const old_password = $("oldPassword").value;
+      const new_password = $("newPassword").value;
+      const { res, body } = await api("/api/me/password", {
+        method: "POST",
+        body: { old_password, new_password },
+      });
+      if (!res.ok) {
+        showMsg($("passwordMsg"), "err", (body.error && body.error.message) || ("HTTP " + res.status));
+        return;
+      }
+      $("passwordForm").reset();
+      showMsg($("passwordMsg"), "ok", "Password updated. You remain signed in on this device.");
     });
 
     async function refreshUsage() {

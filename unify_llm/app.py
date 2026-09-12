@@ -417,7 +417,41 @@ def _public_user(user: dict[str, Any]) -> dict[str, Any]:
         "email": user.get("email") or "",
         "role": user.get("role") or "user",
         "status": user.get("status") or "active",
+        "display_name": user.get("display_name") or "",
+        "badge": user.get("badge") or "",
     }
+
+
+def _display_label(user: dict[str, Any] | None) -> str:
+    """Human label for a user: display_name when set, else name."""
+    if not user:
+        return ""
+    return (user.get("display_name") or "").strip() or (user.get("name") or "")
+
+
+def _enrich_history_items(
+    items: list[dict[str, Any]], users_store: UserStore | None
+) -> list[dict[str, Any]]:
+    """Attach display_name / badge to history rows that carry a user_id."""
+    if users_store is None or not items:
+        return items
+    cache: dict[str, dict[str, Any] | None] = {}
+    for rec in items:
+        uid = str(rec.get("user_id") or "")
+        if not uid:
+            continue
+        if uid not in cache:
+            try:
+                cache[uid] = users_store.get_user(int(uid))
+            except (TypeError, ValueError):
+                cache[uid] = None
+        u = cache[uid]
+        if u is None:
+            continue
+        rec["display_name"] = u.get("display_name") or ""
+        rec["badge"] = u.get("badge") or ""
+        rec["display_label"] = _display_label(u)
+    return items
 
 
 def create_app(
@@ -674,6 +708,10 @@ def create_app(
     async def api_status() -> dict[str, Any]:
         body = state.monitor.status()
         body["limits"] = state.limiter.status()
+        # Enrich traffic rows with display_name / badge for the Account column.
+        for p in body.get("providers") or []:
+            if isinstance(p, dict) and isinstance(p.get("recent"), list):
+                _enrich_history_items(p["recent"], state.users)
         pricing = state.config.pricing
         body["pricing"] = {
             "configured": pricing.has_any_rate(),
@@ -685,7 +723,10 @@ def create_app(
 
     @app.get("/api/history")
     async def api_history(limit: int = 50) -> dict[str, Any]:
-        return state.monitor.history(limit=min(max(limit, 1), 200))
+        body = state.monitor.history(limit=min(max(limit, 1), 200))
+        if isinstance(body, dict) and isinstance(body.get("items"), list):
+            _enrich_history_items(body["items"], state.users)
+        return body
 
     @app.get("/api/config")
     async def api_config() -> dict[str, Any]:
@@ -826,7 +867,7 @@ def create_app(
             return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
         if not isinstance(body, dict):
             return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
-        allowed = {"enabled", "role", "status", "approve", "password"}
+        allowed = {"enabled", "role", "status", "approve", "password", "display_name", "badge"}
         if not any(k in body for k in allowed):
             return JSONResponse(
                 {"error": {"message": f"Supported fields: {sorted(allowed)}"}},
@@ -844,6 +885,12 @@ def create_app(
                 user = users_store.set_role(user_id, str(body["role"]))
             if "password" in body and body["password"]:
                 user = users_store.set_password(user_id, str(body["password"]))
+            if "display_name" in body or "badge" in body:
+                user = users_store.set_profile(
+                    user_id,
+                    display_name=body.get("display_name"),
+                    badge=body.get("badge"),
+                )
         except ValueError as e:
             return JSONResponse({"error": {"message": str(e)}}, status_code=400)
         if user is None:
@@ -878,6 +925,44 @@ def create_app(
             )
         state.monitor.log("info", f"user deleted id={user_id}")
         return JSONResponse({"ok": True, "deleted": user_id})
+
+    @app.post("/api/admin/users/{user_id}/password")
+    async def admin_reset_password(user_id: int, request: Request) -> Response:
+        """Admin password reset for another user. Does not log the password."""
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        password = body.get("password")
+        if not password:
+            return JSONResponse(
+                {"error": {"message": "Field 'password' is required"}},
+                status_code=400,
+            )
+        try:
+            user = users_store.set_password(user_id, str(password))
+        except ValueError as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=400)
+        if user is None:
+            return JSONResponse(
+                {"error": {"message": f"Unknown user id: {user_id}"}},
+                status_code=404,
+            )
+        # Force re-login after an admin reset (other devices should re-auth).
+        try:
+            users_store.delete_sessions_for_user(user_id)
+        except Exception:  # noqa: BLE001
+            pass
+        state.monitor.log("info", f"password reset by admin for user id={user_id}")
+        return JSONResponse({"ok": True, "user": _public_user(user)})
 
     @app.get("/api/admin/keys")
     async def admin_list_keys() -> Response:
@@ -1120,6 +1205,90 @@ def create_app(
             )
         state.monitor.log("info", f"api key revoked id={key_id} by user={session['user_id']}")
         return JSONResponse({"ok": True, "key": meta})
+
+    @app.post("/api/me/password")
+    async def me_change_password(request: Request) -> Response:
+        """Self-service password change. Keeps the current session active."""
+        session = _require_me(request)
+        if session is None:
+            return _session_auth_error()
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        old_password = str(body.get("old_password") or "")
+        new_password = str(body.get("new_password") or "")
+        if not old_password or not new_password:
+            return JSONResponse(
+                {"error": {"message": "Fields 'old_password' and 'new_password' are required"}},
+                status_code=400,
+            )
+        try:
+            user = users_store.change_password(
+                session["user_id"], old_password, new_password
+            )
+        except ValueError as e:
+            msg = str(e)
+            status = 400 if "unknown user" not in msg else 404
+            # Map wrong old password to 401-style client error without leaking state.
+            if "old_password" in msg:
+                return JSONResponse(
+                    {"error": {"message": msg, "type": "AuthenticationError"}},
+                    status_code=400,
+                )
+            return JSONResponse({"error": {"message": msg}}, status_code=status)
+        # Session intentionally kept (documented): user stays signed in after change.
+        state.monitor.log("info", f"password changed by user id={session['user_id']}")
+        return JSONResponse({"ok": True, "user": _public_user(user), "session_kept": True})
+
+    @app.patch("/api/me")
+    async def me_patch_profile(request: Request) -> Response:
+        """Self-service profile: display_name only. Badge is admin-set."""
+        session = _require_me(request)
+        if session is None:
+            return _session_auth_error()
+        users_store = _users_ready()
+        if users_store is None:
+            return JSONResponse(
+                {"error": {"message": "User store unavailable", "type": "ConfigError"}},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        if "badge" in body:
+            return JSONResponse(
+                {"error": {"message": "badge is admin-set; ask an admin to change it"}},
+                status_code=403,
+            )
+        if "display_name" not in body:
+            return JSONResponse(
+                {"error": {"message": "Supported field: display_name"}},
+                status_code=400,
+            )
+        try:
+            user = users_store.set_profile(
+                session["user_id"], display_name=str(body.get("display_name") or "")
+            )
+        except ValueError as e:
+            return JSONResponse({"error": {"message": str(e)}}, status_code=400)
+        if user is None:
+            return JSONResponse(
+                {"error": {"message": f"Unknown user id: {session['user_id']}"}},
+                status_code=404,
+            )
+        return JSONResponse({"ok": True, "user": _public_user(user)})
 
     @app.get("/api/me/usage")
     async def me_usage(request: Request) -> Response:

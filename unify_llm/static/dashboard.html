@@ -882,6 +882,27 @@
       color: var(--ink-3);
       border: 1px solid var(--line);
     }
+    .user-badge-chip {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 9.5px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: var(--accent-soft);
+      color: var(--ink-2);
+      border: 1px solid var(--line);
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+    .acct-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
     .prov-body { padding: 10px 14px 12px; }
     .prov-url {
       font-family: var(--mono);
@@ -3100,9 +3121,7 @@
           <tbody>
             ${rows.map((r, i) => {
               const pc = provColor(r.provider_id);
-              const acct = r.username
-                ? `<span class="mono" title="user_id ${esc(r.user_id || "")}">${esc(r.username)}</span>`
-                : '<span style="color:var(--ink-3)">—</span>';
+              const acct = accountCellHtml(r);
               return `
               <tr class="req-detail-row" data-row-index="${i}" tabindex="0" role="button" aria-label="Open request details for ${esc(r.id)}">
                 <td>${idCellHtml(r.id)}</td>
@@ -3150,9 +3169,7 @@
                 r.prompt_tokens || r.completion_tokens
                   ? fmtN(r.prompt_tokens) + "+" + fmtN(r.completion_tokens)
                   : "—";
-              const acct = r.username
-                ? esc(r.username)
-                : '<span style="color:var(--ink-3)">—</span>';
+              const acct = accountCellHtml(r);
               return `
               <tr>
                 <td class="mono">${esc(t)}</td>
@@ -3264,7 +3281,7 @@
                       <span class="pill proto">${esc(r.protocol)}</span>
                       <span class="chip path" title="${esc(r.path)}">${esc(r.path)}</span>
                       <span class="mono" style="font-size:11px;color:var(--ink-3)" title="${esc(r.app || r.user_agent || "")}">${esc(r.client || "—")}</span>
-                      ${r.username ? `<span class="mono" style="font-size:11px;color:var(--ink-2)" title="account">@${esc(r.username)}</span>` : ""}
+                      ${r.username || r.display_label ? `<span class="mono" style="font-size:11px;color:var(--ink-2)" title="account">@${esc(r.display_label || r.username)}</span>${badgeChipHtml(r.badge)}` : ""}
                     </div>
                   </td>
                   <td>${pill}</td>
@@ -3399,10 +3416,10 @@
         detailRow("Client", esc(rec.client || "—"), { cls: rec.client ? "" : "muted" }),
         detailRow(
           "Account",
-          rec.username
-            ? esc(rec.username) + (rec.user_id ? ' <span class="mono" style="color:var(--ink-3)">#' + esc(rec.user_id) + "</span>" : "")
+          rec.username || rec.display_label
+            ? accountCellHtml(rec)
             : "—",
-          { cls: rec.username ? "" : "muted" }
+          { cls: rec.username || rec.display_label ? "" : "muted" }
         ),
         detailRow("App", esc(rec.app || "—"), { cls: rec.app ? "" : "muted" }),
         detailRow("User-Agent", esc(rec.user_agent || "—"), {
@@ -3711,6 +3728,32 @@
       return '<span class="pill ok">active</span>';
     }
 
+    function badgeChipHtml(badge) {
+      const b = String(badge || "").trim();
+      if (!b) return "";
+      return '<span class="user-badge-chip">' + esc(b) + "</span>";
+    }
+
+    function accountCellHtml(rec) {
+      const label =
+        String(rec.display_label || rec.display_name || rec.username || "").trim();
+      if (!label) return '<span style="color:var(--ink-3)">—</span>';
+      const title =
+        "user_id " +
+        esc(rec.user_id || "") +
+        (rec.username && rec.username !== label ? " · @" + esc(rec.username) : "");
+      return (
+        '<span class="acct-cell" title="' +
+        title +
+        '">' +
+        '<span class="mono">' +
+        esc(label) +
+        "</span>" +
+        badgeChipHtml(rec.badge) +
+        "</span>"
+      );
+    }
+
     function renderUsers(users) {
       lastUsers = users || [];
       const wrap = $("usersWrap");
@@ -3774,15 +3817,30 @@
           status === "pending"
             ? '<button type="button" class="btn-ops primary" data-approve-user="' + Number(u.id) + '">Approve</button>'
             : "";
+        const dn = u.display_name || "";
+        const bg = u.badge || "";
         html +=
           "<tr>" +
-          "<td><b>" + esc(u.name) + '</b> <span class="mono" style="color:var(--ink-3)">#' + Number(u.id) + "</span></td>" +
+          "<td><b>" + esc(dn || u.name) + '</b> ' +
+          badgeChipHtml(bg) +
+          (dn && dn !== u.name
+            ? '<div class="mono" style="color:var(--ink-3);font-size:10px">@' + esc(u.name) + " #" + Number(u.id) + "</div>"
+            : ' <span class="mono" style="color:var(--ink-3)">#' + Number(u.id) + "</span>") +
+          '<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">' +
+          '<input class="filter-input" style="height:24px;padding:0 6px;font-size:11px;max-width:110px" ' +
+          'data-set-display-name="' + Number(u.id) + '" value="' + esc(dn) + '" placeholder="display name" ' +
+          'maxlength="64" aria-label="Display name for ' + esc(u.name) + '" />' +
+          '<input class="filter-input" style="height:24px;padding:0 6px;font-size:11px;max-width:72px" ' +
+          'data-set-badge="' + Number(u.id) + '" value="' + esc(bg) + '" placeholder="badge" ' +
+          'maxlength="16" aria-label="Badge for ' + esc(u.name) + '" />' +
+          "</div></td>" +
           '<td class="mono">' + esc(u.email || "—") + "</td>" +
           "<td>" + roleSel + "</td>" +
           "<td>" + statusPill + "</td>" +
           "<td>" + keysHtml + "</td>" +
           '<td><div class="user-actions">' +
           approveBtn +
+          '<button type="button" class="btn-ops" data-save-profile="' + Number(u.id) + '">Save profile</button>' +
           '<button type="button" class="btn-ops" data-toggle-user="' + Number(u.id) + '" data-next="' + (u.enabled ? "0" : "1") + '">' +
           (u.enabled ? "Disable" : "Enable") +
           "</button>" +
@@ -3934,6 +3992,26 @@
       }
     }
 
+    async function saveUserProfile(userId) {
+      const dnEl = document.querySelector('[data-set-display-name="' + Number(userId) + '"]');
+      const bgEl = document.querySelector('[data-set-badge="' + Number(userId) + '"]');
+      const display_name = dnEl ? dnEl.value.trim() : "";
+      const badge = bgEl ? bgEl.value.trim() : "";
+      try {
+        const res = await apiFetch("/api/admin/users/" + Number(userId), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ display_name: display_name, badge: badge }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((body.error && body.error.message) || "HTTP " + res.status);
+        showToast("ok", "Profile saved");
+        await refreshUsers();
+      } catch (e) {
+        showToast("err", "Profile update failed", e.message || String(e));
+      }
+    }
+
     async function deleteUser(userId) {
       if (!confirm("Delete this user and all their keys?")) return;
       try {
@@ -3977,6 +4055,11 @@
           const approve = e.target.closest("[data-approve-user]");
           if (approve) {
             approveUser(Number(approve.getAttribute("data-approve-user")));
+            return;
+          }
+          const saveProf = e.target.closest("[data-save-profile]");
+          if (saveProf) {
+            saveUserProfile(Number(saveProf.getAttribute("data-save-profile")));
             return;
           }
           const toggle = e.target.closest("[data-toggle-user]");

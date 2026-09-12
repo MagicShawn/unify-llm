@@ -525,3 +525,210 @@ def test_username_in_monitor_history(users_db: Path):
             assert auth["username"] == "attr"
         finally:
             store.close()
+
+
+# ── account settings: password, display_name, badge ────────────────────────
+
+
+def test_store_display_name_and_badge(store: UserStore):
+    user = store.create_user("nick", email="nick@example.com", password="password123")
+    assert user["display_name"] == ""
+    assert user["badge"] == ""
+
+    updated = store.set_profile(user["id"], display_name="Nick L", badge="vip")
+    assert updated is not None
+    assert updated["display_name"] == "Nick L"
+    assert updated["badge"] == "vip"
+
+    # Badge is lowercased and length-limited.
+    updated2 = store.set_profile(user["id"], badge="BETA")
+    assert updated2 is not None
+    assert updated2["badge"] == "beta"
+    with pytest.raises(ValueError):
+        store.set_profile(user["id"], badge="x" * 17)
+    with pytest.raises(ValueError):
+        store.set_profile(user["id"], display_name="y" * 65)
+
+    # Empty string clears.
+    cleared = store.set_profile(user["id"], display_name="", badge="")
+    assert cleared is not None
+    assert cleared["display_name"] == ""
+    assert cleared["badge"] == ""
+
+
+def test_store_change_password(store: UserStore):
+    user = store.create_user(
+        "pw", email="pw@example.com", password="old-pass-123", status="active"
+    )
+    updated = store.change_password(user["id"], "old-pass-123", "new-pass-456")
+    assert updated["id"] == user["id"]
+    assert store.authenticate_password("pw@example.com", "new-pass-456") is not None
+    assert store.authenticate_password("pw@example.com", "old-pass-123") is None
+
+    with pytest.raises(ValueError):
+        store.change_password(user["id"], "wrong", "another-1")
+    with pytest.raises(ValueError):
+        store.change_password(user["id"], "new-pass-456", "short")
+    # Same as current is rejected.
+    with pytest.raises(ValueError):
+        store.change_password(user["id"], "new-pass-456", "new-pass-456")
+
+
+def test_me_password_change_keeps_session(client: TestClient):
+    client.post(
+        "/api/admin/users",
+        json={
+            "name": "selfpw",
+            "email": "selfpw@example.com",
+            "password": "self-pass-1",
+        },
+        headers={"Authorization": "Bearer master-key"},
+    )
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "selfpw@example.com", "password": "self-pass-1"},
+    )
+    assert r.status_code == 200
+
+    # Wrong old password → 400, session still valid.
+    bad = client.post(
+        "/api/me/password",
+        json={"old_password": "nope", "new_password": "self-pass-2"},
+    )
+    assert bad.status_code == 400
+    assert client.get("/api/auth/me").status_code == 200
+
+    ok = client.post(
+        "/api/me/password",
+        json={"old_password": "self-pass-1", "new_password": "self-pass-2"},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["session_kept"] is True
+    # Session kept: /api/auth/me still works without re-login.
+    me = client.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["user"]["name"] == "selfpw"
+
+    # New password works on login; old does not.
+    client.post("/api/auth/logout")
+    r_old = client.post(
+        "/api/auth/login",
+        json={"email": "selfpw@example.com", "password": "self-pass-1"},
+    )
+    assert r_old.status_code == 401
+    r_new = client.post(
+        "/api/auth/login",
+        json={"email": "selfpw@example.com", "password": "self-pass-2"},
+    )
+    assert r_new.status_code == 200
+
+
+def test_admin_password_reset_forces_relogin(client: TestClient):
+    client.post(
+        "/api/admin/users",
+        json={
+            "name": "victim",
+            "email": "victim@example.com",
+            "password": "victim-pass-1",
+        },
+        headers={"Authorization": "Bearer master-key"},
+    )
+    # Login as victim.
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "victim@example.com", "password": "victim-pass-1"},
+    )
+    assert r.status_code == 200
+    uid = None
+
+    # Admin (master key) resets password → victim session dropped.
+    listed = client.get(
+        "/api/admin/users", headers={"Authorization": "Bearer master-key"}
+    ).json()["users"]
+    for u in listed:
+        if u["email"] == "victim@example.com":
+            uid = u["id"]
+    assert uid is not None
+    r2 = client.post(
+        f"/api/admin/users/{uid}/password",
+        json={"password": "reset-pass-99"},
+        headers={"Authorization": "Bearer master-key"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert client.get("/api/auth/me").status_code == 401
+
+    r3 = client.post(
+        "/api/auth/login",
+        json={"email": "victim@example.com", "password": "reset-pass-99"},
+    )
+    assert r3.status_code == 200
+
+
+def test_me_profile_display_name_and_auth_me_fields(client: TestClient):
+    client.post(
+        "/api/admin/users",
+        json={
+            "name": "shown",
+            "email": "shown@example.com",
+            "password": "shown-pass-1",
+        },
+        headers={"Authorization": "Bearer master-key"},
+    )
+    client.post(
+        "/api/auth/login",
+        json={"email": "shown@example.com", "password": "shown-pass-1"},
+    )
+    me = client.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["user"]["display_name"] == ""
+    assert me.json()["user"]["badge"] == ""
+
+    r = client.patch("/api/me", json={"display_name": "Show Name"})
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["display_name"] == "Show Name"
+
+    me2 = client.get("/api/auth/me")
+    assert me2.json()["user"]["display_name"] == "Show Name"
+
+    # Badge is admin-only.
+    r_bad = client.patch("/api/me", json={"badge": "vip"})
+    assert r_bad.status_code == 403
+
+    r_none = client.patch("/api/me", json={})
+    assert r_none.status_code == 400
+
+
+def test_admin_sets_display_name_and_badge(admin_client: TestClient):
+    r = admin_client.post(
+        "/api/admin/users",
+        json={"name": "badge-me", "email": "badge@example.com"},
+        headers={"Authorization": "Bearer master-key"},
+    )
+    uid = r.json()["user"]["id"]
+    r2 = admin_client.patch(
+        f"/api/admin/users/{uid}",
+        json={"display_name": "Badge Me", "badge": "vip"},
+        headers={"Authorization": "Bearer master-key"},
+    )
+    assert r2.status_code == 200, r2.text
+    user = r2.json()["user"]
+    assert user["display_name"] == "Badge Me"
+    assert user["badge"] == "vip"
+
+    # Too-long badge rejected.
+    r3 = admin_client.patch(
+        f"/api/admin/users/{uid}",
+        json={"badge": "x" * 17},
+        headers={"Authorization": "Bearer master-key"},
+    )
+    assert r3.status_code == 400
+
+
+def test_portal_html_has_account_settings(app):
+    with _client(app) as client:
+        r = client.get("/portal")
+        assert r.status_code == 200
+        html = r.text
+        assert "Change password" in html or "passwordForm" in html
+        assert "profileDisplayName" in html
+        assert "Account settings" in html
