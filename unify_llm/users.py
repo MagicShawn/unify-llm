@@ -125,21 +125,25 @@ def verify_password(password: str, stored: str | None) -> bool:
         if algo != "scrypt":
             return False
         n, r, p = int(n_s), int(r_s), int(p_s)
+        # Reject absurd params early. Memory ≈ 128*N*r; also refuse combos that
+        # would exceed maxmem so a tampered row cannot 500 the verify path.
         if n < 2 or n > _SCRYPT_N_MAX or r < 1 or r > _SCRYPT_R_MAX or p < 1 or p > _SCRYPT_P_MAX:
+            return False
+        if 128 * n * r > _SCRYPT_MAXMEM:
             return False
         salt = bytes.fromhex(salt_hex)
         expected = bytes.fromhex(hash_hex)
-    except (ValueError, TypeError):
+        dk = hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=salt,
+            n=n,
+            r=r,
+            p=p,
+            dklen=len(expected) or _SCRYPT_DKLEN,
+            maxmem=_SCRYPT_MAXMEM,
+        )
+    except (ValueError, TypeError, MemoryError, OSError):
         return False
-    dk = hashlib.scrypt(
-        password.encode("utf-8"),
-        salt=salt,
-        n=n,
-        r=r,
-        p=p,
-        dklen=len(expected) or _SCRYPT_DKLEN,
-        maxmem=_SCRYPT_MAXMEM,
-    )
     return hmac.compare_digest(dk, expected)
 
 
