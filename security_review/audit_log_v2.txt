@@ -1,0 +1,36 @@
+workdir: D:\AppData\Local\Temp\unify-audit-k6512dy_   (mock upstream + 2 gateway instances, ephemeral ports)
+
+═══ Part A: password & key storage (direct store checks) ═══
+[A1] PASS (OK) — scrypt N=2^15,r=8,p=1, per-hash random salt (two hashes of same password differ: True)
+[A2] PASS (OK) — verify_password accepts correct / rejects wrong password (constant-time compare)
+[A3] PASS (OK) — raw API key never persisted (SHA-256 hash + prefix only) — raw key absent from DB file bytes
+[A4] PASS (OK) — plaintext password never persisted; users table holds scrypt string only
+[A5-FIXED] FIXED (OK) — session tokens are hashed (SHA-256) at rest — raw token absent after store open
+    info: tampered hash with N=2^30 → huge-N scrypt param rejected (return False)
+
+═══ Part B1: LAN-bound gateway, NO master key (open-admin mode) ═══
+[B0] PASS (OK) — gateway up on http://192.168.124.4:55888 (/healthz=200)
+[B1] PASS (OK) — admin API from LAN IP 192.168.124.4 without credentials → 403 (correctly refused)
+[B2-FIXED] FIXED (OK) — FORGED 'X-Forwarded-For: 127.0.0.1' from LAN IP → HTTP 403 (localhost privilege uses TCP peer, not XFF)
+[B3-FIXED] FIXED (OK) — remote XFF-forge admin create → HTTP 403 (takeover blocked)
+[B4-FIXED] FIXED (OK) — same forged-XFF admin key mint → HTTP 403
+
+═══ Part B2: localhost gateway WITH master key (auth matrix, brute force, limits) ═══
+[C0] PASS (OK) — gateway up on http://127.0.0.1:1064
+[C1] PASS (OK) — /v1 auth: master key=200, wrong key=401, no key=401
+[C2] PASS (OK) — user key call → HTTP 200, points 10→9 (mock usage 1000 prompt tok × 1pt/1k = 1)
+[C3] PASS (OK) — zero-balance user key → HTTP 402 (blocked pre-upstream)
+[C4] PASS (OK) — provider upstream key masked in /api/config (leak=False)
+[C5-FIXED] FIXED (OK) — wrong-password logins → [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 429] (0.0s) — login throttle engages (429)
+[C6-FIXED] FIXED (OK) — login wrong-password: pending → 401, unknown → 401 (uniform 401, no enumeration)
+[C7] PASS (OK) — SQLi payloads in login → 401/401 (parameterized queries hold)
+[C8] PASS (OK) — session cookie: HttpOnly=True, SameSite=lax=True, Secure=False (Secure configurable; default off for LAN HTTP)
+[C9] PASS (OK) — user-role session on /api/admin/users → 401 (RBAC holds)
+[C10-FIXED] FIXED (OK) — after password change: older session → 401, current session kept → 200
+[C11] PASS (OK) — session of disabled user → 401 (server-side revocation works)
+[C12] PASS (OK) — RPM=5 → 429 after burst (limit enforced on /v1)
+[C13-FIXED] FIXED (OK) — XFF rotation after RPM cap: 0/15 passed, got429=True (rate-limit identity uses TCP peer unless trusted_proxies)
+[C14] PASS (OK) — open self-registration → 201 (pending approval gate; spam/noise vector)
+
+══════════════════════════════════════════════════════════════════════
+SUMMARY: 25 checks, 0 remaining finding(s)

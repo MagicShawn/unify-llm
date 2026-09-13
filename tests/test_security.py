@@ -452,8 +452,37 @@ def test_f8_scrypt_params_raised_and_capped():
         verify_password("x", "scrypt$1073741824$8$1$" + "aa" * 16 + "$" + "bb" * 32)
         is False
     )
+    # Near-cap N=2^19,r=8 needs 512MB > maxmem 64MB → must return False, not raise.
+    assert (
+        verify_password("x", "scrypt$524288$8$1$" + "aa" * 16 + "$" + "bb" * 32)
+        is False
+    )
     assert PASSWORD_MIN_LEN == 10
     assert PASSWORD_MAX_LEN == 128
+
+
+def test_r4_login_tampered_scrypt_row_no_500(users_db: Path):
+    """R4: a users.password_hash row with over-maxmem scrypt params must not 500 login."""
+    store = UserStore(users_db)
+    store.create_user("bomb", "bomb@test", password="bomb-pass-1234", status="active")
+    store.close()
+
+    conn = sqlite3.connect(str(users_db))
+    conn.execute(
+        "UPDATE users SET password_hash=? WHERE email=?",
+        (f"scrypt$524288$8$1${'ab' * 16}${'cd' * 32}", "bomb@test"),
+    )
+    conn.commit()
+    conn.close()
+
+    app = create_app(config=_cfg("master-key"), users_db=users_db)
+    with _client(app) as c:
+        r = c.post(
+            "/api/auth/login",
+            json={"email": "bomb@test", "password": "whatever-123"},
+        )
+        assert r.status_code == 401, r.text
+        assert r.status_code != 500
 
 
 def test_f8_password_min_and_max_length(users_db: Path):
