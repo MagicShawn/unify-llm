@@ -594,7 +594,10 @@ class UserStore:
         return _row_user(row) if row else None
 
     def add_points(self, user_id: int, delta: int) -> dict[str, Any] | None:
-        """Add (or subtract) points. Unlimited balance stays unlimited."""
+        """Add (or subtract) points. Unlimited balance stays unlimited.
+
+        Result is floored at 0 so admin subtracts cannot create a negative balance.
+        """
         d = int(delta)
         with self._lock:
             row = self._conn.execute(
@@ -609,15 +612,33 @@ class UserStore:
                 ).fetchone()
                 self._conn.commit()
             else:
-                new_bal = bal + d
                 self._conn.execute(
-                    "UPDATE users SET points_balance=? WHERE id=?",
-                    (new_bal, int(user_id)),
+                    "UPDATE users SET points_balance = MAX(0, points_balance + ?) "
+                    "WHERE id=?",
+                    (d, int(user_id)),
                 )
                 self._conn.commit()
                 updated = self._conn.execute(
                     "SELECT * FROM users WHERE id=?", (int(user_id),)
                 ).fetchone()
+                new_bal = int(updated["points_balance"] or 0) if updated else 0
+                applied = new_bal - max(0, bal)
+                self._conn.execute(
+                    "INSERT INTO points_log "
+                    "(user_id, delta, balance_after, kind, note, prompt_tokens, "
+                    "completion_tokens, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (
+                        int(user_id),
+                        applied,
+                        new_bal,
+                        "adjust",
+                        "admin add_points",
+                        0,
+                        0,
+                        time.time(),
+                    ),
+                )
+                self._conn.commit()
         return _row_user(updated) if updated else None
 
     def deduct_points(
@@ -632,8 +653,9 @@ class UserStore:
         """Deduct points after a successful request. Always increments points_spent.
 
         Unlimited (-1) keeps balance unchanged and only tracks spent.
-        Non-unlimited balances may go slightly negative if a single call costs
-        more than the remaining balance (next call is then blocked).
+        Non-unlimited balances are clamped at 0: a single call that costs more
+        than the remaining balance drives the balance to 0, never negative.
+        The UPDATE is atomic so concurrent deducts cannot interleave.
         """
         amt = max(0, int(amount))
         if amt == 0:
@@ -647,26 +669,33 @@ class UserStore:
             if row is None:
                 return None
             bal = int(row["points_balance"] or 0)
-            spent = int(row["points_spent"] or 0) + amt
             if bal == POINTS_UNLIMITED:
                 new_bal = POINTS_UNLIMITED
+                applied = amt
                 self._conn.execute(
-                    "UPDATE users SET points_spent=? WHERE id=?",
-                    (spent, int(user_id)),
+                    "UPDATE users SET points_spent = points_spent + ? WHERE id=?",
+                    (amt, int(user_id)),
                 )
             else:
-                new_bal = bal - amt
+                # Single atomic UPDATE: never below 0, spent always increments.
                 self._conn.execute(
-                    "UPDATE users SET points_balance=?, points_spent=? WHERE id=?",
-                    (new_bal, spent, int(user_id)),
+                    "UPDATE users SET points_spent = points_spent + ?, "
+                    "points_balance = MAX(0, points_balance - ?) WHERE id=?",
+                    (amt, amt, int(user_id)),
                 )
+                chk = self._conn.execute(
+                    "SELECT points_balance FROM users WHERE id=?", (int(user_id),)
+                ).fetchone()
+                new_bal = int(chk["points_balance"] or 0) if chk else 0
+                # Ledger records the amount actually removed from balance.
+                applied = min(amt, max(0, bal))
             self._conn.execute(
                 "INSERT INTO points_log "
                 "(user_id, delta, balance_after, kind, note, prompt_tokens, "
                 "completion_tokens, created_at) VALUES (?,?,?,?,?,?,?,?)",
                 (
                     int(user_id),
-                    -amt,
+                    -applied,
                     new_bal,
                     "deduct",
                     note or "",

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from unify_llm.app import compute_points_cost, create_app, user_model_catalog
+from unify_llm.app import ANTHROPIC_MESSAGES_PATHS, compute_points_cost, create_app, user_model_catalog
 from unify_llm.config import AppConfig, AuthConfig, LimitsConfig, ModelLimit, ProviderConfig
 from unify_llm.users import POINTS_UNLIMITED, UserStore
 
@@ -399,7 +399,7 @@ def test_master_key_not_charged(admin_client: TestClient):
     assert root["points_spent"] == 0
 
 
-@pytest.mark.parametrize("path", ("/v1/messages", "/messages", "/v1/v1/messages"))
+@pytest.mark.parametrize("path", ANTHROPIC_MESSAGES_PATHS)
 def test_messages_aliases_enforce_points_balance(admin_client: TestClient, path: str):
     _, raw = _make_user_with_key(admin_client, points=0)
     response = admin_client.post(
@@ -410,7 +410,7 @@ def test_messages_aliases_enforce_points_balance(admin_client: TestClient, path:
     assert response.status_code == 402, response.text
 
 
-@pytest.mark.parametrize("path", ("/v1/messages", "/messages", "/v1/v1/messages"))
+@pytest.mark.parametrize("path", ANTHROPIC_MESSAGES_PATHS)
 def test_messages_aliases_charge_user(admin_client: TestClient, path: str):
     uid, raw = _make_user_with_key(admin_client, points=100)
     response = admin_client.post(
@@ -480,3 +480,79 @@ def test_me_usage_includes_points(admin_client: TestClient):
     assert "points_spent" in body
     assert body["points_charging_enabled"] is True
     assert body["points_per_1k_completion"] == 1
+
+
+# ── atomic deduct / no-negative guarantee ──────────────────────────────────
+
+
+def test_deduct_more_than_balance_clamps_to_zero(tmp_path: Path):
+    store = UserStore(tmp_path / "clamp.db")
+    try:
+        user = store.create_user("cl", email="cl@example.com")
+        store.set_points_balance(user["id"], 3)
+        result = store.deduct_points(user["id"], 10, prompt_tokens=5000, completion_tokens=5000)
+        assert result is not None
+        assert result["points_balance"] == 0
+        assert result["points_spent"] == 10
+    finally:
+        store.close()
+
+
+def test_add_points_floors_at_zero(tmp_path: Path):
+    store = UserStore(tmp_path / "floor.db")
+    try:
+        user = store.create_user("fl", email="fl@example.com")
+        store.set_points_balance(user["id"], 5)
+        result = store.add_points(user["id"], -100)
+        assert result is not None
+        assert result["points_balance"] == 0
+    finally:
+        store.close()
+
+
+def test_concurrent_deduct_never_goes_negative(tmp_path: Path):
+    """Regression: two concurrent deducts with balance=1 must settle at 0, not -1.
+
+    The pre-check can still allow both requests through; the atomic UPDATE
+    guarantees the stored balance never drops below 0 after settle.
+    """
+    store = UserStore(tmp_path / "race.db")
+    try:
+        user = store.create_user("rc", email="rc@example.com")
+        store.set_points_balance(user["id"], 1)
+
+        errors: list[Exception] = []
+
+        def _deduct():
+            try:
+                store.deduct_points(user["id"], 1)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=_deduct) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        final = store.get_user(user["id"])
+        assert final is not None
+        assert final["points_balance"] >= 0
+        assert final["points_balance"] == 0
+        assert final["points_spent"] == 8  # all 8 deducts recorded
+    finally:
+        store.close()
+
+
+def test_unlimited_deduct_tracks_spent_not_balance(tmp_path: Path):
+    store = UserStore(tmp_path / "unl.db")
+    try:
+        user = store.create_user("ul", email="ul@example.com")
+        store.set_points_balance(user["id"], POINTS_UNLIMITED)
+        result = store.deduct_points(user["id"], 999)
+        assert result is not None
+        assert result["points_balance"] == POINTS_UNLIMITED
+        assert result["points_spent"] == 999
+    finally:
+        store.close()

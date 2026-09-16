@@ -9,16 +9,16 @@
       --font: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
         "PingFang SC", "Microsoft YaHei", sans-serif;
       --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
-      --radius: 12px;
-      --radius-sm: 8px;
+      --radius: 16px;
+      --radius-sm: 10px;
       --gap: 12px;
     }
     [data-theme="light"] {
-      --bg: #ffffff;
-      --bg-panel: #ffffff;
-      --bg-elev: #ffffff;
-      --bg-soft: #f5f5f7;
-      --bg-hover: #ebebed;
+      --bg: #f2f2f7;
+      --bg-panel: rgba(255, 255, 255, 0.92);
+      --bg-elev: rgba(255, 255, 255, 0.98);
+      --bg-soft: rgba(255, 255, 255, 0.55);
+      --bg-hover: rgba(0, 0, 0, 0.05);
       --ink: #1d1d1f;
       --ink-2: #424245;
       --ink-3: #86868b;
@@ -31,11 +31,11 @@
       --warn: #b25000;
       --warn-soft: rgba(178, 80, 0, 0.10);
       --accent-soft: rgba(0, 0, 0, 0.04);
-      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.06);
-      --glass-bg: rgba(255, 255, 255, 0.58);
-      --glass-bg-strong: rgba(255, 255, 255, 0.74);
-      --glass-line: rgba(255, 255, 255, 0.85);
-      --glass-glow: rgba(255, 255, 255, 1);
+      --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.03), 0 8px 28px rgba(0, 0, 0, 0.06);
+      --glass-bg: rgba(246, 246, 250, 0.52);
+      --glass-bg-strong: rgba(246, 246, 250, 0.72);
+      --glass-line: rgba(255, 255, 255, 0.72);
+      --glass-glow: rgba(255, 255, 255, 0.95);
     }
     [data-theme="dark"] {
       --bg: #000000;
@@ -55,11 +55,11 @@
       --warn: #ffd60a;
       --warn-soft: rgba(255, 214, 10, 0.12);
       --accent-soft: rgba(255, 255, 255, 0.06);
-      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.25);
-      --glass-bg: rgba(28, 28, 30, 0.58);
-      --glass-bg-strong: rgba(44, 44, 46, 0.72);
-      --glass-line: rgba(255, 255, 255, 0.16);
-      --glass-glow: rgba(255, 255, 255, 0.18);
+      --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.28);
+      --glass-bg: rgba(28, 28, 30, 0.55);
+      --glass-bg-strong: rgba(44, 44, 46, 0.68);
+      --glass-line: rgba(255, 255, 255, 0.14);
+      --glass-glow: rgba(255, 255, 255, 0.16);
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; min-height: 100%; }
@@ -73,38 +73,28 @@
       position: relative;
       overflow-x: hidden;
     }
-    /* Silkscreen wave-halftone: sparse even dots on pure white */
+    /* Keep form controls on the same sans stack (no UA serif) */
+    button, input, select, textarea { font-family: inherit; }
+    /* Soft wallpaper color field — glass needs a colorful substrate, not grain */
     body::before {
       content: "";
       position: fixed;
       inset: 0;
       pointer-events: none;
       z-index: 0;
-      background-image:
-        radial-gradient(ellipse 90% 30% at 14% 20%, rgba(0,0,0,.05), transparent 70%),
-        radial-gradient(ellipse 70% 36% at 86% 48%, rgba(0,0,0,.04), transparent 68%),
-        radial-gradient(ellipse 95% 28% at 40% 82%, rgba(0,0,0,.055), transparent 65%),
-        radial-gradient(circle, rgba(0,0,0,.18) 0.45px, transparent 0.62px);
-      background-size:
-        100% 100%,
-        100% 100%,
-        100% 100%,
-        10px 10px;
-      background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+      background:
+        radial-gradient(ellipse 70% 55% at 8% 0%, rgba(120, 160, 255, 0.22), transparent 62%),
+        radial-gradient(ellipse 55% 45% at 95% 18%, rgba(255, 170, 140, 0.16), transparent 60%),
+        radial-gradient(ellipse 60% 50% at 70% 100%, rgba(160, 200, 255, 0.18), transparent 62%),
+        radial-gradient(ellipse 40% 35% at 20% 85%, rgba(200, 170, 255, 0.12), transparent 58%);
     }
     [data-theme="dark"] body::before {
-      background-image:
-        radial-gradient(ellipse 90% 30% at 14% 20%, rgba(255,255,255,.045), transparent 70%),
-        radial-gradient(ellipse 70% 36% at 86% 48%, rgba(255,255,255,.03), transparent 68%),
-        radial-gradient(ellipse 95% 28% at 40% 82%, rgba(255,255,255,.04), transparent 65%),
-        radial-gradient(circle, rgba(255,255,255,.12) 0.42px, transparent 0.58px);
-      background-size:
-        100% 100%,
-        100% 100%,
-        100% 100%,
-        11px 11px;
+      background:
+        radial-gradient(ellipse 70% 55% at 8% 0%, rgba(40, 90, 200, 0.28), transparent 62%),
+        radial-gradient(ellipse 55% 45% at 95% 18%, rgba(160, 70, 40, 0.18), transparent 60%),
+        radial-gradient(ellipse 60% 50% at 70% 100%, rgba(30, 80, 160, 0.22), transparent 62%),
+        radial-gradient(ellipse 40% 35% at 20% 85%, rgba(90, 50, 140, 0.16), transparent 58%);
     }
-    /* Ambient light field — coordinates glass panels with the wave paper */
     body::after {
       content: "";
       position: fixed;
@@ -112,21 +102,26 @@
       pointer-events: none;
       z-index: 0;
       background:
-        radial-gradient(ellipse 55% 42% at 18% 8%, rgba(0, 0, 0, 0.06), transparent 70%),
-        radial-gradient(ellipse 45% 38% at 88% 28%, rgba(0, 0, 0, 0.04), transparent 68%),
-        radial-gradient(ellipse 60% 40% at 48% 96%, rgba(0, 0, 0, 0.05), transparent 65%),
-        radial-gradient(ellipse 35% 28% at 70% 55%, rgba(255, 255, 255, 0.85), transparent 72%),
-        radial-gradient(ellipse 40% 30% at 25% 70%, rgba(255, 255, 255, 0.55), transparent 70%);
+        radial-gradient(ellipse 45% 35% at 15% 8%, rgba(255, 255, 255, 0.45), transparent 70%),
+        radial-gradient(ellipse 50% 40% at 85% 70%, rgba(255, 255, 255, 0.28), transparent 68%);
     }
     [data-theme="dark"] body::after {
       background:
-        radial-gradient(ellipse 55% 42% at 18% 8%, rgba(255, 255, 255, 0.05), transparent 70%),
-        radial-gradient(ellipse 45% 38% at 88% 28%, rgba(255, 255, 255, 0.03), transparent 68%),
-        radial-gradient(ellipse 60% 40% at 48% 96%, rgba(255, 255, 255, 0.04), transparent 65%),
-        radial-gradient(ellipse 30% 25% at 70% 55%, rgba(255, 255, 255, 0.06), transparent 70%);
+        radial-gradient(ellipse 45% 35% at 15% 8%, rgba(255, 255, 255, 0.05), transparent 70%),
+        radial-gradient(ellipse 50% 40% at 85% 70%, rgba(255, 255, 255, 0.03), transparent 68%);
     }
-    .wrap, .top, .card, form, .portal-nav { position: relative; z-index: 1; }
+    .wrap, .top, .card, form, .portal-nav, .portal-panel { position: relative; z-index: 1; }
     a { color: var(--ink); text-underline-offset: 2px; }
+    /* Global keyboard focus ring — keyboard users must always see focus */
+    :focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--ink) 70%, transparent);
+      outline-offset: 2px;
+    }
+    .btn:focus-visible,
+    .tab:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 2px;
+    }
     .wrap {
       max-width: 920px;
       margin: 0 auto;
@@ -424,6 +419,222 @@
       text-align: center;
       font-size: 13.5px;
     }
+    .empty-action {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 22px 12px;
+      text-align: center;
+    }
+    .empty-action p {
+      margin: 0;
+      color: var(--ink-2);
+      font-size: 13.5px;
+      max-width: 320px;
+      line-height: 1.5;
+    }
+
+    /* ── Toast (matches dashboard glass language) ── */
+    .toast-host {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 1000;
+      pointer-events: none;
+      max-width: calc(100vw - 32px);
+    }
+    .toast {
+      pointer-events: auto;
+      background: var(--glass-bg-strong);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      box-shadow:
+        inset 0 1px 0 var(--glass-glow),
+        0 10px 28px rgba(0, 0, 0, 0.14);
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--ink);
+      min-width: 200px;
+      max-width: 340px;
+      animation: toastIn .22s ease;
+      will-change: transform, opacity;
+    }
+    .toast.is-leaving { animation: toastOut .18s ease forwards; }
+    .toast.ok { border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .toast.err { border-color: color-mix(in srgb, var(--err) 40%, transparent); }
+    .toast.warn { border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+    .toast .t-title { font-weight: 600; margin-bottom: 2px; }
+    .toast.ok .t-title { color: var(--ok); }
+    .toast.err .t-title { color: var(--err); }
+    .toast.warn .t-title { color: var(--warn); }
+    .toast .t-body {
+      color: var(--ink-2);
+      word-break: break-word;
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(10px) scale(.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(6px) scale(.98); }
+    }
+
+    /* ── Connect-a-client card (primary path after login) ── */
+    .connect-card {
+      margin: 12px 0 4px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--glass-bg);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      box-shadow:
+        inset 0 1px 0 var(--glass-glow),
+        0 4px 18px rgba(0, 0, 0, 0.05);
+      padding: 14px 16px;
+    }
+    .connect-card .connect-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin: 0 0 10px;
+    }
+    .connect-rows { display: flex; flex-direction: column; gap: 10px; }
+    .connect-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .connect-row .lbl {
+      flex: 0 0 auto;
+      min-width: 96px;
+      font-size: 12px;
+      color: var(--ink-3);
+      font-weight: 500;
+    }
+    .connect-row .val {
+      flex: 1 1 180px;
+      min-width: 0;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--ink);
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 7px 10px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .connect-row .btn { flex: 0 0 auto; }
+    .connect-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--ink-2);
+    }
+    .connect-foot b {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+    }
+
+    /* ── Key list cards (readable at 375px) ── */
+    .key-list { display: flex; flex-direction: column; }
+    .key-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      align-items: start;
+    }
+    .key-row:last-child { border-bottom: none; }
+    .key-row-main {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 8px;
+      min-width: 0;
+    }
+    .key-row-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      overflow-wrap: anywhere;
+    }
+    .key-row-meta {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 14px;
+      font-size: 12px;
+      color: var(--ink-3);
+      font-family: var(--mono);
+    }
+    .key-row-actions {
+      grid-column: 2;
+      grid-row: 1;
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+    .key-row-actions .btn { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+
+    /* In-flight button */
+    .btn.busy { opacity: 0.65; cursor: progress; }
+    .btn.busy.primary { opacity: 0.75; }
+
+    /* Points next-action */
+    .points-next {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 14px;
+      border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+      border-radius: var(--radius-sm);
+      background: var(--warn-soft);
+      color: var(--ink-2);
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+    .points-next.show { display: block; }
+    .points-next b { color: var(--warn); }
+    .points-next .rates {
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    /* Modal focus trap helpers */
+    .key-modal-backdrop:focus-visible { outline: none; }
+    .key-modal .key-raw {
+      user-select: all;
+      -webkit-user-select: all;
+    }
+    .key-modal .copy-now {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--warn);
+      margin-bottom: 8px;
+    }
+    .key-modal .btn.primary { min-height: 40px; }
     .usage-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -715,9 +926,11 @@
         transition: none !important;
       }
       .meter-fill::after,
-      .status-chip.err::before {
+      .status-chip.err::before,
+      .toast {
         animation: none !important;
       }
+      .portal-panel.active { animation: none; }
     }
     table {
       width: 100%;
@@ -990,10 +1203,37 @@
       .profile-head { gap: 6px 12px; }
       .profile-head h2 { font-size: 20px; }
       .section-title { margin-top: 18px; letter-spacing: 0.06em; }
+      .toast-host { right: 10px; left: 10px; bottom: 10px; }
+      .toast { max-width: none; }
+      .connect-row .lbl { min-width: 0; flex: 1 1 100%; }
+      .connect-row .val { flex: 1 1 100%; }
+      .connect-row .btn { width: 100%; }
+      .key-row {
+        grid-template-columns: 1fr;
+        padding: 12px 12px;
+      }
+      .key-row-actions {
+        grid-column: 1;
+        grid-row: auto;
+        justify-content: stretch;
+      }
+      .key-row-actions .btn { flex: 1 1 auto; width: auto; min-height: 36px; }
+      /* Sticky primary CTA on the Keys panel so create stays one tap away */
+      #panel-keys .inline-form {
+        position: sticky;
+        bottom: 0;
+        z-index: 4;
+        padding-bottom: 8px;
+        background: linear-gradient(to top, var(--bg) 70%, transparent);
+      }
+      #panel-keys .inline-form .btn.primary {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+      }
     }
     @media (max-width: 380px) {
       .usage-grid { grid-template-columns: 1fr; }
       .wrap { padding-left: 10px; padding-right: 10px; }
+      .points-remaining-val { font-size: 30px; }
     }
   </style>
 </head>
@@ -1002,7 +1242,6 @@
     <div class="top">
       <div class="brand">
         <b>Unify LLM</b>
-        <span>User portal · 用户门户</span>
       </div>
       <div class="top-actions">
         <button type="button" class="btn" id="themeBtn" title="Toggle theme">◐</button>
@@ -1011,8 +1250,8 @@
 
     <!-- Auth card -->
     <div class="card" id="authCard">
-      <h1>Welcome</h1>
-      <div class="sub">Sign in to manage your API keys · 登录以管理密钥</div>
+      <h1 id="authTitle">Sign in</h1>
+      <div class="sub">Manage API keys · 管理密钥</div>
       <div class="msg" id="authMsg" role="status"></div>
       <div class="tabs" role="tablist">
         <button type="button" class="tab active" data-tab="login" role="tab" aria-selected="true">Login · 登录</button>
@@ -1054,27 +1293,51 @@
       </div>
 
       <div class="btn-row" style="margin-bottom:8px">
-        <a class="btn hidden" id="dashLink" href="/dashboard">Open admin dashboard</a>
+        <a class="btn hidden" id="dashLink" href="/dashboard">Dashboard</a>
         <button type="button" class="btn" id="logoutBtn">Sign out</button>
       </div>
 
       <div class="msg warn" id="pendingMsg">Your account is not active. An admin must approve it before keys work.</div>
 
-      <div class="tabs portal-tabs" role="tablist" id="portalNav">
-        <button type="button" class="tab active" data-panel="overview" role="tab">Overview</button>
-        <button type="button" class="tab" data-panel="guide" role="tab">Guide</button>
-        <button type="button" class="tab" data-panel="points" role="tab">Points</button>
-        <button type="button" class="tab" data-panel="usage" role="tab">Usage</button>
-        <button type="button" class="tab" data-panel="keys" role="tab">Keys</button>
-        <button type="button" class="tab" data-panel="settings" role="tab">Settings</button>
+      <div class="tabs portal-tabs" role="tablist" id="portalNav" aria-label="Portal sections">
+        <button type="button" class="tab active" data-panel="overview" role="tab" aria-selected="true">Overview</button>
+        <button type="button" class="tab" data-panel="guide" role="tab" aria-selected="false">Guide</button>
+        <button type="button" class="tab" data-panel="points" role="tab" aria-selected="false">Points</button>
+        <button type="button" class="tab" data-panel="usage" role="tab" aria-selected="false">Usage</button>
+        <button type="button" class="tab" data-panel="keys" role="tab" aria-selected="false">Keys</button>
+        <button type="button" class="tab" data-panel="settings" role="tab" aria-selected="false">Settings</button>
       </div>
 
       <!-- Overview -->
-      <div class="portal-panel active" id="panel-overview">
+      <div class="portal-panel active" id="panel-overview" role="tabpanel" aria-label="Overview">
+        <!-- Primary path: points, keys, Base URL -->
+        <div class="connect-card" id="connectCard">
+          <p class="connect-title">Connect a client · 接入客户端</p>
+          <div class="connect-rows">
+            <div class="connect-row">
+              <span class="lbl">OpenAI Base URL</span>
+              <code class="val" id="ovBaseOpenai">…</code>
+              <button type="button" class="btn" data-copy-text="ovBaseOpenai">Copy</button>
+            </div>
+            <div class="connect-row">
+              <span class="lbl">Anthropic Base URL</span>
+              <code class="val" id="ovBaseAnthropic">…</code>
+              <button type="button" class="btn" data-copy-text="ovBaseAnthropic">Copy</button>
+            </div>
+          </div>
+          <div class="connect-foot">
+            <span>Active keys · 有效密钥：<b id="ovKeyCount">—</b></span>
+            <span class="btn-row">
+              <button type="button" class="btn primary" id="ovCreateKeyBtn">Create key</button>
+              <button type="button" class="btn" id="ovGuideBtn">Guide</button>
+            </span>
+          </div>
+        </div>
+
         <div class="usage-grid" style="margin:12px 0">
+          <div class="usage-card meter-tile" id="ovPointsCard"><div class="k">points left · 剩余积分</div><div class="v" id="ovPoints">—</div></div>
           <div class="usage-card meter-tile"><div class="k">requests (recent)</div><div class="v" id="ovReq">—</div></div>
           <div class="usage-card meter-tile"><div class="k">tokens total</div><div class="v" id="ovTok">—</div></div>
-          <div class="usage-card meter-tile" id="ovPointsCard"><div class="k">points left</div><div class="v" id="ovPoints">—</div></div>
           <div class="usage-card meter-tile" id="ovStatusCard"><div class="k">status</div><div class="v" id="ovStatus" style="font-size:13px">—</div></div>
         </div>
         <div class="section-title">Available models · 可用模型</div>
@@ -1266,7 +1529,7 @@ Model:     deepseek-flash
             </div>
             <div class="legend-item">
               <i class="dot remain" aria-hidden="true"></i>
-              <span>balance · 余额</span>
+              <span>Points · 积分</span>
               <b id="uPointsBalance">—</b>
             </div>
           </div>
@@ -1280,23 +1543,34 @@ Model:     deepseek-flash
       </div>
 
       <p class="sub" id="pointsHint" style="margin:10px 0 0;display:none"></p>
-      <details id="pointsLogDetails" style="margin-top:12px">
+      <div class="points-next" id="pointsNext" role="status">
+        <div id="pointsNextText"><b>No points left.</b> Ask an admin to grant more Points so requests can run.</div>
+        <div class="rates" id="pointsNextRates"></div>
+      </div>
+      <details id="pointsLogDetails" open style="margin-top:12px">
         <summary style="cursor:pointer;color:var(--ink-2);font-size:13px;padding:6px 0">Recent deductions · 扣费明细</summary>
         <div class="card" style="margin-top:8px;padding:8px 0" id="pointsLogWrap">
-          <div class="empty">No deductions yet · 暂无扣费记录</div>
+          <div class="empty-action">
+            <p>No deductions yet · 暂无扣费记录. Points drop here after a successful model API call.</p>
+          </div>
         </div>
       </details>
       </div><!-- /points -->
 
-      <div class="portal-panel" id="panel-keys">
+      <div class="portal-panel" id="panel-keys" role="tabpanel" aria-label="Keys">
       <div class="section-title">API keys · 我的密钥</div>
+      <p class="sub" style="margin:0 0 12px">
+        Create a key, copy it once, paste into your tool. Prefix <span class="mono">sk-unify-</span> is always shown ·
+        创建后请立即复制；列表只显示前缀。
+      </p>
       <div class="inline-form">
         <div class="field">
           <label for="keyName">Key name (optional)</label>
-          <input id="keyName" type="text" placeholder="laptop / ide / phone" />
+          <input id="keyName" type="text" placeholder="laptop / ide / phone" autocomplete="off" />
         </div>
         <button type="button" class="btn primary" id="createKeyBtn">Create key</button>
       </div>
+      <div class="msg warn hidden" id="keysPendingHint">Your account is pending. An admin must approve it before keys work.</div>
       <div class="card" style="padding:8px 0" id="keysWrap">
         <div class="empty">Loading…</div>
       </div>
@@ -1320,7 +1594,6 @@ Model:     deepseek-flash
     </div>
 
     <div class="foot">
-      <span>Unify LLM gateway</span>
       <span>
         <a href="/healthz">health</a>
         ·
@@ -1334,14 +1607,16 @@ Model:     deepseek-flash
     <button type="button" class="key-modal-backdrop" id="keyModalBackdrop" tabindex="-1" aria-label="Close"></button>
     <div class="key-modal" role="dialog" aria-modal="true" aria-labelledby="keyModalTitle">
       <h3 id="keyModalTitle">API key issued · 密钥已签发</h3>
-      <div class="warn">Copy now — this is shown only once.</div>
+      <div class="copy-now">Shown only once · 仅显示一次</div>
       <div class="key-raw" id="newKeyRaw"></div>
       <div class="btn-row">
         <button type="button" class="btn primary" id="copyNewKey">Copy</button>
-        <button type="button" class="btn" id="closeKeyModal">Close</button>
+        <button type="button" class="btn" id="closeKeyModal">Close · 关闭</button>
       </div>
     </div>
   </div>
+
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="false"></div>
 
   <script>
     "use strict";
@@ -1379,6 +1654,76 @@ Model:     deepseek-flash
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       })[c]);
     }
+
+    /* ── Toast ── */
+    function showToast(kind, title, body) {
+      const host = $("toastHost");
+      if (!host) return;
+      const el = document.createElement("div");
+      el.className = "toast " + (kind === "ok" ? "ok" : kind === "warn" ? "warn" : "err");
+      el.setAttribute("role", "status");
+      el.innerHTML =
+        '<div class="t-title">' + esc(title) + "</div>" +
+        (body ? '<div class="t-body">' + esc(body) + "</div>" : "");
+      host.appendChild(el);
+      window.setTimeout(() => {
+        el.classList.add("is-leaving");
+        window.setTimeout(() => el.remove(), 200);
+      }, 3800);
+    }
+
+    /* Actionable error text — never dump raw JSON */
+    function errText(body, res, fallback) {
+      const msg = body && body.error && body.error.message;
+      if (msg) return String(msg);
+      if (res && res.status === 401) return "Session expired. Sign in again.";
+      if (res && res.status === 403) return "Not allowed. Your account may be pending admin approval.";
+      if (res && res.status === 404) return "Not found. Refresh and try again.";
+      if (res && res.status === 400) return "Check the form values and try again.";
+      return fallback || (res ? "Request failed (HTTP " + res.status + ")" : "Request failed");
+    }
+
+    async function withBusy(btn, fn) {
+      if (!btn) return fn();
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.classList.add("busy");
+      const prevLabel = btn.textContent;
+      if (!btn.dataset.busyLabel) btn.dataset.busyLabel = prevLabel;
+      try {
+        return await fn();
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove("busy");
+        if (btn.dataset.busyLabel) {
+          btn.textContent = btn.dataset.busyLabel;
+          delete btn.dataset.busyLabel;
+        }
+      }
+    }
+
+    async function copyTextToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (_) {
+        // Fallback for non-secure contexts
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          const ok = document.execCommand("copy");
+          ta.remove();
+          return ok;
+        } catch (__) {
+          return false;
+        }
+      }
+    }
     function fmtN(n) {
       n = Number(n) || 0;
       if (n >= 1e9) return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + "B";
@@ -1399,6 +1744,18 @@ Model:     deepseek-flash
         return new Date(Number(ts) * 1000).toISOString().slice(0, 16).replace("T", " ");
       } catch (_) { return "—"; }
     }
+
+    function gatewayOrigin() {
+      return window.location.origin || "http://127.0.0.1:8787";
+    }
+    function initBaseUrls() {
+      const origin = gatewayOrigin();
+      const openaiEl = $("ovBaseOpenai");
+      const anthropicEl = $("ovBaseAnthropic");
+      if (openaiEl) openaiEl.textContent = origin + "/v1";
+      if (anthropicEl) anthropicEl.textContent = origin;
+    }
+    initBaseUrls();
 
     async function api(url, opts = {}) {
       const init = {
@@ -1424,6 +1781,8 @@ Model:     deepseek-flash
         const which = tab.dataset.tab;
         $("loginForm").classList.toggle("hidden", which !== "login");
         $("registerForm").classList.toggle("hidden", which !== "register");
+        const authTitle = $("authTitle");
+        if (authTitle) authTitle.textContent = which === "register" ? "Create account" : "Sign in";
         hideMsg($("authMsg"));
       });
     });
@@ -1431,26 +1790,74 @@ Model:     deepseek-flash
     function showAuth() {
       $("authCard").classList.remove("hidden");
       $("homeCard").classList.add("hidden");
-      closeKeyModal();
+      closeKeyModal(true);
     }
-    function closeKeyModal() {
+    let keyModalPrevFocus = null;
+    let keyModalCopied = false;
+
+    function closeKeyModal(silent) {
       const root = $("keyModalRoot");
-      if (root) root.hidden = true;
+      if (!root || root.hidden) {
+        const rawEl0 = $("newKeyRaw");
+        if (rawEl0) rawEl0.textContent = "";
+        return;
+      }
+      const wasCopied = keyModalCopied;
+      root.hidden = true;
+      document.body.style.overflow = "";
       const rawEl = $("newKeyRaw");
       if (rawEl) rawEl.textContent = "";
+      keyModalCopied = false;
+      if (!silent && !wasCopied) {
+        showToast("warn", "Key not copied", "Create a new key if you lose this one — the full value is never shown again.");
+      }
+      if (keyModalPrevFocus && typeof keyModalPrevFocus.focus === "function") {
+        try { keyModalPrevFocus.focus(); } catch (_) {}
+      }
+      keyModalPrevFocus = null;
     }
     function openKeyModal(raw) {
       const root = $("keyModalRoot");
       const rawEl = $("newKeyRaw");
       if (!root || !rawEl) return;
+      keyModalPrevFocus = document.activeElement;
+      keyModalCopied = false;
       rawEl.textContent = raw || "";
       root.hidden = false;
+      document.body.style.overflow = "hidden";
       const copyBtn = $("copyNewKey");
       if (copyBtn) {
         copyBtn.textContent = "Copy";
         copyBtn.focus();
       }
     }
+    // Focus trap + Escape for the one-time key modal
+    (function bindKeyModalA11y() {
+      const root = $("keyModalRoot");
+      if (!root) return;
+      root.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closeKeyModal(false);
+          return;
+        }
+        if (e.key !== "Tab") return;
+        const focusables = root.querySelectorAll(
+          'button:not([disabled]):not([tabindex="-1"]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const list = Array.prototype.filter.call(focusables, (el) => !el.closest("[hidden]") && el.offsetParent !== null);
+        if (!list.length) return;
+        const first = list[0];
+        const last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      });
+    })();
     function showHome(user) {
       $("authCard").classList.add("hidden");
       $("homeCard").classList.remove("hidden");
@@ -1476,12 +1883,17 @@ Model:     deepseek-flash
       stEl.className = "pill" + (user.status === "active" ? " ok" : user.status === "pending" ? " warn" : " err");
       $("pendingMsg").classList.toggle("hidden", user.status === "active");
       $("dashLink").classList.toggle("hidden", user.role !== "admin");
+      const pendingHint = $("keysPendingHint");
+      if (pendingHint) pendingHint.classList.toggle("hidden", user.status === "active");
       $("createKeyBtn").disabled = user.status !== "active";
+      const ovCreate = $("ovCreateKeyBtn");
+      if (ovCreate) ovCreate.disabled = user.status !== "active";
       $("profileDisplayName").value = dn;
       $("profileBadge").textContent = badge || "—";
       hideMsg($("profileMsg"));
       hideMsg($("passwordMsg"));
-      closeKeyModal();
+      closeKeyModal(true);
+      initBaseUrls();
       refreshKeys();
       refreshUsage();
       refreshModels();
@@ -1511,17 +1923,21 @@ Model:     deepseek-flash
       hideMsg($("authMsg"));
       const email = $("loginEmail").value.trim();
       const password = $("loginPassword").value;
-      const { res, body } = await api("/api/auth/login", {
-        method: "POST",
-        body: { email, password },
+      const submitBtn = $("loginForm").querySelector('button[type="submit"]');
+      await withBusy(submitBtn, async () => {
+        const { res, body } = await api("/api/auth/login", {
+          method: "POST",
+          body: { email, password },
+        });
+        if (!res.ok) {
+          const msg = errText(body, res, "Sign-in failed.");
+          showMsg($("authMsg"), res.status === 403 ? "warn" : "err", msg);
+          return;
+        }
+        $("loginPassword").value = "";
+        showHome(body.user);
+        showToast("ok", "Signed in", "Points, keys, and Base URL are on Overview.");
       });
-      if (!res.ok) {
-        const msg = (body.error && body.error.message) || ("HTTP " + res.status);
-        showMsg($("authMsg"), res.status === 403 ? "warn" : "err", msg);
-        return;
-      }
-      $("loginPassword").value = "";
-      showHome(body.user);
     });
 
     $("registerForm").addEventListener("submit", async (e) => {
@@ -1530,65 +1946,94 @@ Model:     deepseek-flash
       const name = $("regName").value.trim();
       const email = $("regEmail").value.trim();
       const password = $("regPassword").value;
-      const { res, body } = await api("/api/auth/register", {
-        method: "POST",
-        body: { name, email, password },
+      const submitBtn = $("registerForm").querySelector('button[type="submit"]');
+      await withBusy(submitBtn, async () => {
+        const { res, body } = await api("/api/auth/register", {
+          method: "POST",
+          body: { name, email, password },
+        });
+        if (!res.ok) {
+          showMsg($("authMsg"), "err", errText(body, res, "Registration failed."));
+          return;
+        }
+        showMsg(
+          $("authMsg"),
+          "ok",
+          body.message || "Account created. Wait for admin approval, then sign in."
+        );
+        $("registerForm").reset();
+        document.querySelector('.tab[data-tab="login"]').click();
+        $("loginEmail").value = email;
       });
-      if (!res.ok) {
-        showMsg($("authMsg"), "err", (body.error && body.error.message) || ("HTTP " + res.status));
-        return;
-      }
-      showMsg(
-        $("authMsg"),
-        "ok",
-        body.message || "Account created. Wait for admin approval, then sign in."
-      );
-      $("registerForm").reset();
-      document.querySelector('.tab[data-tab="login"]').click();
-      $("loginEmail").value = email;
     });
 
     $("logoutBtn").addEventListener("click", async () => {
-      await api("/api/auth/logout", { method: "POST", body: {} });
-      showAuth();
+      await withBusy($("logoutBtn"), async () => {
+        await api("/api/auth/logout", { method: "POST", body: {} });
+        showAuth();
+      });
     });
+
+    function setOvKeyCount(n) {
+      const el = $("ovKeyCount");
+      if (el) el.textContent = n == null ? "—" : String(n);
+    }
 
     async function refreshKeys() {
       const wrap = $("keysWrap");
       const { res, body } = await api("/api/me/keys");
       if (!res.ok) {
-        wrap.innerHTML = '<div class="empty">' + esc((body.error && body.error.message) || "Failed to load keys") + "</div>";
+        wrap.innerHTML = '<div class="empty">' + esc(errText(body, res, "Failed to load keys")) + "</div>";
+        setOvKeyCount(null);
         return;
       }
       const keys = body.keys || [];
+      const active = keys.filter((k) => !k.revoked_at && k.enabled);
+      setOvKeyCount(active.length);
       if (!keys.length) {
-        wrap.innerHTML = '<div class="empty">No keys yet · 创建一个密钥以调用 /v1</div>';
+        wrap.innerHTML =
+          '<div class="empty-action">' +
+          "<p>No keys yet. Create one to call <span class=\"mono\">/v1</span> from OpenCode, Codex, or any OpenAI-compatible client.</p>" +
+          '<button type="button" class="btn primary" id="emptyCreateKeyBtn">Create your first key</button>' +
+          "</div>";
+        const emptyBtn = $("emptyCreateKeyBtn");
+        if (emptyBtn) {
+          emptyBtn.disabled = $("createKeyBtn").disabled;
+          emptyBtn.addEventListener("click", () => {
+            const nameInput = $("keyName");
+            if (nameInput) nameInput.focus();
+            createKeyFrom(nameInput, emptyBtn);
+          });
+        }
         return;
       }
-      let html =
-        '<div class="table-wrap"><table><thead><tr>' +
-        "<th>Prefix</th><th>Name</th><th>Created</th><th>Status</th><th>Last used</th><th></th>" +
-        "</tr></thead><tbody>";
+      let html = '<div class="key-list">';
       keys.forEach((k) => {
         const pill = k.revoked_at
           ? '<span class="pill err">revoked</span>'
           : k.enabled
             ? '<span class="pill ok">active</span>'
             : '<span class="pill err">disabled</span>';
+        const name = (k.name || "").trim();
         html +=
-          "<tr>" +
-          '<td><span class="key-prefix">sk-unify-' + esc(k.key_prefix) + "…</span></td>" +
-          "<td>" + esc(k.name || "—") + "</td>" +
-          '<td class="mono">' + esc(fmtTs(k.created_at)) + "</td>" +
-          "<td>" + pill + "</td>" +
-          '<td class="mono">' + esc(fmtTs(k.last_used_at)) + "</td>" +
-          "<td>" +
+          '<div class="key-row" data-key-id="' + Number(k.id) + '">' +
+          '<div class="key-row-main">' +
+          '<span class="key-prefix">sk-unify-' + esc(k.key_prefix) + "…</span>" +
+          pill +
+          (name ? '<span class="key-row-name">' + esc(name) + "</span>" : "") +
+          "</div>" +
+          '<div class="key-row-actions">' +
           (k.revoked_at
             ? ""
-            : '<button type="button" class="btn" data-revoke="' + Number(k.id) + '">Revoke</button>') +
-          "</td></tr>";
+            : '<button type="button" class="btn" data-revoke="' + Number(k.id) + '" aria-label="Revoke key ' + esc(k.key_prefix) + '">Revoke</button>') +
+          "</div>" +
+          '<div class="key-row-meta">' +
+          "<span>created " + esc(fmtTs(k.created_at)) + "</span>" +
+          "<span>last used " + esc(fmtTs(k.last_used_at)) + "</span>" +
+          "</div>" +
+          "</div>";
       });
-      html += "</tbody></table></div>";
+      html += "</div>";
       wrap.innerHTML = html;
     }
 
@@ -1596,57 +2041,106 @@ Model:     deepseek-flash
       const btn = e.target.closest("[data-revoke]");
       if (!btn) return;
       const id = Number(btn.getAttribute("data-revoke"));
-      if (!confirm("Revoke this API key?")) return;
-      const { res, body } = await api("/api/me/keys/" + id + "/revoke", { method: "POST", body: {} });
-      if (!res.ok) {
-        alert((body.error && body.error.message) || "Revoke failed");
-        return;
-      }
-      refreshKeys();
+      if (!confirm("Revoke this API key? Tools using it will stop working immediately.")) return;
+      await withBusy(btn, async () => {
+        const { res, body } = await api("/api/me/keys/" + id + "/revoke", { method: "POST", body: {} });
+        if (!res.ok) {
+          showToast("err", "Revoke failed", errText(body, res, "Could not revoke this key."));
+          return;
+        }
+        showToast("ok", "Key revoked", "This key can no longer call the gateway.");
+        refreshKeys();
+      });
     });
 
-    $("createKeyBtn").addEventListener("click", async () => {
-      const name = $("keyName").value.trim();
-      const { res, body } = await api("/api/me/keys", { method: "POST", body: { name } });
-      if (!res.ok) {
-        alert((body.error && body.error.message) || "Create failed");
-        return;
-      }
-      const raw = body.key && body.key.raw_key;
-      if (raw) openKeyModal(raw);
-      $("keyName").value = "";
-      refreshKeys();
-    });
+    async function createKeyFrom(nameInput, btn) {
+      const name = nameInput ? nameInput.value.trim() : "";
+      await withBusy(btn || $("createKeyBtn"), async () => {
+        const { res, body } = await api("/api/me/keys", { method: "POST", body: { name } });
+        if (!res.ok) {
+          showToast("err", "Create failed", errText(body, res, "Could not create a key."));
+          return;
+        }
+        const raw = body.key && body.key.raw_key;
+        if (raw) openKeyModal(raw);
+        if (nameInput) nameInput.value = "";
+        showToast("ok", "API key created", "Copy it now — it is shown only once.");
+        refreshKeys();
+      });
+    }
+
+    $("createKeyBtn").addEventListener("click", () => createKeyFrom($("keyName"), $("createKeyBtn")));
+    const ovCreateBtn = $("ovCreateKeyBtn");
+    if (ovCreateBtn) {
+      ovCreateBtn.addEventListener("click", () => {
+        switchPortalPanel("keys");
+        const nameInput = $("keyName");
+        if (nameInput) nameInput.focus();
+      });
+    }
+    const ovGuideBtn = $("ovGuideBtn");
+    if (ovGuideBtn) {
+      ovGuideBtn.addEventListener("click", () => switchPortalPanel("guide"));
+    }
 
     $("copyNewKey").addEventListener("click", async () => {
       const text = $("newKeyRaw").textContent || "";
-      try {
-        await navigator.clipboard.writeText(text);
+      const ok = await copyTextToClipboard(text);
+      if (ok) {
+        keyModalCopied = true;
         $("copyNewKey").textContent = "Copied";
-      } catch (_) {
+        showToast("ok", "Copied", "Paste it into your client config or env var.");
+      } else {
         $("copyNewKey").textContent = "Copy failed";
+        showToast("err", "Copy failed", "Select the key text and copy manually.");
       }
-      setTimeout(() => { $("copyNewKey").textContent = "Copy"; }, 1500);
+      setTimeout(() => { $("copyNewKey").textContent = "Copy"; }, 1600);
     });
-    $("closeKeyModal").addEventListener("click", closeKeyModal);
-    $("keyModalBackdrop").addEventListener("click", closeKeyModal);
+    $("closeKeyModal").addEventListener("click", () => closeKeyModal(false));
+    $("keyModalBackdrop").addEventListener("click", () => closeKeyModal(false));
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeKeyModal();
+      if (e.key === "Escape") {
+        const root = $("keyModalRoot");
+        if (root && !root.hidden) closeKeyModal(false);
+      }
+    });
+
+    /* Overview / connect-card element copy */
+    document.querySelectorAll("[data-copy-text]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const src = $(btn.getAttribute("data-copy-text"));
+        const text = src ? (src.textContent || "").trim() : "";
+        if (!text || text === "…") return;
+        const ok = await copyTextToClipboard(text);
+        if (ok) {
+          showToast("ok", "Copied", text);
+          btn.textContent = "Copied";
+        } else {
+          showToast("err", "Copy failed", "Select the URL and copy manually.");
+          btn.textContent = "Copy failed";
+        }
+        setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+      });
     });
 
     $("saveProfileBtn").addEventListener("click", async () => {
       hideMsg($("profileMsg"));
       const display_name = $("profileDisplayName").value.trim();
-      const { res, body } = await api("/api/me", {
-        method: "PATCH",
-        body: { display_name },
+      await withBusy($("saveProfileBtn"), async () => {
+        const { res, body } = await api("/api/me", {
+          method: "PATCH",
+          body: { display_name },
+        });
+        if (!res.ok) {
+          const msg = errText(body, res, "Could not save profile.");
+          showMsg($("profileMsg"), "err", msg);
+          showToast("err", "Save failed", msg);
+          return;
+        }
+        showMsg($("profileMsg"), "ok", "Saved.");
+        showToast("ok", "Profile saved", display_name || "Display name cleared.");
+        if (body.user) showHome(body.user);
       });
-      if (!res.ok) {
-        showMsg($("profileMsg"), "err", (body.error && body.error.message) || ("HTTP " + res.status));
-        return;
-      }
-      showMsg($("profileMsg"), "ok", "Saved.");
-      if (body.user) showHome(body.user);
     });
 
     $("passwordForm").addEventListener("submit", async (e) => {
@@ -1654,16 +2148,22 @@ Model:     deepseek-flash
       hideMsg($("passwordMsg"));
       const old_password = $("oldPassword").value;
       const new_password = $("newPassword").value;
-      const { res, body } = await api("/api/me/password", {
-        method: "POST",
-        body: { old_password, new_password },
+      const submitBtn = $("passwordForm").querySelector('button[type="submit"]');
+      await withBusy(submitBtn, async () => {
+        const { res, body } = await api("/api/me/password", {
+          method: "POST",
+          body: { old_password, new_password },
+        });
+        if (!res.ok) {
+          const msg = errText(body, res, "Could not change password.");
+          showMsg($("passwordMsg"), "err", msg);
+          showToast("err", "Password not changed", msg);
+          return;
+        }
+        $("passwordForm").reset();
+        showMsg($("passwordMsg"), "ok", "Password updated. Other devices were signed out.");
+        showToast("ok", "Password updated", "Other devices were signed out. This session stays active.");
       });
-      if (!res.ok) {
-        showMsg($("passwordMsg"), "err", (body.error && body.error.message) || ("HTTP " + res.status));
-        return;
-      }
-      $("passwordForm").reset();
-      showMsg($("passwordMsg"), "ok", "Password updated. Other devices were signed out.");
     });
 
     function switchPortalPanel(name) {
@@ -1694,11 +2194,13 @@ Model:     deepseek-flash
       btn.addEventListener("click", async () => {
         const src = $(btn.getAttribute("data-copy"));
         const text = src ? (src.textContent || "") : "";
-        try {
-          await navigator.clipboard.writeText(text);
+        const ok = await copyTextToClipboard(text);
+        if (ok) {
           btn.textContent = "Copied";
-        } catch (_) {
+          showToast("ok", "Copied", "Snippet ready to paste.");
+        } else {
           btn.textContent = "Copy failed";
+          showToast("err", "Copy failed", "Select the text and copy manually.");
         }
         setTimeout(() => { btn.textContent = "Copy"; }, 1500);
       });
@@ -1774,7 +2276,8 @@ Model:     deepseek-flash
       if (iwrap) {
         const items = body.items || [];
         if (!items.length) {
-          iwrap.innerHTML = '<div class="empty">No traffic yet · 暂无请求</div>';
+          iwrap.innerHTML =
+            '<div class="empty-action"><p>No traffic yet · 暂无请求. Create a key, point your client at the Base URL on Overview, then call <span class="mono">/v1</span>.</p></div>';
         } else {
           iwrap.innerHTML =
             '<div class="table-wrap"><table><thead><tr>' +
@@ -1840,6 +2343,39 @@ Model:     deepseek-flash
             " / 1k completion. Balance −1 = unlimited.";
         }
       }
+      // Zero / low next-action guidance
+      const nextEl = $("pointsNext");
+      if (nextEl) {
+        const ratesLine =
+          "Rates: " +
+          (body.points_per_1k_prompt || 0) +
+          " / 1k prompt · " +
+          (body.points_per_1k_completion || 0) +
+          " / 1k completion.";
+        const nextText = $("pointsNextText");
+        const nextRates = $("pointsNextRates");
+        if (!body.points_charging_enabled || unlimited) {
+          nextEl.classList.remove("show");
+        } else if (bal <= 0) {
+          nextEl.classList.add("show");
+          if (nextText) {
+            nextText.innerHTML =
+              "<b>No points left.</b> Requests will be rejected. Ask an admin to grant more Points, then try again.";
+          }
+          if (nextRates) nextRates.textContent = ratesLine;
+        } else if (health.tone === "err" || health.tone === "warn") {
+          nextEl.classList.add("show");
+          if (nextText) {
+            nextText.innerHTML =
+              "<b>Points running low · " +
+              esc(fmtPts(Math.max(0, bal))) +
+              " left.</b> Ask an admin for a top-up before traffic is blocked.";
+          }
+          if (nextRates) nextRates.textContent = ratesLine;
+        } else {
+          nextEl.classList.remove("show");
+        }
+      }
       // remaining meter: width = % remaining vs granted (balance + spent)
       const bar = $("pointsBar");
       const plabel = $("pointsProgressLabel");
@@ -1891,12 +2427,15 @@ Model:     deepseek-flash
       if (!res.ok) return;
       const items = (body && body.items) || [];
       if (!items.length) {
-        wrap.innerHTML = '<div class="empty">No deductions yet · 暂无扣费记录</div>';
+        wrap.innerHTML =
+          '<div class="empty-action">' +
+          "<p>No deductions yet · 暂无扣费记录. Points drop here after a successful model API call.</p>" +
+          "</div>";
         return;
       }
       wrap.innerHTML =
         '<div class="table-wrap"><table><thead><tr>' +
-        "<th>time</th><th>delta</th><th>balance</th><th>tokens</th><th>note</th>" +
+        "<th>time</th><th>delta</th><th>Points</th><th>tokens</th><th>note</th>" +
         "</tr></thead><tbody>" +
         items
           .map((r) => {

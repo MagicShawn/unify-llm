@@ -42,10 +42,15 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 PROBE_TIMEOUT_SECONDS = 10.0
 
+# Canonical Anthropic Messages paths clients may use (OpenAI-style baseURL,
+# host-root OpenCode, and double-/v1 when clients prepend /v1 again).
+ANTHROPIC_MESSAGES_PATHS = ("/v1/messages", "/messages", "/v1/v1/messages")
+HOST_ROOT_MODEL_PATHS = ("/messages", "/messages/count_tokens")
+
 
 def _is_model_api_path(path: str) -> bool:
     """Include host-root Anthropic aliases in all model API policies."""
-    return path.startswith("/v1/") or path in ("/messages", "/messages/count_tokens")
+    return path.startswith("/v1/") or path in HOST_ROOT_MODEL_PATHS
 
 
 class LoginGuard:
@@ -357,11 +362,14 @@ def _client_ip(request: Request, trusted_proxies: frozenset[str] | None = None) 
 
     X-Forwarded-For / X-Real-IP are honored only when the TCP peer is an
     explicitly configured trusted proxy. Otherwise the peer address wins.
+    An empty peer never consults client-controlled headers.
     Localhost privilege checks must use _peer_ip, never this helper.
     """
     peer = _peer_ip(request)
+    if not peer:
+        return ""
     proxies = trusted_proxies if trusted_proxies is not None else frozenset()
-    if peer and peer not in proxies:
+    if peer not in proxies:
         return peer
     xff = request.headers.get("x-forwarded-for") or ""
     if xff:
@@ -763,7 +771,7 @@ def create_app(
             return await call_next(request)
 
         client_key = _extract_client_key(request)
-        is_user_admin = path.startswith(("/api/admin/users", "/api/admin/keys"))
+        is_admin_api = path.startswith("/api/admin/")
 
         # Master gateway key always grants full access.
         if gateway_key and _keys_match(client_key, gateway_key):
@@ -779,15 +787,15 @@ def create_app(
         ):
             return await call_next(request)
 
-        # User/key admin without a master key → TCP peer must be loopback.
+        # Any admin API without a master key → TCP peer must be loopback.
         # Never trust X-Forwarded-For here (auth bypass / admin takeover).
-        if is_user_admin and not gateway_key:
+        if is_admin_api and not gateway_key:
             if not _is_loopback(_peer_ip(request)):
                 return JSONResponse(
                     status_code=403,
                     content={
                         "error": {
-                            "message": "Admin user API is localhost-only when no gateway key is set.",
+                            "message": "Admin API is localhost-only when no gateway key is set.",
                             "type": "ForbiddenError",
                         }
                     },
@@ -917,7 +925,9 @@ def create_app(
 
         try:
             response = await call_next(request)
-        except Exception:
+        except BaseException:
+            # Also catches CancelledError (client disconnect / task cancel)
+            # so the concurrency slot is never leaked.
             _release_once()
             raise
 
@@ -2164,7 +2174,7 @@ def create_app(
         providers we proxy do not all expose count_tokens, so estimate
         (~4 chars/token) instead of 404ing the client.
         """
-        # Include schemas, tool arguments and nested tool results as prompt content.
+        # tools/tool_choice count toward prompt for OpenCode packing heuristics.
         prompt = {
             key: payload[key]
             for key in ("system", "messages", "tools", "tool_choice")

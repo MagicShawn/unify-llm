@@ -796,7 +796,7 @@ async def anthropic_sse_to_openai_sse(
         delta: dict[str, Any],
         finish: str | None = None,
         usage: dict[str, int] | None = None,
-        usage_only: bool = False,
+        omit_choices: bool = False,
     ) -> bytes:
         body = {
             "id": chunk_id,
@@ -811,7 +811,7 @@ async def anthropic_sse_to_openai_sse(
                 }
             ],
         }
-        if usage is not None and usage_only:
+        if omit_choices:
             body["choices"] = []
         if usage is not None:
             body["usage"] = usage
@@ -914,7 +914,7 @@ async def anthropic_sse_to_openai_sse(
             elif etype == "message_stop":
                 if saw_usage:
                     if include_usage:
-                        yield _chunk({}, usage=_usage(), usage_only=True)
+                        yield _chunk({}, usage=_usage(), omit_choices=True)
                     elif not usage_emitted:
                         yield _chunk({}, usage=_usage())
                 yield b"data: [DONE]\n\n"

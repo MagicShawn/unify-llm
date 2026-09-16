@@ -93,9 +93,9 @@ python -m pip install -r requirements.txt
 | OpenAI-compatible | `http://127.0.0.1:8787/v1` |
 | Anthropic Messages | `http://127.0.0.1:8787` |
 
-Anthropic clients that append `/messages` directly can also use a base URL ending
+Anthropic clients that append `/messages` directly can also use a Base URL ending
 in `/v1`. The gateway accepts `/messages`, `/v1/messages`, and `/v1/v1/messages`,
-with identical API-key authentication, rate limits, and user points accounting.
+with identical API-key authentication, rate limits, and Points accounting.
 Each path also supports `/count_tokens`, returning a local estimate that includes
 system text, messages, tool schemas, and tool inputs. This uses roughly four
 characters per token, not the upstream model's tokenizer; it is not an exact

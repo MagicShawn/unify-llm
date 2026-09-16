@@ -1,0 +1,50 @@
+name: Bug report
+description: Something broke or behaved differently from the documented/intended behavior
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Fill in the fields below — incomplete reports may get `needs-info`.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: One or two sentences describing the failure.
+      placeholder: Streaming from Anthropic upstream via OpenAI client drops tool_call deltas…
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Numbered steps, minimal config shape (secrets redacted), and the client/command used.
+      placeholder: |
+        1. Configure provider X with model Y
+        2. Call `/v1/chat/completions` with `stream: true` and tools
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What should have happened, and what actually happened.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, commit/version, LAN or localhost, auth mode.
+      placeholder: "Windows 11, Python 3.12, commit abc1234, localhost, auth off"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / status (optional)
+      description: Relevant log lines or `GET /api/status` / history snippets. Redact API keys.
+    validations:
+      required: false

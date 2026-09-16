@@ -338,7 +338,7 @@ Base：
 | OpenAI 兼容 | `http://127.0.0.1:8787/v1` |
 | Anthropic | `http://127.0.0.1:8787` |
 
-本地中转默认**不校验**客户端 Authorization；若设置了网关 Key（`UNIFY_GATEWAY_KEY` 或 `auth.api_key`），`/v1/*` 与 `/api/*` 需带正确 Key。SDK 仍要求非空 api_key，本机无鉴权时可填占位符如 `local`。
+本地中转默认**不校验**客户端 Authorization；若设置了网关 Key（`UNIFY_GATEWAY_KEY` 或 `auth.api_key`），`/v1/*`（含 `/messages` 别名）与 `/api/*` 需带正确 Key。SDK 仍要求非空 api_key，本机无鉴权时可填占位符如 `local`。
 
 ### 6.1 OpenAI Python SDK
 
@@ -697,6 +697,60 @@ journalctl -u unify-llm -f
    ```
 
 **不要**把 8787 端口映射到公网。
+
+---
+
+## 9.2 信任边界与多层部署
+
+### 信任边界
+
+| 区域 | 典型来源 | 鉴权要求 |
+|------|----------|----------|
+| Localhost | `127.0.0.1` / `::1` | 无网关 Key 时：`/api/admin/*` 可直接访问（首次引导） |
+| LAN | 同网段其他机器 | 必须设 `UNIFY_GATEWAY_KEY` 或使用用户 API Key |
+| WAN / 边缘代理 | 反向代理后的公网 | 必须设网关 Key + TLS 反代；`/api/admin/*` 需要 Key 或 admin session |
+
+**X-Forwarded-For 信任规则**：仅当 TCP 对端 IP 在 `auth.trusted_proxies` 列表中时才采纳 `X-Forwarded-For` / `X-Real-IP` 头。localhost 特权判定**永远**使用 TCP 对端地址，不读请求头。
+
+### 三轨鉴权分离
+
+| 凭据 | 用途 | 存储 |
+|------|------|------|
+| Gateway Key（`UNIFY_GATEWAY_KEY`） | 共享 LAN 凭据，保护整个网关 | 环境变量 / config.yaml |
+| User API Key（`sk-unify-…`） | 每用户调用模型 API（`/v1/*` 及 `/messages`、`/v1/v1/messages` 别名） | SHA-256 哈希存 SQLite |
+| Session Cookie（`unify_session`） | Portal/Dashboard UI 登录 | SHA-256 哈希存 SQLite |
+
+三者互不通用：Session Cookie 不能调模型 API，User API Key 不能访问 `/api/admin/*`（除非对应用户是 admin 且有 session）。
+
+### 多进程 / 多 Worker 限制
+
+**Rate Limit（`limits.requests_per_minute` / `max_concurrent`）和 Login Throttle（`login.*`）是进程内存状态，仅在单 Worker 下准确。**
+
+- 单进程 uvicorn（默认，`python main.py`）：限流准确。
+- 多 Worker（`uvicorn --workers N`）：每个 Worker 有独立的限流桶和登录计数器，实际限额约为配置值 × N。登录锁定也会被摊薄。
+- 不建议引入外部存储（如 Redis）——本项目定位为 LAN 单实例网关。如需多 Worker，接受限流近似即可。
+
+### 推荐 limits 配置
+
+```yaml
+limits:
+  # 每客户端 IP 每分钟请求数（token bucket）。0 = 不限。
+  requests_per_minute: 60
+  # 全局并发上限（in-flight 请求数）。0 = 不限。
+  max_concurrent: 16
+  # 并发满时的等待队列长度。0 = 直接 429。
+  max_queue: 32
+  # 队列最长等待秒数。
+  queue_timeout_seconds: 30
+```
+
+| 场景 | requests_per_minute | max_concurrent | max_queue |
+|------|---------------------|----------------|-----------|
+| 本机单用户 | 0（不限） | 0 | 0 |
+| LAN 小团队（3-5 人） | 60 | 8-16 | 16-32 |
+| LAN 较多用户（10+） | 30 | 16-32 | 32-64 |
+
+查看当前限流状态：`GET /api/limits`（返回 active / queued / remaining 等）。
 
 ---
 

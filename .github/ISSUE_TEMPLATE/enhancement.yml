@@ -1,0 +1,43 @@
+name: Enhancement
+description: A missing capability or an improvement to an existing one
+title: "[enhancement] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem first, then the proposed direction. Large items will be split into tracer-bullet tickets during triage.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is painful or impossible today? Who hits it?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed direction
+      description: Desired behavior. Avoid prescribing implementation unless you have a hard constraint.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered (optional)
+      description: Workarounds or other designs you already rejected.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Protocol / conversion
+        - Routing / providers
+        - Auth / users / keys
+        - Points / rate limit
+        - Dashboard / portal
+        - Ops / reliability
+        - Docs
+        - Other
+    validations:
+      required: true

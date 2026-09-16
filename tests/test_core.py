@@ -843,7 +843,7 @@ def test_health_tasks_restart_on_admin_reload_and_patch(tmp_path: Path):
     path = tmp_path / "config.yaml"
     path.write_text(_yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
     app = create_app(config_path=path)
-    with TestClient(app) as client:
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
         state = app.state.proxy
         assert len(state._health_tasks) == 1
 
@@ -1283,6 +1283,22 @@ def test_rate_limit_releases_slot_after_request():
         assert app.state.proxy.limiter.status()["active"] == 0
 
 
+def test_rate_limit_releases_slot_on_exception():
+    """Exception during call_next must free the concurrency slot (no leak)."""
+    app = _limits_app(rpm=0, max_concurrent=1)
+
+    @app.get("/v1/boom")
+    async def boom():
+        raise RuntimeError("intentional test error")
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.get("/v1/boom")
+        assert r.status_code == 500
+        assert app.state.proxy.limiter.status()["active"] == 0
+        # Normal request still works (slot was released).
+        assert client.get("/v1/models").status_code == 200
+
+
 def test_admin_reload_updates_limits():
     import yaml as _yaml
 
@@ -1302,7 +1318,7 @@ def test_admin_reload_updates_limits():
         path = Path(tmp) / "config.yaml"
         path.write_text(_yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
         app = create_app(config_path=path)
-        with TestClient(app) as client:
+        with TestClient(app, client=("127.0.0.1", 50000)) as client:
             assert client.get("/api/status").json()["limits"]["enabled"] is False
 
             disk = _yaml.safe_load(path.read_text(encoding="utf-8"))

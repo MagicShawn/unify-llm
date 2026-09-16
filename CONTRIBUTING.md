@@ -5,8 +5,9 @@ Thanks for your interest in improving Unify LLM.
 ## Before you start
 
 1. Read [README.md](./README.md) and [DESIGN.md](./DESIGN.md).
-2. Search existing issues and pull requests for duplicates.
-3. For larger changes, open an issue first and describe the problem and proposed approach.
+2. Use the project vocabulary in [CONTEXT.md](./CONTEXT.md) for issue titles and PR text.
+3. Search existing issues and pull requests for duplicates.
+4. For larger changes, open an issue first and describe the problem and proposed approach.
 
 ## Development setup
 
@@ -100,14 +101,15 @@ feat(dashboard): add rolling p50 latency chart
 
 ## Reporting bugs
 
-Include:
+Use the GitHub **Bug report** template, or follow the same fields:
 
-- OS and Python version
-- Proxy version or commit
-- Config shape with secrets redacted
-- Request path and model id
-- Expected and actual behavior
-- Relevant `/api/status` snapshot or logs
+- What happened
+- Reproduction steps
+- Expected vs actual
+- Environment (OS, Python, commit, LAN/localhost, auth mode)
+- Logs / `/api/status` (optional)
+
+Full intake → triage → implement loop: [docs/agents/maintenance.md](./docs/agents/maintenance.md).
 
 ## Security issues
 

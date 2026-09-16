@@ -109,12 +109,17 @@ def check_balanced_tags(html: str) -> tuple[bool, str]:
 
 
 def main() -> None:
+    import tempfile
+    from pathlib import Path as P
+
     from fastapi.testclient import TestClient
 
     from unify_llm.app import create_app
     from unify_llm.config import AppConfig, ProviderConfig
 
     server, port = start_dummy()
+    tmp = tempfile.TemporaryDirectory(prefix="unify_validate_", ignore_cleanup_errors=True)
+    users_db = P(tmp.name) / "unify_users.db"
     try:
         cfg = AppConfig(
             providers={
@@ -127,7 +132,9 @@ def main() -> None:
             },
             aliases={"chat": "dummy-chat"},
         )
-        app = create_app(config=cfg)
+        # Isolated users DB: a leftover portal account makes non-loopback
+        # /api/* require auth even with no gateway key (auth middleware).
+        app = create_app(config=cfg, users_db=users_db)
 
         with TestClient(app) as client:
             # --- required endpoints ---
@@ -195,18 +202,37 @@ def main() -> None:
                 f"status={r.status_code} content={r.json().get('choices',[{}])[0].get('message',{}).get('content') if r.status_code==200 else r.text[:80]}",
             )
 
-            # --- dashboard HTML content ---
-            html = (ROOT / "unify_llm" / "static" / "dashboard.html").read_text(
-                encoding="utf-8"
+            # --- dashboard HTML via HTTP (not raw static file on disk) ---
+            users_store = client.app.state.proxy.users
+            assert users_store is not None
+            adm = users_store.register_user(
+                name="validate-admin", email="validate-admin@local", password="validate-pass-123"
+            )
+            users_store.approve_user(adm["id"])
+            users_store.set_role(adm["id"], "admin")
+            login = client.post(
+                "/api/auth/login",
+                json={"email": "validate-admin@local", "password": "validate-pass-123"},
+            )
+            r = client.get("/dashboard")
+            html = r.text if r.status_code == 200 else ""
+            record(
+                "GET /dashboard after admin login",
+                login.status_code == 200 and r.status_code == 200,
+                f"login={login.status_code} dashboard={r.status_code}",
             )
 
             for needle in ("Unify LLM", "latencyChart", "providerGrid", "toastHost"):
                 present = needle in html
-                record(f"dashboard.html contains '{needle}'", present, "found" if present else "MISSING")
+                record(
+                    f"GET /dashboard body contains '{needle}'",
+                    present,
+                    "found" if present else "MISSING",
+                )
 
             # also check brand title specifically
             record(
-                "dashboard.html <title> brand",
+                "GET /dashboard <title> brand",
                 "Unify LLM" in html and "<title>" in html,
                 "title/brand present",
             )
@@ -256,6 +282,7 @@ def main() -> None:
 
     finally:
         server.shutdown()
+        tmp.cleanup()
 
     # --- summary ---
     failed = [c for c, s, _ in RESULTS if s == "FAIL"]

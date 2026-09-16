@@ -153,6 +153,34 @@ async def run_checks(port: int) -> None:
         assert adata["content"][0]["text"] == "pong"
         assert adata.get("role") == "assistant"
 
+        # Anthropic path aliases share auth / accounting surface
+        from unify_llm.app import ANTHROPIC_MESSAGES_PATHS
+
+        for alias in ANTHROPIC_MESSAGES_PATHS:
+            r = client.post(
+                alias,
+                json={
+                    "model": "dummy-chat",
+                    "max_tokens": 32,
+                    "messages": [{"role": "user", "content": "ping"}],
+                },
+            )
+            assert r.status_code == 200, (alias, r.status_code, r.text)
+            body = r.json()
+            assert body.get("type") == "message", (alias, body)
+            assert body["content"][0]["text"] == "pong"
+
+        for ct_path in (p + "/count_tokens" for p in ANTHROPIC_MESSAGES_PATHS):
+            r = client.post(
+                ct_path,
+                json={
+                    "model": "dummy-chat",
+                    "messages": [{"role": "user", "content": "hello world"}],
+                },
+            )
+            assert r.status_code == 200, (ct_path, r.status_code, r.text)
+            assert r.json()["input_tokens"] >= 1
+
         r = client.get("/api/status")
         assert r.status_code == 200
         body = r.json()

@@ -523,3 +523,60 @@ def test_login_guard_unit():
     assert allowed is False and retry >= 1
     guard.record_success("a@b.c")
     assert guard.check("2.2.2.2", "a@b.c")[0] is True
+
+
+# ── _client_ip: empty peer must not trust XFF ──────────────────────────────
+
+
+def test_client_ip_empty_peer_ignores_xff():
+    """When request.client is missing/empty, XFF/X-Real-IP must not be trusted."""
+
+    class ReqNoClient:
+        client = None
+        headers = {"x-forwarded-for": "127.0.0.1", "x-real-ip": "10.0.0.1"}
+
+    class ReqEmptyHost:
+        client = type("C", (), {"host": ""})()
+        headers = {"x-forwarded-for": "127.0.0.1"}
+
+    assert _client_ip(ReqNoClient()) == ""
+    assert _client_ip(ReqEmptyHost()) == ""
+    # Even with trusted_proxies configured, empty peer is not a trusted proxy.
+    assert _client_ip(ReqNoClient(), frozenset({"10.0.0.2"})) == ""
+
+
+# ── all /api/admin/* routes are localhost-only when no gateway key ─────────
+
+
+def test_all_admin_routes_localhost_only_no_gateway_key(users_db: Path):
+    """When no gateway key is set, every /api/admin/* path requires loopback peer."""
+    app = create_app(config=_cfg(""), users_db=users_db)
+    with _client(app, host="192.168.1.50") as c:
+        for path in (
+            "/api/admin/users",
+            "/api/admin/keys",
+            "/api/admin/reload",
+            "/api/admin/clear-logs",
+            "/api/admin/clear-stats",
+        ):
+            r = c.post(path, json={})
+            assert r.status_code == 403, f"POST {path} → {r.status_code}"
+            r = c.get(path)
+            assert r.status_code == 403, f"GET {path} → {r.status_code}"
+    # Localhost still works for bootstrap.
+    with _client(app, host="127.0.0.1") as c:
+        r = c.post(
+            "/api/admin/users",
+            json={"name": "ok", "email": "ok@test", "password": "ok-pass-12345"},
+        )
+        assert r.status_code == 201, r.text
+
+
+def test_admin_routes_with_gateway_key_require_auth(users_db: Path):
+    """With a gateway key set, admin routes need the key or an admin session."""
+    app = create_app(config=_cfg("master-key"), users_db=users_db)
+    with _client(app, host="192.168.1.50") as c:
+        r = c.get("/api/admin/users")
+        assert r.status_code == 401
+        r = c.get("/api/admin/users", headers={"Authorization": "Bearer master-key"})
+        assert r.status_code == 200

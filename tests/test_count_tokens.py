@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from unify_llm.app import create_app
+from unify_llm.app import ANTHROPIC_MESSAGES_PATHS, create_app
 from unify_llm.config import AppConfig, AuthConfig, LimitsConfig, ProviderConfig
 from unify_llm.users import UserStore
 
@@ -16,7 +16,7 @@ def users_db(tmp_path: Path) -> Path:
     return tmp_path / "unify_users.db"
 
 
-BASE_PATHS = ("/v1/messages", "/messages", "/v1/v1/messages")
+BASE_PATHS = ANTHROPIC_MESSAGES_PATHS
 
 
 def _app(users_db: Path, *, rpm: int = 0):

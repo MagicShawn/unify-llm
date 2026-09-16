@@ -159,6 +159,8 @@ Env expansion: any string `${VAR}` is replaced from `os.environ` at load time. M
 | POST | `/v1/chat/completions` | OpenAI chat; `stream: true` supported |
 | GET | `/v1/models` | Combined catalog |
 | POST | `/v1/messages` | Anthropic Messages; `stream: true` supported |
+| POST | `/messages`, `/v1/v1/messages` | Anthropic aliases (OpenCode baseURL styles); same auth, limits, Points |
+| POST | `…/count_tokens` on each messages path | Local ~4 char/token estimate |
 | GET | `/healthz` | Liveness |
 | GET | `/api/status` | Providers, concurrency, in-flight |
 | GET | `/api/history` | Recent completed requests |
@@ -186,7 +188,7 @@ Global: active count, uptime, last request summary.
 
 - OpenAI upstream → OpenAI client: raw SSE passthrough.
 - Anthropic upstream → Anthropic client: raw SSE passthrough.
-- Cross-protocol: convert non-stream JSON fully; stream conversion is best-effort text-delta only in v1.
+- Cross-protocol: convert non-stream JSON fully; stream conversion maps text deltas, tool_use fragments, and usage (not a full event taxonomy).
 
 ## Security notes
 
@@ -204,6 +206,6 @@ Global: active count, uptime, last request summary.
 
 1. `python main.py` starts; `/healthz` 200.
 2. With real keys in `config.yaml`, OpenAI client pointed at `http://127.0.0.1:8787/v1` can chat.
-3. Anthropic client pointed at `http://127.0.0.1:8787` can call `/v1/messages`.
+3. Anthropic client pointed at `http://127.0.0.1:8787` can call `/v1/messages` (aliases `/messages` and `/v1/v1/messages` share the same policies).
 4. Dashboard shows live active counts and in-flight rows.
 5. Killing network / bad key surfaces a clear error in history and dashboard.
