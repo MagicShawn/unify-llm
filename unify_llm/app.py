@@ -706,6 +706,22 @@ def create_app(
     )
     app.state.proxy = state
 
+    # Debug: log client 404s on /v1 so OpenCode path mismatches are visible.
+    @app.middleware("http")
+    async def _log_v1_misses(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path.startswith("/v1") and response.status_code == 404:
+            try:
+                state.monitor.log(
+                    "warn",
+                    f"404 {request.method} {path} query={request.url.query!r} "
+                    f"client={_peer_ip(request)}",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        return response
+
     if config.server.dashboard:
         app.add_middleware(
             CORSMiddleware,
@@ -2135,6 +2151,65 @@ def create_app(
 
     # ---------- Anthropic ----------
 
+    def _estimate_prompt_tokens(payload: dict[str, Any]) -> int:
+        """Rough local token estimate for /v1/messages/count_tokens.
+
+        OpenCode (@ai-sdk/anthropic) calls this before chat. Upstream
+        providers we proxy do not all expose count_tokens, so estimate
+        (~4 chars/token) instead of 404ing the client.
+        """
+        parts: list[str] = []
+        system = payload.get("system")
+        if isinstance(system, str):
+            parts.append(system)
+        elif isinstance(system, list):
+            for block in system:
+                if isinstance(block, dict):
+                    parts.append(str(block.get("text") or ""))
+                else:
+                    parts.append(str(block))
+        for msg in payload.get("messages") or []:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        parts.append(str(block.get("text") or block.get("content") or ""))
+                    else:
+                        parts.append(str(block))
+        text = "\n".join(parts)
+        # + a few tokens of message framing overhead
+        return max(1, (len(text) + 3) // 4 + 8)
+
+    @app.post("/v1/messages/count_tokens")
+    async def count_tokens(request: Request) -> Response:
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
+        if not isinstance(payload, dict):
+            return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        return JSONResponse({"input_tokens": _estimate_prompt_tokens(payload)})
+
+    # Some clients (OpenCode + @ai-sdk/anthropic) prepend an extra /v1 when
+    # baseURL already ends with /v1 — accept the doubled form too.
+    @app.post("/v1/v1/messages/count_tokens")
+    async def count_tokens_v1_alias(request: Request) -> Response:
+        return await count_tokens(request)
+
+    # OpenCode 1.18 posts to {baseURL}/messages (expects baseURL …/v1).
+    # Accept the host-root form as well so either baseURL style works.
+    @app.post("/messages")
+    async def messages_root_alias(request: Request) -> Response:
+        return await messages(request)
+
+    @app.post("/messages/count_tokens")
+    async def count_tokens_root_alias(request: Request) -> Response:
+        return await count_tokens(request)
+
     @app.post("/v1/messages")
     async def messages(request: Request) -> Response:
         try:
@@ -2168,6 +2243,10 @@ def create_app(
             payload=payload,
             call=call,
         )
+
+    @app.post("/v1/v1/messages")
+    async def messages_v1_alias(request: Request) -> Response:
+        return await messages(request)
 
     @app.exception_handler(ProxyError)
     async def _proxy_error_handler(request: Request, exc: ProxyError) -> JSONResponse:

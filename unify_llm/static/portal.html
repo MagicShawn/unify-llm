@@ -2,88 +2,159 @@
 <html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Unify LLM · Portal</title>
   <style>
     :root {
       --font: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
         "PingFang SC", "Microsoft YaHei", sans-serif;
       --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
-      --radius: 10px;
+      --radius: 12px;
       --radius-sm: 8px;
       --gap: 12px;
     }
     [data-theme="light"] {
-      --bg: #f5f5f5;
+      --bg: #ffffff;
       --bg-panel: #ffffff;
       --bg-elev: #ffffff;
-      --bg-soft: #f0f0f0;
-      --bg-hover: #e8e8e8;
-      --ink: #111111;
-      --ink-2: #444444;
-      --ink-3: #777777;
-      --line: #e2e2e2;
-      --line-strong: #cccccc;
-      --ok: #1a7f37;
-      --ok-soft: rgba(26, 127, 55, 0.1);
-      --err: #c62828;
-      --err-soft: rgba(198, 40, 40, 0.08);
-      --warn: #9a6700;
-      --warn-soft: rgba(154, 103, 0, 0.1);
-      --accent-soft: rgba(0, 0, 0, 0.06);
-      --shadow-card: 2px 2px 0 rgba(0, 0, 0, 0.06);
+      --bg-soft: #f5f5f7;
+      --bg-hover: #ebebed;
+      --ink: #1d1d1f;
+      --ink-2: #424245;
+      --ink-3: #86868b;
+      --line: rgba(0, 0, 0, 0.08);
+      --line-strong: rgba(0, 0, 0, 0.12);
+      --ok: #248a3d;
+      --ok-soft: rgba(36, 138, 61, 0.10);
+      --err: #c9342c;
+      --err-soft: rgba(201, 52, 44, 0.08);
+      --warn: #b25000;
+      --warn-soft: rgba(178, 80, 0, 0.10);
+      --accent-soft: rgba(0, 0, 0, 0.04);
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.06);
+      --glass-bg: rgba(255, 255, 255, 0.58);
+      --glass-bg-strong: rgba(255, 255, 255, 0.74);
+      --glass-line: rgba(255, 255, 255, 0.85);
+      --glass-glow: rgba(255, 255, 255, 1);
     }
     [data-theme="dark"] {
-      --bg: #0e0e0e;
-      --bg-panel: #161616;
-      --bg-elev: #1c1c1c;
-      --bg-soft: #222222;
-      --bg-hover: #2c2c2c;
-      --ink: #f2f2f2;
-      --ink-2: #cfcfcf;
-      --ink-3: #8a8a8a;
-      --line: #2e2e2e;
-      --line-strong: #444444;
-      --ok: #6fcf97;
-      --ok-soft: rgba(111, 207, 151, 0.12);
-      --err: #f07171;
-      --err-soft: rgba(240, 113, 113, 0.12);
-      --warn: #e0c36a;
-      --warn-soft: rgba(224, 195, 106, 0.12);
-      --accent-soft: rgba(255, 255, 255, 0.08);
-      --shadow-card: 2px 2px 0 rgba(0, 0, 0, 0.45);
+      --bg: #000000;
+      --bg-panel: #1c1c1e;
+      --bg-elev: #2c2c2e;
+      --bg-soft: #2c2c2e;
+      --bg-hover: #3a3a3c;
+      --ink: #f5f5f7;
+      --ink-2: #d1d1d6;
+      --ink-3: #8e8e93;
+      --line: rgba(255, 255, 255, 0.10);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --ok: #30d158;
+      --ok-soft: rgba(48, 209, 88, 0.14);
+      --err: #ff453a;
+      --err-soft: rgba(255, 69, 58, 0.14);
+      --warn: #ffd60a;
+      --warn-soft: rgba(255, 214, 10, 0.12);
+      --accent-soft: rgba(255, 255, 255, 0.06);
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.25);
+      --glass-bg: rgba(28, 28, 30, 0.58);
+      --glass-bg-strong: rgba(44, 44, 46, 0.72);
+      --glass-line: rgba(255, 255, 255, 0.16);
+      --glass-glow: rgba(255, 255, 255, 0.18);
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; min-height: 100%; }
+    html { -webkit-text-size-adjust: 100%; }
     body {
       font-family: var(--font);
       background: var(--bg);
       color: var(--ink);
-      font-size: 14px;
-      line-height: 1.55;
-      background-image:
-        radial-gradient(circle at 1px 1px, rgba(0,0,0,.04) 0.6px, transparent 0.8px);
-      background-size: 4px 4px;
+      font-size: 15px;
+      line-height: 1.6;
+      position: relative;
+      overflow-x: hidden;
     }
-    [data-theme="dark"] body {
+    /* Silkscreen wave-halftone: sparse even dots on pure white */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
       background-image:
-        radial-gradient(circle at 1px 1px, rgba(255,255,255,.03) 0.6px, transparent 0.8px);
+        radial-gradient(ellipse 90% 30% at 14% 20%, rgba(0,0,0,.05), transparent 70%),
+        radial-gradient(ellipse 70% 36% at 86% 48%, rgba(0,0,0,.04), transparent 68%),
+        radial-gradient(ellipse 95% 28% at 40% 82%, rgba(0,0,0,.055), transparent 65%),
+        radial-gradient(circle, rgba(0,0,0,.18) 0.45px, transparent 0.62px);
+      background-size:
+        100% 100%,
+        100% 100%,
+        100% 100%,
+        10px 10px;
+      background-repeat: no-repeat, no-repeat, no-repeat, repeat;
     }
-    a { color: var(--ink); }
+    [data-theme="dark"] body::before {
+      background-image:
+        radial-gradient(ellipse 90% 30% at 14% 20%, rgba(255,255,255,.045), transparent 70%),
+        radial-gradient(ellipse 70% 36% at 86% 48%, rgba(255,255,255,.03), transparent 68%),
+        radial-gradient(ellipse 95% 28% at 40% 82%, rgba(255,255,255,.04), transparent 65%),
+        radial-gradient(circle, rgba(255,255,255,.12) 0.42px, transparent 0.58px);
+      background-size:
+        100% 100%,
+        100% 100%,
+        100% 100%,
+        11px 11px;
+    }
+    /* Ambient light field — coordinates glass panels with the wave paper */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 55% 42% at 18% 8%, rgba(0, 0, 0, 0.06), transparent 70%),
+        radial-gradient(ellipse 45% 38% at 88% 28%, rgba(0, 0, 0, 0.04), transparent 68%),
+        radial-gradient(ellipse 60% 40% at 48% 96%, rgba(0, 0, 0, 0.05), transparent 65%),
+        radial-gradient(ellipse 35% 28% at 70% 55%, rgba(255, 255, 255, 0.85), transparent 72%),
+        radial-gradient(ellipse 40% 30% at 25% 70%, rgba(255, 255, 255, 0.55), transparent 70%);
+    }
+    [data-theme="dark"] body::after {
+      background:
+        radial-gradient(ellipse 55% 42% at 18% 8%, rgba(255, 255, 255, 0.05), transparent 70%),
+        radial-gradient(ellipse 45% 38% at 88% 28%, rgba(255, 255, 255, 0.03), transparent 68%),
+        radial-gradient(ellipse 60% 40% at 48% 96%, rgba(255, 255, 255, 0.04), transparent 65%),
+        radial-gradient(ellipse 30% 25% at 70% 55%, rgba(255, 255, 255, 0.06), transparent 70%);
+    }
+    .wrap, .top, .card, form, .portal-nav { position: relative; z-index: 1; }
+    a { color: var(--ink); text-underline-offset: 2px; }
     .wrap {
-      max-width: 1280px;
+      max-width: 920px;
       margin: 0 auto;
-      padding: 24px 24px 48px;
+      padding: 28px 20px 56px;
     }
     @media (max-width: 720px) {
-      .wrap { padding: 16px 12px 40px; }
+      .wrap { padding: 16px 12px 40px; max-width: 100%; }
+      h1 { font-size: 22px; }
+      .brand b { font-size: 18px; }
+      .tab { padding: 10px 8px; font-size: 12px; }
     }
     .top {
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       justify-content: space-between;
       margin-bottom: 20px;
       gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--glass-bg-strong);
+      backdrop-filter: blur(32px) saturate(200%);
+      -webkit-backdrop-filter: blur(32px) saturate(200%);
+      box-shadow:
+        inset 0 1px 0 var(--glass-glow),
+        inset 0 0 0 1px var(--glass-line),
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        0 8px 24px rgba(0, 0, 0, 0.04);
     }
     .brand {
       display: flex;
@@ -91,45 +162,69 @@
       gap: 2px;
     }
     .brand b {
-      font-size: 16px;
-      letter-spacing: 0.02em;
+      font-size: 22px;
+      letter-spacing: 0.01em;
+      font-weight: 700;
+      line-height: 1.15;
     }
     .brand span {
       color: var(--ink-3);
-      font-size: 13px;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-family: var(--font);
     }
     .top-actions { display: flex; gap: 8px; align-items: center; }
     .card {
-      background: var(--bg-panel);
+      position: relative;
+      background: var(--glass-bg);
+      backdrop-filter: blur(28px) saturate(200%);
+      -webkit-backdrop-filter: blur(28px) saturate(200%);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      box-shadow: var(--shadow-card);
+      box-shadow:
+        inset 0 1px 0 var(--glass-glow),
+        inset 0 0 0 1px var(--glass-line),
+        var(--shadow-card);
       padding: 18px;
+      overflow: hidden;
     }
     h1 {
       margin: 0 0 4px;
-      font-size: 22px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      line-height: 1.2;
     }
-    .sub { color: var(--ink-3); margin-bottom: 18px; font-size: 13.5px; line-height: 1.55; }
+    .sub {
+      color: var(--ink-2);
+      margin-bottom: 18px;
+      font-size: 14.5px;
+      line-height: 1.55;
+      padding-left: 2px;
+    }
     .tabs {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       margin-bottom: 16px;
       border-bottom: 1px solid var(--line);
       padding-bottom: 0;
+      overflow-x: auto;
     }
     .tab {
       appearance: none;
       background: transparent;
       border: none;
-      border-bottom: 2px solid transparent;
+      border-bottom: 3px solid transparent;
       color: var(--ink-3);
       font: inherit;
-      padding: 8px 12px;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 10px 12px;
       cursor: pointer;
-      border-radius: 4px 4px 0 0;
+      border-radius: 0;
+      white-space: nowrap;
     }
     .tab:hover { color: var(--ink); background: var(--bg-soft); }
     .tab.active {
@@ -164,21 +259,26 @@
     .btn {
       appearance: none;
       border: 1px solid var(--line-strong);
-      background: var(--bg-soft);
+      background: var(--bg-panel);
       color: var(--ink);
       border-radius: var(--radius-sm);
-      padding: 8px 12px;
+      padding: 8px 14px;
       font: inherit;
+      font-size: 13px;
+      letter-spacing: 0.01em;
       cursor: pointer;
-      min-height: 32px;
+      min-height: 34px;
+      box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.04);
     }
     .btn:hover { background: var(--bg-hover); }
     .btn.primary {
       background: var(--ink);
       color: var(--bg-panel);
-      border-color: var(--ink);
+      border-color: transparent;
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
     }
-    .btn.primary:hover { opacity: 0.9; }
+    .btn.primary:hover { opacity: 0.92; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .msg {
@@ -245,8 +345,9 @@
     }
     .profile-head h2 {
       margin: 0;
-      font-size: 20px;
-      font-weight: 600;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
     }
     .profile-head .meta {
       color: var(--ink-3);
@@ -255,12 +356,59 @@
     }
     .section-title {
       font-family: var(--font);
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 600;
-      color: var(--ink-2);
-      margin: 22px 0 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin: 24px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--line);
     }
     tbody tr:last-child td { border-bottom: none; }
+    /* Tables: always scroll inside a card, never paint past the canvas */
+    .table-wrap {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+    }
+    .table-wrap table {
+      width: 100%;
+      min-width: 520px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .table-wrap th,
+    .table-wrap td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .table-wrap th {
+      color: var(--ink-3);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 1;
+    }
+    .table-wrap td.mono,
+    .table-wrap td .mono {
+      white-space: nowrap;
+    }
+    .table-wrap td b {
+      word-break: break-word;
+    }
     .mono { font-family: var(--mono); font-size: 12.5px; }
     .key-prefix {
       font-family: var(--mono);
@@ -284,14 +432,19 @@
     .usage-card {
       border: 1px solid var(--line);
       border-radius: var(--radius-sm);
-      background: var(--bg-soft);
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(160%);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      box-shadow: inset 0 1px 0 var(--glass-glow);
       padding: 14px 16px;
       transition: transform .2s ease, box-shadow .25s ease, border-color .25s ease;
     }
     .usage-card.meter-tile:hover {
       transform: translateY(-1px);
       border-color: color-mix(in srgb, var(--ink) 12%, var(--line));
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07);
+      box-shadow:
+        inset 0 1px 0 var(--glass-glow),
+        0 6px 18px rgba(0, 0, 0, 0.07);
     }
     [data-theme="dark"] .usage-card.meter-tile:hover {
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
@@ -590,7 +743,6 @@
       overflow-wrap: anywhere;
       word-break: break-word;
     }
-    .table-wrap { overflow-x: auto; max-width: 100%; }
     .key-raw {
       font-family: var(--mono);
       font-size: 12.5px;
@@ -665,10 +817,14 @@
       transform: translate(-50%, -50%);
       z-index: 41;
       width: min(480px, calc(100vw - 32px));
-      background: var(--bg-panel);
-      border: 1px solid var(--line-strong);
+      background: var(--glass-bg-strong);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
-      box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
+      box-shadow:
+        inset 0 1px 0 var(--glass-glow),
+        0 12px 40px rgba(0, 0, 0, 0.16);
       padding: 18px;
     }
     .key-modal h3 { margin: 0 0 6px; font-size: 16px; }
@@ -677,7 +833,18 @@
       font-size: 13px;
       margin-bottom: 8px;
     }
-    .portal-tabs { margin: 14px 0 4px; }
+    .portal-tabs {
+      margin: 14px 0 4px;
+      padding: 4px 6px 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--glass-bg);
+      backdrop-filter: blur(22px) saturate(180%);
+      -webkit-backdrop-filter: blur(22px) saturate(180%);
+      box-shadow: inset 0 1px 0 var(--glass-glow);
+      border-bottom: 1px solid var(--line);
+    }
+    .portal-tabs .tab { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
     .portal-panel { display: none; }
     .portal-panel.active { display: block; animation: fadeIn .18s ease; }
     @keyframes fadeIn { from { opacity: .4; transform: translateY(2px);} to { opacity: 1; transform: none; } }
@@ -743,6 +910,90 @@
       border: 1px solid var(--line);
       border-radius: 4px;
       padding: 0 4px;
+    }
+
+    /* ── Mobile portrait ── */
+    @media (max-width: 720px) {
+      .wrap {
+        max-width: 100%;
+        padding: 14px 12px calc(32px + env(safe-area-inset-bottom));
+      }
+      .top {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .top-actions {
+        width: 100%;
+        justify-content: flex-end;
+      }
+      .card { padding: 14px; }
+      h1 { font-size: 22px; }
+      .brand b { font-size: 18px; }
+      .tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .tabs::-webkit-scrollbar { display: none; }
+      .tab { padding: 10px 10px; font-size: 12.5px; flex: 0 0 auto; }
+      #portalNav .tab { min-width: 0; }
+      .usage-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .usage-card { padding: 12px; }
+      .inline-form {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .inline-form .field {
+        flex: 1 1 auto;
+        min-width: 0;
+        width: 100%;
+      }
+      .btn { width: 100%; min-height: 40px; }
+      .btn-row { width: 100%; }
+      .btn-row .btn { width: auto; flex: 1 1 auto; }
+      .top-actions .btn { width: auto; }
+      input[type="text"],
+      input[type="email"],
+      input[type="password"] {
+        font-size: 16px; /* avoid iOS zoom on focus */
+        min-height: 40px;
+      }
+      .code-block pre {
+        padding: 12px 12px 40px;
+        font-size: 11.5px;
+      }
+      .code-copy { top: auto; bottom: 6px; right: 6px; }
+      .table-wrap {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+      }
+      .table-wrap table {
+        min-width: 460px;
+        font-size: 12.5px;
+      }
+      .table-wrap th,
+      .table-wrap td { padding: 8px 10px; }
+      /* Drop secondary columns so the table fits phone portrait */
+      #modelsWrap .table-wrap table th:nth-child(3),
+      #modelsWrap .table-wrap table td:nth-child(3),
+      #modelsWrap .table-wrap table th:nth-child(4),
+      #modelsWrap .table-wrap table td:nth-child(4) {
+        display: none;
+      }
+      #modelsWrap .table-wrap table { min-width: 0; }
+      .profile-head { gap: 6px 12px; }
+      .profile-head h2 { font-size: 20px; }
+      .section-title { margin-top: 18px; letter-spacing: 0.06em; }
+    }
+    @media (max-width: 380px) {
+      .usage-grid { grid-template-columns: 1fr; }
+      .wrap { padding-left: 10px; padding-right: 10px; }
     }
   </style>
 </head>
@@ -827,8 +1078,8 @@
           <div class="usage-card meter-tile" id="ovStatusCard"><div class="k">status</div><div class="v" id="ovStatus" style="font-size:13px">—</div></div>
         </div>
         <div class="section-title">Available models · 可用模型</div>
-        <div class="card" style="padding:0;box-shadow:none" id="modelsWrap">
-          <div class="empty">Loading…</div>
+        <div class="card" style="padding:8px 0" id="modelsWrap">
+          <div class="table-wrap"><div class="empty">Loading…</div></div>
         </div>
         <p class="sub" style="margin-top:10px">Call <b>/v1</b> with your API key. Track spend under Points · Usage.</p>
       </div>
@@ -869,7 +1120,7 @@ sk-unify-…</pre>
       "npm": "@ai-sdk/anthropic",
       "name": "Unify Local Gateway",
       "options": {
-        "baseURL": "http://127.0.0.1:8787",
+        "baseURL": "http://127.0.0.1:8787/v1",
         "apiKey": "sk-unify-…"
       },
       "models": {
@@ -880,7 +1131,7 @@ sk-unify-…</pre>
   }
 }</pre>
           </div>
-          <p class="note">baseURL is the host root (no <span class="mono">/v1</span>) for the Anthropic npm package · Anthropic 包使用主机根路径。</p>
+          <p class="note">OpenCode 1.18 posts to <span class="mono">{baseURL}/messages</span> — set baseURL to <span class="mono">http://127.0.0.1:8787/v1</span> (with /v1) · OpenCode 会请求 baseURL+/messages，因此要带 /v1。</p>
         </div>
 
         <div class="guide-section">
@@ -1031,7 +1282,7 @@ Model:     deepseek-flash
       <p class="sub" id="pointsHint" style="margin:10px 0 0;display:none"></p>
       <details id="pointsLogDetails" style="margin-top:12px">
         <summary style="cursor:pointer;color:var(--ink-2);font-size:13px;padding:6px 0">Recent deductions · 扣费明细</summary>
-        <div class="card table-wrap" style="margin-top:8px;padding:0;box-shadow:none" id="pointsLogWrap">
+        <div class="card" style="margin-top:8px;padding:8px 0" id="pointsLogWrap">
           <div class="empty">No deductions yet · 暂无扣费记录</div>
         </div>
       </details>
@@ -1046,7 +1297,7 @@ Model:     deepseek-flash
         </div>
         <button type="button" class="btn primary" id="createKeyBtn">Create key</button>
       </div>
-      <div class="card" style="padding:0;box-shadow:none" id="keysWrap">
+      <div class="card" style="padding:8px 0" id="keysWrap">
         <div class="empty">Loading…</div>
       </div>
       </div><!-- /keys -->
@@ -1062,7 +1313,7 @@ Model:     deepseek-flash
         <div class="usage-card"><div class="k">est. USD</div><div class="v" id="uCost">—</div></div>
       </div>
       <div class="section-title" style="margin-top:14px">Recent requests · 最近请求</div>
-      <div class="card" style="padding:0;box-shadow:none" id="usageItemsWrap">
+      <div class="card" style="padding:8px 0" id="usageItemsWrap">
         <div class="empty">No traffic yet · 暂无请求</div>
       </div>
       </div><!-- /usage -->
@@ -1315,7 +1566,7 @@ Model:     deepseek-flash
         return;
       }
       let html =
-        "<table><thead><tr>" +
+        '<div class="table-wrap"><table><thead><tr>' +
         "<th>Prefix</th><th>Name</th><th>Created</th><th>Status</th><th>Last used</th><th></th>" +
         "</tr></thead><tbody>";
       keys.forEach((k) => {
@@ -1337,7 +1588,7 @@ Model:     deepseek-flash
             : '<button type="button" class="btn" data-revoke="' + Number(k.id) + '">Revoke</button>') +
           "</td></tr>";
       });
-      html += "</tbody></table>";
+      html += "</tbody></table></div>";
       wrap.innerHTML = html;
     }
 
@@ -1526,12 +1777,8 @@ Model:     deepseek-flash
           iwrap.innerHTML = '<div class="empty">No traffic yet · 暂无请求</div>';
         } else {
           iwrap.innerHTML =
-            '<table style="width:100%;font-size:13px;border-collapse:collapse"><thead><tr>' +
-            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">time</th>' +
-            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">model</th>' +
-            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">status</th>' +
-            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">latency</th>' +
-            '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">tokens</th>' +
+            '<div class="table-wrap"><table><thead><tr>' +
+            "<th>time</th><th>model</th><th>status</th><th>latency</th><th>tokens</th>" +
             "</tr></thead><tbody>" +
             items
               .slice(0, 20)
@@ -1541,23 +1788,23 @@ Model:     deepseek-flash
                   : "";
                 const ok = r.status === "ok";
                 return (
-                  "<tr><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px'>" +
+                  "<tr><td class='mono'>" +
                   esc(t) +
-                  "</td><td style='padding:8px 12px'>" +
+                  "</td><td>" +
                   esc(r.model || r.requested_model || "") +
-                  "</td><td style='padding:8px 12px;color:" +
+                  "</td><td style='color:" +
                   (ok ? "var(--ok)" : "var(--err)") +
                   "'>" +
                   esc(r.status || "") +
-                  "</td><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums'>" +
+                  "</td><td class='mono'>" +
                   esc((r.latency_ms || 0) + "ms") +
-                  "</td><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums'>" +
+                  "</td><td class='mono'>" +
                   esc(fmtN(r.prompt_tokens || 0) + "+" + fmtN(r.completion_tokens || 0)) +
                   "</td></tr>"
                 );
               })
               .join("") +
-            "</tbody></table>";
+            "</tbody></table></div>";
         }
       }
       // Hero product meter
@@ -1648,13 +1895,8 @@ Model:     deepseek-flash
         return;
       }
       wrap.innerHTML =
-        '<table style="width:100%;font-size:13px;border-collapse:collapse">' +
-        "<thead><tr>" +
-        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">time</th>' +
-        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">delta</th>' +
-        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">balance</th>' +
-        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">tokens</th>' +
-        '<th style="text-align:left;padding:10px 12px;color:var(--ink-2);font-weight:600">note</th>' +
+        '<div class="table-wrap"><table><thead><tr>' +
+        "<th>time</th><th>delta</th><th>balance</th><th>tokens</th><th>note</th>" +
         "</tr></thead><tbody>" +
         items
           .map((r) => {
@@ -1662,23 +1904,23 @@ Model:     deepseek-flash
               ? new Date(r.created_at * 1000).toLocaleTimeString()
               : "";
             return (
-              "<tr><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px'>" +
+              "<tr><td class='mono'>" +
               esc(t) +
-              "</td><td style='padding:8px 12px;color:var(--err)'>-" +
+              "</td><td style='color:var(--err)'>-" +
               esc(fmtPts(Math.abs(r.delta || 0))) +
-              "</td><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums'>" +
+              "</td><td class='mono'>" +
               esc(r.balance_after === -1 ? "∞" : fmtPts(r.balance_after)) +
-              "</td><td style='padding:8px 12px;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums'>" +
+              "</td><td class='mono'>" +
               esc(fmtN(r.prompt_tokens || 0)) +
               "+" +
               esc(fmtN(r.completion_tokens || 0)) +
-              "</td><td style='padding:8px 12px;color:var(--ink-2);overflow-wrap:anywhere'>" +
+              "</td><td class='wrap-cell' style='color:var(--ink-2)'>" +
               esc(r.note || "") +
               "</td></tr>"
             );
           })
           .join("") +
-        "</tbody></table>";
+        "</tbody></table></div>";
     }
 
     async function refreshModels() {
@@ -1695,7 +1937,7 @@ Model:     deepseek-flash
         return;
       }
       let html =
-        "<table><thead><tr>" +
+        '<div class="table-wrap"><table><thead><tr>' +
         "<th>Model</th><th>Provider</th><th>Type</th><th>Aliases</th><th>Limits</th>" +
         "</tr></thead><tbody>";
       models.forEach((m) => {
@@ -1717,7 +1959,7 @@ Model:     deepseek-flash
           '<td class="mono">' + esc(limits) + "</td>" +
           "</tr>";
       });
-      html += "</tbody></table>";
+      html += "</tbody></table></div>";
       wrap.innerHTML = html;
     }
 
