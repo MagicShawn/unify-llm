@@ -2043,17 +2043,6 @@
           aria-haspopup="dialog"
           aria-controls="shortcutsPop"
         >?</button>
-        <div class="shortcuts-pop" id="shortcutsPop" role="dialog" aria-label="Keyboard shortcuts" hidden>
-          <h3>Shortcuts · 快捷键</h3>
-          <ul>
-            <li><span>Overview / Providers / Traffic / Logs / Users</span><span><kbd>1</kbd>–<kbd>5</kbd></span></li>
-            <li><span>Refresh · 刷新</span><kbd>r</kbd></li>
-            <li><span>Theme · 主题</span><kbd>t</kbd></li>
-            <li><span>Log model filter</span><kbd>/</kbd></li>
-            <li><span>This panel</span><kbd>?</kbd></li>
-            <li><span>Close drawer / toasts</span><kbd>Esc</kbd></li>
-          </ul>
-        </div>
       </div>
       <button class="theme-btn" id="themeBtn" title="Toggle theme (t) / 切换主题" aria-label="Toggle theme" aria-keyshortcuts="t">
         <span id="themeIcon">◐</span>
@@ -2343,6 +2332,19 @@
       </div>
 
     </main>
+  </div>
+
+  <!-- Keep the fixed popover outside the filtered, scrolling system bar. -->
+  <div class="shortcuts-pop" id="shortcutsPop" role="dialog" aria-label="Keyboard shortcuts" hidden>
+    <h3>Shortcuts · 快捷键</h3>
+    <ul>
+      <li><span>Overview / Providers / Traffic / Logs / Users</span><span><kbd>1</kbd>–<kbd>5</kbd></span></li>
+      <li><span>Refresh · 刷新</span><kbd>r</kbd></li>
+      <li><span>Theme · 主题</span><kbd>t</kbd></li>
+      <li><span>Log model filter</span><kbd>/</kbd></li>
+      <li><span>This panel</span><kbd>?</kbd></li>
+      <li><span>Close drawer / toasts</span><kbd>Esc</kbd></li>
+    </ul>
   </div>
 
   <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="false"></div>

@@ -93,6 +93,14 @@ python -m pip install -r requirements.txt
 | OpenAI-compatible | `http://127.0.0.1:8787/v1` |
 | Anthropic Messages | `http://127.0.0.1:8787` |
 
+Anthropic clients that append `/messages` directly can also use a base URL ending
+in `/v1`. The gateway accepts `/messages`, `/v1/messages`, and `/v1/v1/messages`,
+with identical API-key authentication, rate limits, and user points accounting.
+Each path also supports `/count_tokens`, returning a local estimate that includes
+system text, messages, tool schemas, and tool inputs. This uses roughly four
+characters per token, not the upstream model's tokenizer; it is not an exact
+context-limit or billing calculation, especially for non-Latin text and images.
+
 The gateway does not authenticate local clients by default. For LAN access, set `UNIFY_GATEWAY_KEY` (see [LAN access](#lan-access)); clients then send that key as `Authorization: Bearer` or `x-api-key`. SDKs still require a non-empty API key string when auth is off; pass a placeholder such as `local`.
 
 ### OpenAI SDK
@@ -195,6 +203,9 @@ List the same model id under only one enabled provider. The first match wins.
 | GET | `/v1/models` | Combined model catalog |
 | POST | `/v1/chat/completions` | OpenAI chat (supports `stream`) |
 | POST | `/v1/messages` | Anthropic messages (supports `stream`) |
+| POST | `/v1/messages/count_tokens` | Local approximate input token count |
+| POST | `/messages`, `/v1/v1/messages` | Anthropic aliases; same auth, limits and accounting |
+| POST | `/messages/count_tokens`, `/v1/v1/messages/count_tokens` | Token-count aliases; same auth and rate limits |
 | GET | `/docs` | Interactive OpenAPI docs |
 
 ## Monitoring

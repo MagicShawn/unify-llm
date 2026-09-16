@@ -172,12 +172,12 @@ def main() -> None:
                 f"status={r.status_code} body={r.json() if r.status_code==200 else r.text[:80]}",
             )
 
-            r = client.get("/dashboard")
-            dash_ok = r.status_code == 200 and b"Unify LLM" in r.content
+            r = client.get("/dashboard", follow_redirects=False)
+            dash_ok = r.status_code == 302 and r.headers.get("location", "").startswith("/portal")
             record(
-                "GET /dashboard (200 + Unify LLM)",
+                "GET /dashboard redirects unauthenticated user",
                 dash_ok,
-                f"status={r.status_code} bytes={len(r.content)}",
+                f"status={r.status_code} location={r.headers.get('location')}",
             )
 
             # --- chat completions against dummy ---
@@ -196,7 +196,9 @@ def main() -> None:
             )
 
             # --- dashboard HTML content ---
-            html = r.content.decode("utf-8") if False else client.get("/dashboard").content.decode("utf-8")
+            html = (ROOT / "unify_llm" / "static" / "dashboard.html").read_text(
+                encoding="utf-8"
+            )
 
             for needle in ("Unify LLM", "latencyChart", "providerGrid", "toastHost"):
                 present = needle in html

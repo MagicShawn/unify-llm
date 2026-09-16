@@ -66,6 +66,14 @@ class AnthropicAdapter(BaseAdapter):
             return status, data, None
         if stream:
             assert byte_iter is not None
-            return status, None, anthropic_sse_to_openai_sse(byte_iter, model=model)
+            stream_options = payload.get("stream_options")
+            include_usage = bool(
+                isinstance(stream_options, dict) and stream_options.get("include_usage") is True
+            )
+            return status, None, anthropic_sse_to_openai_sse(
+                byte_iter,
+                model=model,
+                include_usage=include_usage,
+            )
         assert data is not None
         return status, anthropic_response_to_openai_chat(data, model=model), None
