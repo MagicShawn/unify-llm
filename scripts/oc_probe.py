@@ -5,6 +5,7 @@ import http.server
 import socketserver
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 
 UPSTREAM = "http://127.0.0.1:8787"
 PORT = 8799
@@ -17,11 +18,16 @@ class H(http.server.BaseHTTPRequestHandler):
     def _relay(self):
         n = int(self.headers.get("content-length") or 0)
         body = self.rfile.read(n) if n else b""
-        line = f"{self.command} {self.path}\n"
+        # Keep enough request metadata for path debugging without persisting
+        # credentials that may appear in headers or query parameters.
+        line = f"{self.command} {urlsplit(self.path).path}\n"
         with open(LOG, "a", encoding="utf-8") as f:
             f.write(line)
             for k, v in self.headers.items():
-                if k.lower() in ("host", "authorization", "x-api-key", "anthropic-version", "content-type"):
+                lower = k.lower()
+                if lower in ("authorization", "x-api-key"):
+                    f.write(f"  {k}: <redacted>\n")
+                elif lower in ("host", "anthropic-version", "content-type"):
                     f.write(f"  {k}: {v}\n")
             f.write("\n")
         url = UPSTREAM + self.path

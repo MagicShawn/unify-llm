@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import json
 import math
 import os
 import threading
@@ -40,6 +41,11 @@ _LOCALHOST_IPS = frozenset({"127.0.0.1", "::1", "localhost", ""})
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 PROBE_TIMEOUT_SECONDS = 10.0
+
+
+def _is_model_api_path(path: str) -> bool:
+    """Include host-root Anthropic aliases in all model API policies."""
+    return path.startswith("/v1/") or path in ("/messages", "/messages/count_tokens")
 
 
 class LoginGuard:
@@ -715,7 +721,7 @@ def create_app(
             try:
                 state.monitor.log(
                     "warn",
-                    f"404 {request.method} {path} query={request.url.query!r} "
+                    f"404 {request.method} {path} "
                     f"client={_peer_ip(request)}",
                 )
             except Exception:  # noqa: BLE001
@@ -734,13 +740,14 @@ def create_app(
     # Auth: master gateway key, per-user API keys, and session cookies.
     # - /api/auth/*: open (login/register/logout/me-by-session).
     # - /api/me/*: requires an active session cookie (any role).
-    # - /v1/*: master key OR a valid user key. Open when neither is configured.
+    # - Model APIs: master key OR a valid user key. Open when neither is configured.
     # - /api/admin/*: master key OR admin session OR localhost when no master key.
     # - other /api/*: master key, or admin session, when one is set.
     @app.middleware("http")
     async def gateway_auth(request: Request, call_next):
         path = request.url.path
-        protected = path.startswith(("/v1/", "/api/"))
+        is_model_api = _is_model_api_path(path)
+        protected = is_model_api or path.startswith("/api/")
         if not protected:
             return await call_next(request)
 
@@ -756,7 +763,6 @@ def create_app(
             return await call_next(request)
 
         client_key = _extract_client_key(request)
-        is_v1 = path.startswith("/v1/")
         is_user_admin = path.startswith(("/api/admin/users", "/api/admin/keys"))
 
         # Master gateway key always grants full access.
@@ -764,11 +770,11 @@ def create_app(
             return await call_next(request)
 
         # Admin session cookie grants dashboard + admin API access.
-        # Not applied to /v1/* — model calls still need a master or user API key.
+        # Model calls still need a master or user API key, including root aliases.
         session = _resolve_session(state, request)
         if (
             session is not None
-            and not is_v1
+            and not is_model_api
             and session["user"].get("role") == "admin"
         ):
             return await call_next(request)
@@ -791,8 +797,8 @@ def create_app(
         users = state.users
         has_user_keys = bool(users is not None and users.has_any_active_key())
 
-        # User API keys authenticate /v1/* only.
-        if is_v1 and client_key:
+        # User API keys authenticate model APIs only.
+        if is_model_api and client_key:
             if users is not None:
                 auth = users.authenticate_key(client_key)
                 if auth is not None:
@@ -809,7 +815,7 @@ def create_app(
 
         # No credentials.
         if not client_key:
-            if is_v1:
+            if is_model_api:
                 # Open when no master key and no user keys (backward compatible).
                 if not gateway_key and not has_user_keys:
                     return await call_next(request)
@@ -824,15 +830,15 @@ def create_app(
                 return await call_next(request)
             return _auth_error()
 
-        # Wrong key on non-/v1 protected path.
+        # Wrong key on a protected control-plane path.
         return _auth_error()
 
-    # Rate limit /v1/* only (token bucket per client IP + optional concurrency cap).
+    # Rate limit model APIs (token bucket per client IP + optional concurrency cap).
     # Always registered so admin reload can turn limits on without restart.
     @app.middleware("http")
     async def rate_limit_middleware(request: Request, call_next):
         path = request.url.path
-        if not path.startswith("/v1/"):
+        if not _is_model_api_path(path):
             return await call_next(request)
         if not state.limiter.enabled:
             return await call_next(request)
@@ -2158,29 +2164,13 @@ def create_app(
         providers we proxy do not all expose count_tokens, so estimate
         (~4 chars/token) instead of 404ing the client.
         """
-        parts: list[str] = []
-        system = payload.get("system")
-        if isinstance(system, str):
-            parts.append(system)
-        elif isinstance(system, list):
-            for block in system:
-                if isinstance(block, dict):
-                    parts.append(str(block.get("text") or ""))
-                else:
-                    parts.append(str(block))
-        for msg in payload.get("messages") or []:
-            if not isinstance(msg, dict):
-                continue
-            content = msg.get("content")
-            if isinstance(content, str):
-                parts.append(content)
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict):
-                        parts.append(str(block.get("text") or block.get("content") or ""))
-                    else:
-                        parts.append(str(block))
-        text = "\n".join(parts)
+        # Include schemas, tool arguments and nested tool results as prompt content.
+        prompt = {
+            key: payload[key]
+            for key in ("system", "messages", "tools", "tool_choice")
+            if key in payload
+        }
+        text = json.dumps(prompt, ensure_ascii=False, separators=(",", ":"))
         # + a few tokens of message framing overhead
         return max(1, (len(text) + 3) // 4 + 8)
 
@@ -2192,6 +2182,14 @@ def create_app(
             return JSONResponse({"error": {"message": "Invalid JSON body"}}, status_code=400)
         if not isinstance(payload, dict):
             return JSONResponse({"error": {"message": "JSON object required"}}, status_code=400)
+        prompt_messages = payload.get("messages", [])
+        if not isinstance(prompt_messages, list) or any(
+            not isinstance(message, dict) for message in prompt_messages
+        ):
+            return JSONResponse(
+                {"error": {"message": "Field 'messages' must be an array of objects"}},
+                status_code=400,
+            )
         return JSONResponse({"input_tokens": _estimate_prompt_tokens(payload)})
 
     # Some clients (OpenCode + @ai-sdk/anthropic) prepend an extra /v1 when

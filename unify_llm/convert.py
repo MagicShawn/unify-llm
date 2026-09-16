@@ -648,19 +648,17 @@ async def openai_sse_to_anthropic_sse(
         buffer += chunk
         while b"\n" in buffer:
             line, buffer = buffer.split(b"\n", 1)
-            if not line.strip():
+            # SSE comments and metadata are not JSON payloads.
+            if not line.startswith(b"data:"):
                 continue
-            if line.startswith(b"data:"):
-                payload = line[5:].strip().decode("utf-8", errors="replace")
-            else:
-                payload = line.decode("utf-8", errors="replace").strip()
+            payload = line[5:].strip().decode("utf-8", errors="replace")
             if not payload or payload == "[DONE]":
                 continue
             try:
                 obj = json.loads(payload)
             except json.JSONDecodeError:
-                buffer = f"data: {payload}\n".encode() + buffer
-                break
+                # This line is complete; requeuing it would block all later data.
+                continue
             if not isinstance(obj, dict):
                 continue
 
@@ -766,7 +764,10 @@ async def openai_sse_to_anthropic_sse(
                 "stop_reason": _finish_reason_to_stop_reason(finish_reason),
                 "stop_sequence": None,
             },
-            "usage": {"output_tokens": max(output_tokens, 1 if not saw_usage else 0)},
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": max(output_tokens, 1 if not saw_usage else 0),
+            },
         },
     )
     yield _anthropic_sse("message_stop", {"type": "message_stop"})
@@ -781,12 +782,22 @@ async def anthropic_sse_to_openai_sse(
     source: AsyncIterator[bytes],
     *,
     model: str,
+    include_usage: bool = False,
 ) -> AsyncIterator[bytes]:
     chunk_id = f"chatcmpl-{model}"
     created = int(time.time())
     buffer = b""
+    input_tokens = 0
+    output_tokens = 0
+    saw_usage = False
+    usage_emitted = False
 
-    def _chunk(delta: dict[str, Any], finish: str | None = None) -> bytes:
+    def _chunk(
+        delta: dict[str, Any],
+        finish: str | None = None,
+        usage: dict[str, int] | None = None,
+        usage_only: bool = False,
+    ) -> bytes:
         body = {
             "id": chunk_id,
             "object": "chat.completion.chunk",
@@ -800,7 +811,18 @@ async def anthropic_sse_to_openai_sse(
                 }
             ],
         }
+        if usage is not None and usage_only:
+            body["choices"] = []
+        if usage is not None:
+            body["usage"] = usage
         return f"data: {json.dumps(body, ensure_ascii=False)}\n\n".encode()
+
+    def _usage() -> dict[str, int]:
+        return {
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
 
     yield _chunk({"role": "assistant", "content": ""})
 
@@ -810,9 +832,12 @@ async def anthropic_sse_to_openai_sse(
 
     async for chunk in source:
         buffer += chunk
-        text_buf = buffer.decode("utf-8", errors="replace")
-        while "\n\n" in text_buf:
-            raw_event, text_buf = text_buf.split("\n\n", 1)
+        # Keep incomplete UTF-8 sequences as bytes until their event is complete.
+        # Normalizing after appending also handles CRLF split across chunks.
+        buffer = buffer.replace(b"\r\n", b"\n")
+        while b"\n\n" in buffer:
+            raw_bytes, buffer = buffer.split(b"\n\n", 1)
+            raw_event = raw_bytes.decode("utf-8", errors="replace")
             data_lines = []
             for line in raw_event.splitlines():
                 if line.startswith("data:"):
@@ -825,12 +850,20 @@ async def anthropic_sse_to_openai_sse(
             try:
                 obj = json.loads(payload)
             except json.JSONDecodeError:
-                text_buf = payload + "\n\n" + text_buf
-                break
+                continue
             if not isinstance(obj, dict):
                 continue
 
             etype = obj.get("type")
+            usage = (
+                (obj.get("message") or {}).get("usage")
+                if etype == "message_start"
+                else obj.get("usage")
+            )
+            if isinstance(usage, dict):
+                input_tokens = max(input_tokens, int(usage.get("input_tokens") or 0))
+                output_tokens = max(output_tokens, int(usage.get("output_tokens") or 0))
+                saw_usage = True
             if etype == "content_block_start":
                 cb = obj.get("content_block") or {}
                 bidx = int(obj.get("index") or 0)
@@ -873,11 +906,19 @@ async def anthropic_sse_to_openai_sse(
             elif etype == "message_delta":
                 stop = (obj.get("delta") or {}).get("stop_reason")
                 if stop:
-                    yield _chunk({}, _stop_reason_to_finish_reason(stop))
+                    # Keep default streams compatible with clients that index
+                    # choices[0], while still exposing usage to gateway billing.
+                    final_usage = _usage() if saw_usage and not include_usage else None
+                    yield _chunk({}, _stop_reason_to_finish_reason(stop), usage=final_usage)
+                    usage_emitted = final_usage is not None
             elif etype == "message_stop":
+                if saw_usage:
+                    if include_usage:
+                        yield _chunk({}, usage=_usage(), usage_only=True)
+                    elif not usage_emitted:
+                        yield _chunk({}, usage=_usage())
                 yield b"data: [DONE]\n\n"
             elif etype == "error":
                 err = obj.get("error") or {}
                 yield f"data: {json.dumps({'error': err}, ensure_ascii=False)}\n\n".encode()
                 yield b"data: [DONE]\n\n"
-        buffer = text_buf.encode("utf-8")

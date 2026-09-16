@@ -399,6 +399,34 @@ def test_master_key_not_charged(admin_client: TestClient):
     assert root["points_spent"] == 0
 
 
+@pytest.mark.parametrize("path", ("/v1/messages", "/messages", "/v1/v1/messages"))
+def test_messages_aliases_enforce_points_balance(admin_client: TestClient, path: str):
+    _, raw = _make_user_with_key(admin_client, points=0)
+    response = admin_client.post(
+        path,
+        json={"model": "m-x", "messages": [{"role": "user", "content": "ping"}]},
+        headers={"x-api-key": raw},
+    )
+    assert response.status_code == 402, response.text
+
+
+@pytest.mark.parametrize("path", ("/v1/messages", "/messages", "/v1/v1/messages"))
+def test_messages_aliases_charge_user(admin_client: TestClient, path: str):
+    uid, raw = _make_user_with_key(admin_client, points=100)
+    response = admin_client.post(
+        path,
+        json={"model": "m-x", "messages": [{"role": "user", "content": "ping"}]},
+        headers={"x-api-key": raw},
+    )
+    assert response.status_code == 200, response.text
+    users = admin_client.get(
+        "/api/admin/users", headers={"Authorization": "Bearer master-key"}
+    ).json()["users"]
+    user = next(user for user in users if user["id"] == uid)
+    assert user["points_balance"] == 98
+    assert user["points_spent"] == 2
+
+
 # ── admin + usage ──────────────────────────────────────────────────────────
 
 
