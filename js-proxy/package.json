@@ -1,0 +1,13 @@
+{
+  "name": "js-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Node.js reverse proxy with a global concurrency cap.",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
