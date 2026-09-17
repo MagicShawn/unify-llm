@@ -442,7 +442,7 @@ def test_portal_html_mentions_windows(app):
         r = client.get("/portal")
         assert r.status_code == 200
         html = r.text
-        assert "usageWindowsBody" in html
-        assert "1h" in html
-        assert "24h" in html
-        assert "7d" in html or "7d" in html
+        assert "usageChart" in html
+        assert "last_1h" in html
+        assert "usageWindowsBody" not in html
+        assert "ovWindowsBody" not in html

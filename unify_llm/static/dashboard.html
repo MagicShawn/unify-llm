@@ -1542,8 +1542,19 @@
       gap: 8px;
       margin-bottom: 10px;
     }
+    .usage-line-chart {
+      min-height: 220px;
+      width: 100%;
+    }
+    .usage-line-chart svg {
+      display: block;
+      width: 100%;
+      height: 220px;
+    }
     @media (max-width: 640px) {
       .usage-win-summary { grid-template-columns: 1fr; }
+      .usage-line-chart,
+      .usage-line-chart svg { min-height: 180px; height: 180px; }
     }
     .chip.path {
       background: var(--bg-soft);
@@ -2205,28 +2216,7 @@
                 <div class="hint">selected window</div>
               </div>
             </div>
-            <div id="adminUsageSpark" style="color:var(--ok);min-height:48px">—</div>
-          </div>
-          <div class="card tight" style="margin-top:12px;padding:0">
-            <div class="table-wrap" id="windowsTableWrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>period</th>
-                    <th>requests</th>
-                    <th>errors</th>
-                    <th>tokens in</th>
-                    <th>tokens out</th>
-                    <th>tokens</th>
-                    <th>cost</th>
-                    <th>points</th>
-                  </tr>
-                </thead>
-                <tbody id="windowsTableBody">
-                  <tr><td colspan="8">Connecting to gateway…</td></tr>
-                </tbody>
-              </table>
-            </div>
+            <div id="adminUsageSpark" class="usage-line-chart" style="color:var(--ink);min-height:220px">—</div>
           </div>
         </section>
 
@@ -4516,18 +4506,45 @@
         if (sparkEl) {
           const reqVals = sparkSeries.map((p) => Number(p.requests) || 0);
           if (reqVals.length >= 2) {
-            const W = 640, H = 48, n = reqVals.length;
+            const W = 640, H = 220, n = reqVals.length;
+            const pad = { l: 36, r: 12, t: 14, b: 24 };
+            const innerW = W - pad.l - pad.r;
+            const innerH = H - pad.t - pad.b;
             let maxR = 0;
             for (const v of reqVals) if (v > maxR) maxR = v;
             const yMax = maxR > 0 ? maxR : 1;
             const coords = reqVals.map((v, i) => {
-              const x = 2 + (i / (n - 1)) * (W - 4);
-              const y = H - 4 - ((v / yMax) * (H - 8));
-              return x.toFixed(1) + "," + y.toFixed(1);
-            }).join(" ");
+              const x = pad.l + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+              const y = pad.t + innerH - ((v / yMax) * innerH);
+              return [x, y];
+            });
+            let line = "M " + coords[0][0].toFixed(1) + " " + coords[0][1].toFixed(1);
+            for (let i = 1; i < coords.length; i++) {
+              line += " L " + coords[i][0].toFixed(1) + " " + coords[i][1].toFixed(1);
+            }
+            const y0 = (pad.t + innerH).toFixed(1);
+            const area = line + " L " + coords[coords.length - 1][0].toFixed(1) + " " + y0 + " L " + coords[0][0].toFixed(1) + " " + y0 + " Z";
+            const step = n > 24 ? Math.ceil(n / 12) : 1;
+            let dots = "";
+            for (let i = 0; i < n; i++) {
+              if (i % step !== 0 && i !== n - 1) continue;
+              dots += `<circle cx="${coords[i][0].toFixed(1)}" cy="${coords[i][1].toFixed(1)}" r="3" fill="currentColor" stroke="var(--bg-panel)" stroke-width="1.5"/>`;
+            }
+            const grid = [0.25, 0.5, 0.75].map((f) => {
+              const y = pad.t + innerH * f;
+              return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W - pad.r}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.08" stroke-width="1"/>`;
+            }).join("");
             sparkEl.innerHTML =
-              '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:48px;display:block" aria-label="Gateway requests curve">' +
-              '<polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="' + coords + '"/>' +
+              '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:220px;display:block" aria-label="Gateway requests line chart">' +
+              '<defs><linearGradient id="adminLineFill" x1="0" y1="0" x2="0" y2="1">' +
+              '<stop offset="0%" stop-color="currentColor" stop-opacity="0.18"/>' +
+              '<stop offset="100%" stop-color="currentColor" stop-opacity="0.02"/>' +
+              "</linearGradient></defs>" +
+              grid +
+              `<text x="${pad.l}" y="${(pad.t + 4).toFixed(1)}" font-size="10" fill="currentColor" fill-opacity="0.5">${fmtN(maxR)}</text>` +
+              `<path d="${area}" fill="url(#adminLineFill)"/>` +
+              `<path d="${line}" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>` +
+              dots +
               "</svg>";
             const metaEl = $("adminSparkMeta");
             if (metaEl) {
@@ -4542,30 +4559,6 @@
           } else {
             sparkEl.textContent = "no recent traffic in series buffer";
           }
-        }
-        const winRows = [
-          ["lifetime", lifeW],
-          ["1h", w1],
-          ["24h", w24],
-          ["7d", w7],
-        ];
-        const windowsBody = $("windowsTableBody");
-        if (windowsBody) {
-          windowsBody.innerHTML = winRows
-            .map(([label, x]) => {
-              const tt = x || {};
-              return (
-                "<tr><td>" + esc(label) + "</td>" +
-                "<td class='mono'>" + esc(fmtN(tt.requests || 0)) + "</td>" +
-                "<td class='mono'>" + esc(fmtN(tt.errors || 0)) + "</td>" +
-                "<td class='mono'>" + esc(fmtN(tt.prompt_tokens || 0)) + "</td>" +
-                "<td class='mono'>" + esc(fmtN(tt.completion_tokens || 0)) + "</td>" +
-                "<td class='mono'>" + esc(fmtN(tt.total_tokens || 0)) + "</td>" +
-                "<td class='mono'>" + esc(pricingOn ? fmtUSD(tt.cost_usd || 0) : "—") + "</td>" +
-                "<td class='mono'>" + esc(fmtN(tt.points || 0)) + "</td></tr>"
-              );
-            })
-            .join("");
         }
 
         if (lastTs && now > lastTs) {
