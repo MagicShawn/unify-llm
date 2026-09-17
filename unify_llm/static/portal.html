@@ -110,7 +110,9 @@
         radial-gradient(ellipse 45% 35% at 15% 8%, rgba(255, 255, 255, 0.05), transparent 70%),
         radial-gradient(ellipse 50% 40% at 85% 70%, rgba(255, 255, 255, 0.03), transparent 68%);
     }
-    .wrap, .top, .card, form, .portal-nav, .portal-panel { position: relative; z-index: 1; }
+    .wrap, .top, .card, form, .portal-nav, .portal-panel,
+    .usage-chart-card, .usage-line-chart, .usage-win-summary,
+    .points-hero, .section-title { position: relative; z-index: 1; }
     a { color: var(--ink); text-underline-offset: 2px; }
     /* Global keyboard focus ring — keyboard users must always see focus */
     :focus-visible {
@@ -688,20 +690,27 @@
       padding: 14px 16px 12px;
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      background: var(--glass-bg);
-      backdrop-filter: blur(16px) saturate(160%);
-      -webkit-backdrop-filter: blur(16px) saturate(160%);
-      box-shadow: inset 0 1px 0 var(--glass-glow);
-      overflow: hidden;
+      background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      box-shadow:
+        inset 0 1px 0 var(--glass-glow),
+        0 4px 20px rgba(0, 0, 0, 0.06);
+      overflow: visible;
+      isolation: isolate;
+      color: var(--ink);
     }
     .usage-line-chart {
       min-height: 220px;
       width: 100%;
+      height: 220px;
+      color: var(--ink);
     }
     .usage-line-chart svg {
       display: block;
       width: 100%;
       height: 220px;
+      overflow: visible;
     }
     @media (max-width: 720px) {
       .usage-line-chart,
@@ -1684,12 +1693,6 @@ Model:     deepseek-flash
         </div>
       </div>
 
-      <div class="usage-grid" id="pointsGrid" style="margin-top:10px">
-        <div class="usage-card meter-tile" id="tileGranted"><div class="k">granted</div><div class="v" id="uGranted" style="font-size:20px">—</div></div>
-        <div class="usage-card meter-tile" id="tileUsedPct"><div class="k">used</div><div class="v" id="uUsedPct" style="font-size:20px">—</div></div>
-        <div class="usage-card meter-tile" id="tileRemainPct"><div class="k">remaining %</div><div class="v" id="uRemainPct" style="font-size:20px">—</div></div>
-      </div>
-
       <p class="sub" id="pointsHint" style="margin:10px 0 0;display:none"></p>
       <div class="points-next" id="pointsNext" role="status">
         <div id="pointsNextText"><b>No points left.</b> Ask an admin to grant more Points so requests can run.</div>
@@ -1749,15 +1752,6 @@ Model:     deepseek-flash
           <span class="legend-item" id="tokLegendItem" hidden><i class="dot tok" aria-hidden="true"></i> tokens · Token 折线</span>
           <button type="button" class="chart-series-toggle" id="chartTokToggle" aria-pressed="false">+ tokens</button>
         </div>
-      </div>
-
-      <div class="usage-grid" style="margin-top:12px">
-        <div class="usage-card"><div class="k">lifetime requests</div><div class="v" id="uReq">—</div></div>
-        <div class="usage-card"><div class="k">lifetime tokens in</div><div class="v" id="uIn">—</div></div>
-        <div class="usage-card"><div class="k">lifetime tokens out</div><div class="v" id="uOut">—</div></div>
-        <div class="usage-card"><div class="k">lifetime tokens</div><div class="v" id="uTotal">—</div></div>
-        <div class="usage-card"><div class="k">lifetime errors</div><div class="v" id="uErr">—</div></div>
-        <div class="usage-card"><div class="k">lifetime est. USD</div><div class="v" id="uCost">—</div></div>
       </div>
 
       <div class="section-title" style="margin-top:14px">Recent requests · 最近请求</div>
@@ -2480,6 +2474,34 @@ Model:     deepseek-flash
       return area;
     }
 
+    function _emptyLineSvg() {
+      const W = 640, H = 220;
+      const grid = [0.25, 0.5, 0.75].map((f) => {
+        const y = 20 + (H - 40) * f;
+        return `<line x1="40" y1="${y}" x2="${W - 14}" y2="${y}" stroke="currentColor" stroke-opacity="0.12" stroke-width="1"/>`;
+      }).join("");
+      return (
+        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:220px;display:block" aria-hidden="true">` +
+        grid +
+        `<polyline fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" points="40,${H - 24} ${W - 14},${H - 24}"/>` +
+        "</svg>"
+      );
+    }
+
+    function _emptyUsageLineSvg() {
+      const W = 640, H = 200;
+      const grid = [0.3, 0.55, 0.8].map((f) => {
+        const y = 24 + (H - 48) * f;
+        return `<line x1="40" y1="${y}" x2="${W - 14}" y2="${y}" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>`;
+      }).join("");
+      return (
+        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:200px;display:block" aria-hidden="true" class="usage-empty-svg">` +
+        grid +
+        `<polyline fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="6 4" points="40,${H - 28} ${W - 14},${H - 28}"/>` +
+        "</svg>"
+      );
+    }
+
     function renderUsageChart() {
       const wrap = $("usageChartWrap");
       if (!wrap) return;
@@ -2504,14 +2526,16 @@ Model:     deepseek-flash
         tokBtn.classList.toggle("active", usageShowTokens);
         tokBtn.setAttribute("aria-pressed", usageShowTokens ? "true" : "false");
       }
-      if (!pts.length) {
-        wrap.innerHTML = '<div class="usage-chart-empty">No series yet · 暂无曲线数据</div>';
+      const reqs = pts.map((p) => Number(p.requests) || 0);
+      const toks = pts.map((p) => Number(p.total_tokens) || 0);
+      if (!pts.length || reqs.every((v) => !v)) {
+        wrap.innerHTML =
+          '<div class="usage-chart-empty">No traffic yet · 暂无请求（折线将随调用出现）</div>' +
+          _emptyUsageLineSvg();
         return;
       }
       const W = 640, H = 240;
       const pad = { l: 40, r: 14, t: 16, b: 32 };
-      const reqs = pts.map((p) => Number(p.requests) || 0);
-      const toks = pts.map((p) => Number(p.total_tokens) || 0);
       const reqArea = _chartPath(reqs, true, W, H, pad);
       const reqLine = _chartPath(reqs, false, W, H, pad);
       // Point markers on the request polyline (classic line chart)
@@ -2528,7 +2552,7 @@ Model:     deepseek-flash
           if (i % step !== 0 && i !== n - 1) continue;
           const x = pad.l + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
           const y = pad.t + innerH - ((Number(reqs[i]) || 0) / yMax) * innerH;
-          reqDots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#1d1d1f" stroke="#faf8f3" stroke-width="1.5"/>`;
+          reqDots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.25" fill="currentColor" stroke="var(--bg-panel)" stroke-width="1.5"/>`;
         }
       }
       // Tokens scaled on their own axis when secondary line is on.
@@ -2574,21 +2598,21 @@ Model:     deepseek-flash
         `<text x="${x.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.55">${esc(tLabels[i])}</text>`
       ).join("");
       const svg =
-        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Usage line chart">` +
+        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:220px;display:block" role="img" aria-label="Usage line chart">` +
         `<defs>` +
         `<linearGradient id="usageReqFill" x1="0" y1="0" x2="0" y2="1">` +
-        `<stop offset="0%" stop-color="#1d1d1f" stop-opacity="0.18"/>` +
-        `<stop offset="100%" stop-color="#1d1d1f" stop-opacity="0.02"/>` +
+        `<stop offset="0%" stop-color="currentColor" stop-opacity="0.24"/>` +
+        `<stop offset="100%" stop-color="currentColor" stop-opacity="0.03"/>` +
         `</linearGradient>` +
         `</defs>` +
         gridLines +
-        `<text x="${pad.l}" y="${(pad.t + 4).toFixed(1)}" font-size="10" fill="currentColor" fill-opacity="0.5">${esc(fmtN(maxReq))}</text>` +
+        `<text x="${pad.l}" y="${(pad.t + 4).toFixed(1)}" font-size="10" fill="currentColor" fill-opacity="0.65">${esc(fmtN(maxReq))}</text>` +
         (reqArea ? `<path d="${reqArea}" fill="url(#usageReqFill)"/>` : "") +
-        (reqLine ? `<path d="${reqLine}" fill="none" stroke="#1d1d1f" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>` : "") +
+        (reqLine ? `<path d="${reqLine}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : "") +
         reqDots +
         (usageShowTokens && tokLine
-          ? `<path d="${tokLine}" fill="none" stroke="#8e8e93" stroke-width="1.75" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round"/>` +
-            `<text x="${W - pad.r}" y="${(pad.t + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="#8e8e93" fill-opacity="0.9">${esc(fmtN(maxTok2))} tok</text>`
+          ? `<path d="${tokLine}" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.75" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round"/>` +
+            `<text x="${W - pad.r}" y="${(pad.t + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="currentColor" fill-opacity="0.65">${esc(fmtN(maxTok2))} tok</text>`
           : "") +
         labelSvg +
         `</svg>`;
@@ -2629,17 +2653,6 @@ Model:     deepseek-flash
       usageSeriesMeta = body.series_meta || (body.usage_windows && body.usage_windows.series_meta) || {};
       usageWinData = win;
       renderUsageChart();
-      $("uReq").textContent = fmtN(body.recent_requests || life.requests || 0);
-      $("uIn").textContent = fmtN(body.prompt_tokens || life.prompt_tokens || 0);
-      $("uOut").textContent = fmtN(body.completion_tokens || life.completion_tokens || 0);
-      $("uErr").textContent = fmtN(body.errors || life.errors || 0);
-      const tokTotal = Number(body.prompt_tokens || life.prompt_tokens || 0) + Number(body.completion_tokens || life.completion_tokens || 0);
-      const ut = $("uTotal");
-      if (ut) ut.textContent = fmtN(tokTotal);
-      const uc = $("uCost");
-      if (uc) {
-        uc.textContent = _fmtUsd(body.estimated_cost_usd != null ? body.estimated_cost_usd : life.cost_usd);
-      }
       // Points health (shared by hero meter + overview tiles)
       const bal = Number(body.points_balance || 0);
       const spent = Number(body.points_spent || 0);
@@ -2647,12 +2660,12 @@ Model:     deepseek-flash
       const health = pointsHealth(bal, spent, charging, unlimited);
       const freeOrUnlimited = !charging || unlimited;
       const balLabel = unlimited ? "∞" : fmtPts(Math.max(0, bal));
-      // Overview: lifetime + 24h summary (chart owns 1h/24h/7d switching)
+      // Overview tiles: 24h only (line chart owns other windows)
       const tok24 = Number(w24.prompt_tokens || 0) + Number(w24.completion_tokens || 0);
       const ovR = $("ovReq");
-      if (ovR) ovR.textContent = fmtN(w24.requests || 0) + " · life " + fmtN(life.requests || 0);
+      if (ovR) ovR.textContent = fmtN(w24.requests || 0);
       const ovT = $("ovTok");
-      if (ovT) ovT.textContent = fmtN(tok24) + " · life " + fmtN(tokTotal);
+      if (ovT) ovT.textContent = fmtN(tok24);
       const ovP = $("ovPoints");
       if (ovP) ovP.textContent = balLabel;
       setToneClass($("ovPointsCard"), health.tone);
@@ -2804,8 +2817,8 @@ Model:     deepseek-flash
       if (uUsedPct) uUsedPct.textContent = freeOrUnlimited ? "—" : Math.round(health.usedPct) + "%";
       const uRemainPct = $("uRemainPct");
       if (uRemainPct) uRemainPct.textContent = freeOrUnlimited ? "—" : Math.round(health.remainPct) + "%";
-      setToneClass($("tileRemainPct"), health.tone);
-      setToneClass($("tileUsedPct"), health.tone === "err" ? "err" : health.tone === "warn" ? "warn" : "ok");
+      if ($("tileRemainPct")) setToneClass($("tileRemainPct"), health.tone);
+      if ($("tileUsedPct")) setToneClass($("tileUsedPct"), health.tone === "err" ? "err" : health.tone === "warn" ? "warn" : "ok");
     }
 
     async function refreshPointsLog() {
