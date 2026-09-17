@@ -307,6 +307,9 @@ class Monitor:
         self._persist_interval = max(0.0, float(persist_interval_seconds or 0.0))
         self._last_persist = time.monotonic()
         self._dirty_totals = False
+        # Watchdog: force-end in-flight rows older than this (client abort leaks).
+        # 0 disables the sweep.
+        self.stale_request_seconds = 900.0
         if store is not None:
             self._load_persisted()
 
@@ -484,7 +487,15 @@ class Monitor:
         started_at: float | None = None,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
+        status: str | None = None,
     ) -> None:
+        """Complete an in-flight request and release its concurrency slot.
+
+        ``status`` overrides the derived label (``ok`` / ``error``). Pass
+        ``"cancelled"`` for client aborts so they do not inflate error
+        counters. Idempotent: ending an already-completed request is a no-op
+        (active must not be double-decremented when cleanup paths race).
+        """
         now = time.time()
         with self._lock:
             stats = self._providers.get(provider_id)
@@ -492,26 +503,23 @@ class Monitor:
                 self._global_active = max(0, self._global_active - 1)
                 return
             rec = stats.in_flight.pop(request_id, None)
-            latency_ms = 0
-            if rec is not None:
-                start = started_at if started_at is not None else rec.started_at
-                latency_ms = int((now - start) * 1000)
-                model = rec.model
-                requested = rec.requested_model
-                protocol = rec.protocol
-                path = rec.path
-                client = rec.client
-                user_agent = rec.user_agent
-                app = rec.app
-                headers = rec.headers
-                user_id = rec.user_id
-                username = rec.username
-            else:
-                model = requested = protocol = path = client = ""
-                user_agent = app = ""
-                headers = {}
-                user_id = username = ""
-            status = "error" if error or http_status >= 400 else "ok"
+            if rec is None:
+                # Already ended — keep totals/active stable.
+                return
+            start = started_at if started_at is not None else rec.started_at
+            latency_ms = int((now - start) * 1000)
+            model = rec.model
+            requested = rec.requested_model
+            protocol = rec.protocol
+            path = rec.path
+            client = rec.client
+            user_agent = rec.user_agent
+            app = rec.app
+            headers = rec.headers
+            user_id = rec.user_id
+            username = rec.username
+            if status is None:
+                status = "error" if error or http_status >= 400 else "ok"
             prompt_tokens = int(prompt_tokens or 0)
             completion_tokens = int(completion_tokens or 0)
             # Estimate outside the rec branch so stream + non-stream share one path.
@@ -561,7 +569,12 @@ class Monitor:
             self._global_recent.append(completed)
             self._global_active = max(0, self._global_active - 1)
             self._persist_locked()
-        level = "error" if status == "error" else "info"
+        if status == "cancelled":
+            level = "warn"
+        elif status == "error":
+            level = "error"
+        else:
+            level = "info"
         src = app or (user_agent[:48] if user_agent else client or "?")
         who = f" user={username}" if username else ""
         self.logs.add(
@@ -653,8 +666,9 @@ class Monitor:
             item["cost_usd"] += r.estimated_cost_usd
             if r.status == "ok":
                 item["latencies"].append(r.latency_ms)
-            else:
+            elif r.status == "error":
                 item["errors"] += 1
+            # cancelled: neither latency sample nor error
         for item in out.values():
             lats = sorted(item.pop("latencies") or [])
             item["p50"] = round(_percentile(lats, 0.5), 1) if lats else None
@@ -663,6 +677,9 @@ class Monitor:
         return out
 
     def status(self) -> dict[str, Any]:
+        # Self-heal: drop phantom in-flight rows (e.g. abort that never finalized).
+        if self.stale_request_seconds > 0:
+            self.sweep_stale()
         with self._lock:
             models = list(self._model_breakdown_locked().values())
             models.sort(key=lambda m: m["total"], reverse=True)
@@ -688,8 +705,52 @@ class Monitor:
 
     def active_count(self) -> int:
         """Cheap in-flight count for /api/limits (no history/enrichment)."""
+        if self.stale_request_seconds > 0:
+            self.sweep_stale()
         with self._lock:
             return self._global_active
+
+    def sweep_stale(self, max_age_seconds: float | None = None) -> list[str]:
+        """Force-end in-flight requests older than ``max_age_seconds``.
+
+        Safety net when a client abort never finalized the stream generator
+        (monitor.end skipped). Returns request ids that were swept.
+        """
+        limit = self.stale_request_seconds if max_age_seconds is None else float(max_age_seconds)
+        if limit <= 0:
+            return []
+        cutoff = time.time() - limit
+        victims: list[tuple[str, str, float]] = []
+        with self._lock:
+            for pid, stats in self._providers.items():
+                for rid, rec in stats.in_flight.items():
+                    if rec.started_at <= cutoff:
+                        victims.append((pid, rid, rec.started_at))
+        swept: list[str] = []
+        for pid, rid, started in victims:
+            self.end(
+                rid,
+                provider_id=pid,
+                http_status=499,
+                error=f"swept stale in-flight (> {int(limit)}s)",
+                started_at=started,
+                status="cancelled",
+            )
+            swept.append(rid)
+        return swept
+
+    def lifetime_totals(self) -> dict[str, Any]:
+        """Cheap lifetime counter snapshot for usage-window aggregation."""
+        with self._lock:
+            return {
+                "requests": self._global_total,
+                "errors": self._global_errors,
+                "prompt_tokens": self._prompt_tokens,
+                "completion_tokens": self._completion_tokens,
+                "total_tokens": self._prompt_tokens + self._completion_tokens,
+                "cost_usd": self._cost_usd,
+                "persisted": self._store is not None,
+            }
 
     def provider_totals(self, provider_id: str) -> dict[str, Any] | None:
         """Counter snapshot for one provider, or None if unknown."""

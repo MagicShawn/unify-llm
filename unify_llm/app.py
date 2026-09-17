@@ -26,6 +26,7 @@ from .monitor import Monitor, StreamUsageSniffer, extract_usage
 from .rate_limit import RateLimiter
 from .registry import Registry, ResolvedRoute
 from .store import StatsStore
+from .usage_windows import aggregate_windows
 from .users import (
     POINTS_UNLIMITED,
     SESSION_COOKIE,
@@ -988,7 +989,13 @@ def create_app(
             "per_million_output": pricing.per_million_output,
             "models": list(pricing.models.keys()),
         }
+        body["usage_windows"] = _gateway_usage_windows()
         return body
+
+    @app.get("/api/stats/windows")
+    async def api_stats_windows() -> dict[str, Any]:
+        """Gateway-wide lifetime / 24h / 7d usage windows (admin + gateway key)."""
+        return _gateway_usage_windows()
 
     @app.get("/api/history")
     async def api_history(limit: int = 50) -> dict[str, Any]:
@@ -1687,6 +1694,23 @@ def create_app(
             )
         return JSONResponse({"ok": True, "user": _public_user(user)})
 
+    def _gateway_history_items(limit: int = 1000) -> list[dict[str, Any]]:
+        hist = state.monitor.history(limit=max(1, int(limit)))
+        items = hist.get("items") if isinstance(hist, dict) else None
+        return [r for r in (items or []) if isinstance(r, dict)]
+
+    def _gateway_usage_windows() -> dict[str, Any]:
+        """Gateway-wide lifetime + 24h + 7d windows (history + lifetime override)."""
+        rp, rc = _points_rates()
+        totals = state.monitor.lifetime_totals()
+        return aggregate_windows(
+            _gateway_history_items(1000),
+            points_per_1k_prompt=rp,
+            points_per_1k_completion=rc,
+            lifetime_totals=totals,
+            history_cap=1000,
+        )
+
     @app.get("/api/me/usage")
     async def me_usage(request: Request) -> Response:
         """Cheap personal usage: filter recent monitor history by user_id."""
@@ -1705,15 +1729,27 @@ def create_app(
         spent = int(user.get("points_spent") or 0)
         # Refresh from store so deducts after login stay visible.
         users_store = _users_ready()
+        points_log: list[dict[str, Any]] | None = None
         if users_store is not None:
             try:
                 fresh = users_store.get_user(int(session["user_id"]))
                 if fresh is not None:
                     balance = int(fresh.get("points_balance") or 0)
                     spent = int(fresh.get("points_spent") or 0)
+                points_log = users_store.list_points_log(session["user_id"], limit=200)
             except (TypeError, ValueError):
                 pass
         rp, rc = _points_rates()
+        windows = aggregate_windows(
+            items,
+            user_id=uid,
+            points_per_1k_prompt=rp,
+            points_per_1k_completion=rc,
+            points_log_rows=points_log,
+            history_cap=200,
+        )
+        # Keep top-level lifetime fields backward-compatible; attach windows.
+        windows_payload = windows.get("windows") or {}
         return JSONResponse(
             {
                 "ok": True,
@@ -1729,6 +1765,8 @@ def create_app(
                 "points_charging_enabled": _points_charging_enabled(),
                 "points_per_1k_prompt": rp,
                 "points_per_1k_completion": rc,
+                "windows": windows_payload,
+                "usage_windows": windows,
                 "items": items[:20],
             }
         )
@@ -2085,21 +2123,60 @@ def create_app(
                 sniffer=sniffer,
                 client_proto=client_proto,
             ) -> AsyncIterator[bytes]:
+                # Client disconnect / task cancel raises GeneratorExit or
+                # CancelledError (both BaseException) — must still monitor.end()
+                # or `active` and limiter-visible in-flight rows leak forever.
+                ended = False
+
+                def _finish(
+                    *,
+                    http_status: int,
+                    error: str | None,
+                    deduct_points: bool,
+                    status_override: str | None = None,
+                ) -> None:
+                    nonlocal ended
+                    if ended:
+                        return
+                    ended = True
+                    pt, ct = sniffer.usage()
+                    state.monitor.end(
+                        rid,
+                        provider_id=rt.provider_id,
+                        http_status=http_status,
+                        error=error,
+                        started_at=started,
+                        prompt_tokens=pt,
+                        completion_tokens=ct,
+                        status=status_override,
+                    )
+                    if deduct_points:
+                        _deduct_points_after_success(
+                            auth_user_id, pt, ct, note=f"{path} {rt.model} stream"
+                        )
+
                 try:
                     assert byte_iter is not None
                     async for chunk in byte_iter:
                         sniffer.feed(chunk)
                         yield chunk
+                    _finish(http_status=status, error=None, deduct_points=True)
+                except (GeneratorExit, asyncio.CancelledError):
+                    # OpenCode Ctrl+C / HTTP disconnect mid-SSE.
+                    # Points: not charged on pure client abort (partial upstream
+                    # usage is still recorded on the monitor completion row).
+                    _finish(
+                        http_status=499,
+                        error="client aborted",
+                        deduct_points=False,
+                        status_override="cancelled",
+                    )
+                    raise
                 except Exception as e:  # noqa: BLE001
-                    pt, ct = sniffer.usage()
-                    state.monitor.end(
-                        rid,
-                        provider_id=rt.provider_id,
+                    _finish(
                         http_status=502,
                         error=f"stream: {type(e).__name__}: {e}",
-                        started_at=started,
-                        prompt_tokens=pt,
-                        completion_tokens=ct,
+                        deduct_points=False,
                     )
                     # Do not die silently — client would see a truncated reply.
                     yield stream_error_frame(
@@ -2107,20 +2184,14 @@ def create_app(
                         f"Upstream stream aborted: {type(e).__name__}: {e}",
                     )
                     return
-                else:
-                    pt, ct = sniffer.usage()
-                    state.monitor.end(
-                        rid,
-                        provider_id=rt.provider_id,
-                        http_status=status,
-                        error=None,
-                        started_at=started,
-                        prompt_tokens=pt,
-                        completion_tokens=ct,
-                    )
-                    _deduct_points_after_success(
-                        auth_user_id, pt, ct, note=f"{path} {rt.model} stream"
-                    )
+                finally:
+                    if not ended:
+                        _finish(
+                            http_status=499,
+                            error="stream closed",
+                            deduct_points=False,
+                            status_override="cancelled",
+                        )
 
             return StreamingResponse(
                 event_gen(),

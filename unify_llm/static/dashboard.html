@@ -2139,6 +2139,66 @@
 
         <section class="block">
           <div class="sec-head">
+            <h2>Windows<span class="zh">时间窗</span></h2>
+            <div class="meta" id="windowsMeta">lifetime · 24h · 7d</div>
+          </div>
+          <div class="kpi-grid">
+            <div class="card kpi">
+              <div class="label"><span>24h requests</span><span class="zh">24h 请求</span></div>
+              <div class="value" id="winReq24">0</div>
+              <div class="hint" id="winReq24Hint">errors 0</div>
+            </div>
+            <div class="card kpi ok">
+              <div class="label"><span>24h tokens</span><span class="zh">24h tokens</span></div>
+              <div class="value ok" id="winTok24">0</div>
+              <div class="hint" id="winTok24Hint">in 0 · out 0</div>
+            </div>
+            <div class="card kpi accent">
+              <div class="label"><span>24h cost</span><span class="zh">24h 费用</span></div>
+              <div class="value accent" id="winCost24">$0.00</div>
+              <div class="hint">est. from token rates</div>
+            </div>
+            <div class="card kpi">
+              <div class="label"><span>7d requests</span><span class="zh">7d 请求</span></div>
+              <div class="value" id="winReq7">0</div>
+              <div class="hint" id="winReq7Hint">errors 0</div>
+            </div>
+            <div class="card kpi ok">
+              <div class="label"><span>7d tokens</span><span class="zh">7d tokens</span></div>
+              <div class="value ok" id="winTok7">0</div>
+              <div class="hint" id="winTok7Hint">in 0 · out 0</div>
+            </div>
+            <div class="card kpi accent">
+              <div class="label"><span>7d cost</span><span class="zh">7d 费用</span></div>
+              <div class="value accent" id="winCost7">$0.00</div>
+              <div class="hint">est. from token rates</div>
+            </div>
+          </div>
+          <div class="card tight" style="margin-top:12px;padding:0">
+            <div class="table-wrap" id="windowsTableWrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>period</th>
+                    <th>requests</th>
+                    <th>errors</th>
+                    <th>tokens in</th>
+                    <th>tokens out</th>
+                    <th>tokens</th>
+                    <th>cost</th>
+                    <th>points</th>
+                  </tr>
+                </thead>
+                <tbody id="windowsTableBody">
+                  <tr><td colspan="8">Connecting to gateway…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="block">
+          <div class="sec-head">
             <h2>Models<span class="zh">模型</span></h2>
             <div class="meta" id="modelsMeta">from recent history</div>
           </div>
@@ -4393,6 +4453,54 @@
           ? ((t.errors / t.requests) * 100).toFixed(1) + "%"
           : "0%";
         $("kpiErrRate").textContent = errRate;
+
+        // Gateway time-window usage (lifetime / 24h / 7d)
+        const uw = data.usage_windows || {};
+        const windows = uw.windows || {};
+        const lifeW = windows.lifetime || t;
+        const w24 = windows.last_24h || {};
+        const w7 = windows.last_7d || {};
+        $("winReq24").textContent = fmtN(w24.requests || 0);
+        $("winReq24Hint").textContent = "errors " + fmtN(w24.errors || 0);
+        $("winTok24").textContent = fmtN(w24.total_tokens || 0);
+        $("winTok24Hint").textContent =
+          "in " + fmtN(w24.prompt_tokens || 0) + " · out " + fmtN(w24.completion_tokens || 0);
+        $("winCost24").textContent = pricingOn ? fmtUSD(w24.cost_usd || 0) : "—";
+        $("winReq7").textContent = fmtN(w7.requests || 0);
+        $("winReq7Hint").textContent = "errors " + fmtN(w7.errors || 0);
+        $("winTok7").textContent = fmtN(w7.total_tokens || 0);
+        $("winTok7Hint").textContent =
+          "in " + fmtN(w7.prompt_tokens || 0) + " · out " + fmtN(w7.completion_tokens || 0);
+        $("winCost7").textContent = pricingOn ? fmtUSD(w7.cost_usd || 0) : "—";
+        const cap = uw.history_cap ? " · history≈" + uw.history_cap : "";
+        $("windowsMeta").textContent =
+          "lifetime · 24h · 7d" + cap +
+          (uw.points_source === "rate_estimate" && data.pricing && data.pricing.configured
+            ? " · points est."
+            : "");
+        const winRows = [
+          ["lifetime", lifeW],
+          ["24h", w24],
+          ["7d", w7],
+        ];
+        const windowsBody = $("windowsTableBody");
+        if (windowsBody) {
+          windowsBody.innerHTML = winRows
+            .map(([label, x]) => {
+              const tt = x || {};
+              return (
+                "<tr><td>" + esc(label) + "</td>" +
+                "<td class='mono'>" + esc(fmtN(tt.requests || 0)) + "</td>" +
+                "<td class='mono'>" + esc(fmtN(tt.errors || 0)) + "</td>" +
+                "<td class='mono'>" + esc(fmtN(tt.prompt_tokens || 0)) + "</td>" +
+                "<td class='mono'>" + esc(fmtN(tt.completion_tokens || 0)) + "</td>" +
+                "<td class='mono'>" + esc(fmtN(tt.total_tokens || 0)) + "</td>" +
+                "<td class='mono'>" + esc(pricingOn ? fmtUSD(tt.cost_usd || 0) : "—") + "</td>" +
+                "<td class='mono'>" + esc(fmtN(tt.points || 0)) + "</td></tr>"
+              );
+            })
+            .join("");
+        }
 
         if (lastTs && now > lastTs) {
           const dt = (now - lastTs) / 1000;
