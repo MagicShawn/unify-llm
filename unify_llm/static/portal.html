@@ -1336,9 +1336,27 @@
 
         <div class="usage-grid" style="margin:12px 0">
           <div class="usage-card meter-tile" id="ovPointsCard"><div class="k">points left · 剩余积分</div><div class="v" id="ovPoints">—</div></div>
-          <div class="usage-card meter-tile"><div class="k">requests (recent)</div><div class="v" id="ovReq">—</div></div>
-          <div class="usage-card meter-tile"><div class="k">tokens total</div><div class="v" id="ovTok">—</div></div>
+          <div class="usage-card meter-tile"><div class="k">requests 24h · 7d</div><div class="v" id="ovReq">—</div></div>
+          <div class="usage-card meter-tile"><div class="k">tokens 24h · 7d</div><div class="v" id="ovTok">—</div></div>
           <div class="usage-card meter-tile" id="ovStatusCard"><div class="k">status</div><div class="v" id="ovStatus" style="font-size:13px">—</div></div>
+        </div>
+        <div class="card" style="padding:8px 0;margin-bottom:12px" id="ovWindowsWrap">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>period · 时间窗</th>
+                  <th>requests</th>
+                  <th>tokens</th>
+                  <th>errors</th>
+                  <th>est. USD</th>
+                </tr>
+              </thead>
+              <tbody id="ovWindowsBody">
+                <tr><td colspan="5">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <div class="section-title">Available models · 可用模型</div>
         <div class="card" style="padding:8px 0" id="modelsWrap">
@@ -1578,13 +1596,45 @@ Model:     deepseek-flash
 
       <div class="portal-panel" id="panel-usage">
       <div class="section-title">Token consumption · Token 消耗</div>
-      <div class="usage-grid">
-        <div class="usage-card"><div class="k">requests</div><div class="v" id="uReq">—</div></div>
-        <div class="usage-card"><div class="k">tokens in</div><div class="v" id="uIn">—</div></div>
-        <div class="usage-card"><div class="k">tokens out</div><div class="v" id="uOut">—</div></div>
-        <div class="usage-card"><div class="k">tokens total</div><div class="v" id="uTotal">—</div></div>
-        <div class="usage-card"><div class="k">errors</div><div class="v" id="uErr">—</div></div>
-        <div class="usage-card"><div class="k">est. USD</div><div class="v" id="uCost">—</div></div>
+      <p class="sub" style="margin:0 0 10px">
+        Lifetime + rolling windows from recent gateway history · 终身累计与 24 小时 / 7 天时间窗。
+      </p>
+      <div class="card" style="padding:8px 0" id="usageWindowsWrap">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>period · 时间窗</th>
+                <th>requests</th>
+                <th>tokens in</th>
+                <th>tokens out</th>
+                <th>tokens</th>
+                <th>errors</th>
+                <th>est. USD</th>
+                <th>points</th>
+              </tr>
+            </thead>
+            <tbody id="usageWindowsBody">
+              <tr><td colspan="8">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="usage-grid" style="margin-top:12px">
+        <div class="usage-card"><div class="k">lifetime requests</div><div class="v" id="uReq">—</div></div>
+        <div class="usage-card"><div class="k">lifetime tokens in</div><div class="v" id="uIn">—</div></div>
+        <div class="usage-card"><div class="k">lifetime tokens out</div><div class="v" id="uOut">—</div></div>
+        <div class="usage-card"><div class="k">lifetime tokens</div><div class="v" id="uTotal">—</div></div>
+        <div class="usage-card"><div class="k">lifetime errors</div><div class="v" id="uErr">—</div></div>
+        <div class="usage-card"><div class="k">lifetime est. USD</div><div class="v" id="uCost">—</div></div>
+      </div>
+      <div class="usage-grid" style="margin-top:12px">
+        <div class="usage-card meter-tile"><div class="k">24h requests</div><div class="v" id="uReq24">—</div></div>
+        <div class="usage-card meter-tile"><div class="k">24h tokens</div><div class="v" id="uTok24">—</div></div>
+        <div class="usage-card meter-tile"><div class="k">24h est. USD</div><div class="v" id="uCost24">—</div></div>
+        <div class="usage-card meter-tile"><div class="k">7d requests</div><div class="v" id="uReq7">—</div></div>
+        <div class="usage-card meter-tile"><div class="k">7d tokens</div><div class="v" id="uTok7">—</div></div>
+        <div class="usage-card meter-tile"><div class="k">7d est. USD</div><div class="v" id="uCost7">—</div></div>
       </div>
       <div class="section-title" style="margin-top:14px">Recent requests · 最近请求</div>
       <div class="card" style="padding:8px 0" id="usageItemsWrap">
@@ -2237,22 +2287,72 @@ Model:     deepseek-flash
       el.classList.add("tone-" + tone);
     }
 
+    function _fmtUsd(usd) {
+      const n = Number(usd || 0);
+      return n > 0 ? "$" + n.toFixed(n < 0.01 ? 4 : 2) : "—";
+    }
+    function _fillWindowsTable(tbodyId, body, cols) {
+      const tb = $(tbodyId);
+      if (!tb) return;
+      const w = (body && body.windows) || {};
+      const periods = [
+        ["lifetime · 累计", w.lifetime],
+        ["24h · 24小时", w.last_24h],
+        ["7d · 7天", w.last_7d],
+      ];
+      tb.innerHTML = periods
+        .map(([label, win]) => {
+          const x = win || {};
+          const cells = cols
+            .map((c) => {
+              if (c === "period") return "<td>" + esc(label) + "</td>";
+              if (c === "tokens")
+                return (
+                  "<td class='mono'>" +
+                  esc(fmtN(Number(x.prompt_tokens || 0) + Number(x.completion_tokens || 0))) +
+                  "</td>"
+                );
+              if (c === "cost_usd" || c === "est_usd")
+                return "<td class='mono'>" + esc(_fmtUsd(x.cost_usd)) + "</td>";
+              return "<td class='mono'>" + esc(fmtN(x[c] || 0)) + "</td>";
+            })
+            .join("");
+          return "<tr>" + cells + "</tr>";
+        })
+        .join("");
+    }
     async function refreshUsage() {
       const { res, body } = await api("/api/me/usage");
       if (!res.ok) return;
       const unlimited = !!body.points_unlimited || Number(body.points_balance) === -1;
-      $("uReq").textContent = fmtN(body.recent_requests || 0);
-      $("uIn").textContent = fmtN(body.prompt_tokens || 0);
-      $("uOut").textContent = fmtN(body.completion_tokens || 0);
-      $("uErr").textContent = fmtN(body.errors || 0);
-      const tokTotal = Number(body.prompt_tokens || 0) + Number(body.completion_tokens || 0);
+      const win = body.windows || {};
+      const life = win.lifetime || {};
+      const w24 = win.last_24h || {};
+      const w7 = win.last_7d || {};
+      $("uReq").textContent = fmtN(body.recent_requests || life.requests || 0);
+      $("uIn").textContent = fmtN(body.prompt_tokens || life.prompt_tokens || 0);
+      $("uOut").textContent = fmtN(body.completion_tokens || life.completion_tokens || 0);
+      $("uErr").textContent = fmtN(body.errors || life.errors || 0);
+      const tokTotal = Number(body.prompt_tokens || life.prompt_tokens || 0) + Number(body.completion_tokens || life.completion_tokens || 0);
       const ut = $("uTotal");
       if (ut) ut.textContent = fmtN(tokTotal);
       const uc = $("uCost");
       if (uc) {
-        const usd = Number(body.estimated_cost_usd || 0);
-        uc.textContent = usd > 0 ? "$" + usd.toFixed(usd < 0.01 ? 4 : 2) : "—";
+        uc.textContent = _fmtUsd(body.estimated_cost_usd != null ? body.estimated_cost_usd : life.cost_usd);
       }
+      const setIf = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+      setIf("uReq24", fmtN(w24.requests || 0));
+      setIf("uTok24", fmtN(Number(w24.prompt_tokens || 0) + Number(w24.completion_tokens || 0)));
+      setIf("uCost24", _fmtUsd(w24.cost_usd));
+      setIf("uReq7", fmtN(w7.requests || 0));
+      setIf("uTok7", fmtN(Number(w7.prompt_tokens || 0) + Number(w7.completion_tokens || 0)));
+      setIf("uCost7", _fmtUsd(w7.cost_usd));
+      _fillWindowsTable("usageWindowsBody", body, [
+        "period", "requests", "prompt_tokens", "completion_tokens", "tokens", "errors", "cost_usd", "points",
+      ]);
+      _fillWindowsTable("ovWindowsBody", body, [
+        "period", "requests", "tokens", "errors", "cost_usd",
+      ]);
       // Points health (shared by hero meter + overview tiles)
       const bal = Number(body.points_balance || 0);
       const spent = Number(body.points_spent || 0);
@@ -2260,11 +2360,13 @@ Model:     deepseek-flash
       const health = pointsHealth(bal, spent, charging, unlimited);
       const freeOrUnlimited = !charging || unlimited;
       const balLabel = unlimited ? "∞" : fmtPts(Math.max(0, bal));
-      // Overview tiles
+      // Overview tiles: 24h · 7d
       const ovR = $("ovReq");
-      if (ovR) ovR.textContent = fmtN(body.recent_requests || 0);
+      if (ovR) ovR.textContent = fmtN(w24.requests || 0) + " · " + fmtN(w7.requests || 0);
+      const tok24 = Number(w24.prompt_tokens || 0) + Number(w24.completion_tokens || 0);
+      const tok7 = Number(w7.prompt_tokens || 0) + Number(w7.completion_tokens || 0);
       const ovT = $("ovTok");
-      if (ovT) ovT.textContent = fmtN(tokTotal);
+      if (ovT) ovT.textContent = fmtN(tok24) + " · " + fmtN(tok7);
       const ovP = $("ovPoints");
       if (ovP) ovP.textContent = balLabel;
       setToneClass($("ovPointsCard"), health.tone);
