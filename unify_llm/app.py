@@ -994,7 +994,7 @@ def create_app(
 
     @app.get("/api/stats/windows")
     async def api_stats_windows() -> dict[str, Any]:
-        """Gateway-wide lifetime / 24h / 7d usage windows (admin + gateway key)."""
+        """Gateway-wide lifetime / 1h / 24h / 7d usage windows (admin + gateway key)."""
         return _gateway_usage_windows()
 
     @app.get("/api/history")
@@ -1700,7 +1700,7 @@ def create_app(
         return [r for r in (items or []) if isinstance(r, dict)]
 
     def _gateway_usage_windows() -> dict[str, Any]:
-        """Gateway-wide lifetime + 24h + 7d windows (history + lifetime override)."""
+        """Gateway-wide lifetime + 1h + 24h + 7d windows (history + lifetime override)."""
         rp, rc = _points_rates()
         totals = state.monitor.lifetime_totals()
         return aggregate_windows(
@@ -1750,6 +1750,7 @@ def create_app(
         )
         # Keep top-level lifetime fields backward-compatible; attach windows.
         windows_payload = windows.get("windows") or {}
+        series = windows.get("series") or {}
         return JSONResponse(
             {
                 "ok": True,
@@ -1767,6 +1768,9 @@ def create_app(
                 "points_per_1k_completion": rc,
                 "windows": windows_payload,
                 "usage_windows": windows,
+                # Per-user series (items already filtered by user_id).
+                "series": series,
+                "series_meta": windows.get("series_meta") or {},
                 "items": items[:20],
             }
         )

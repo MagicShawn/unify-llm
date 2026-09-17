@@ -682,6 +682,151 @@
     .usage-card.tone-err .v { color: var(--err); }
     .usage-card.tone-free .v { color: var(--ink-3); }
 
+    /* ── Usage curves (inline SVG, no chart lib) ── */
+    .usage-chart-card {
+      margin-top: 12px;
+      padding: 14px 16px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(160%);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      box-shadow: inset 0 1px 0 var(--glass-glow);
+      overflow: hidden;
+    }
+    .usage-win-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 0 0 10px;
+    }
+    .usage-win-summary .sw-cell {
+      background: var(--glass-bg);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+    }
+    .usage-win-summary .k {
+      font-size: 11px;
+      color: var(--ink-3);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .usage-win-summary .v {
+      margin-top: 2px;
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 560px) {
+      .usage-win-summary { grid-template-columns: 1fr 1fr; }
+    }
+    .usage-chart-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 12px;
+      margin-bottom: 10px;
+    }
+    .usage-chart-head .meta {
+      color: var(--ink-3);
+      font-size: 12.5px;
+    }
+    }
+    .usage-chart-head .k {
+      font-size: 13px;
+      color: var(--ink-2);
+      font-weight: 600;
+    }
+    .usage-chart-head .meta {
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+    .chart-wins {
+      display: inline-flex;
+      gap: 4px;
+      padding: 3px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      border: 1px solid var(--line);
+    }
+    .chart-win {
+      border: 0;
+      background: transparent;
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background .2s ease, color .2s ease;
+    }
+    .chart-win.active {
+      background: var(--bg-elev);
+      color: var(--ink);
+      box-shadow: 0 1px 2px rgba(0,0,0,.06);
+    }
+    .usage-chart-wrap {
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .usage-chart-wrap svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-width: 100%;
+    }
+    .usage-chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+    .usage-chart-legend .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .usage-chart-legend .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .usage-chart-legend .dot.req { background: var(--ok); }
+    .usage-chart-legend .dot.tok { background: #0071e3; }
+    [data-theme="dark"] .usage-chart-legend .dot.tok { background: #0a84ff; }
+    .chart-series-toggle {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--ink-2);
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      border-radius: 999px;
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+    .chart-series-toggle.active {
+      background: var(--bg-elev);
+      border-color: color-mix(in srgb, #0071e3 35%, var(--line));
+      color: #0071e3;
+    }
+    [data-theme="dark"] .chart-series-toggle.active { color: #0a84ff; }
+    .usage-chart-empty {
+      text-align: center;
+      color: var(--ink-3);
+      font-size: 13px;
+      padding: 28px 8px;
+    }
+
     /* ── Points product meter ── */
     .points-hero {
       margin-top: 4px;
@@ -1336,8 +1481,8 @@
 
         <div class="usage-grid" style="margin:12px 0">
           <div class="usage-card meter-tile" id="ovPointsCard"><div class="k">points left · 剩余积分</div><div class="v" id="ovPoints">—</div></div>
-          <div class="usage-card meter-tile"><div class="k">requests 24h · 7d</div><div class="v" id="ovReq">—</div></div>
-          <div class="usage-card meter-tile"><div class="k">tokens 24h · 7d</div><div class="v" id="ovTok">—</div></div>
+          <div class="usage-card meter-tile"><div class="k">requests (24h)</div><div class="v" id="ovReq">—</div></div>
+          <div class="usage-card meter-tile"><div class="k">tokens (24h)</div><div class="v" id="ovTok">—</div></div>
           <div class="usage-card meter-tile" id="ovStatusCard"><div class="k">status</div><div class="v" id="ovStatus" style="font-size:13px">—</div></div>
         </div>
         <div class="card" style="padding:8px 0;margin-bottom:12px" id="ovWindowsWrap">
@@ -1597,7 +1742,7 @@ Model:     deepseek-flash
       <div class="portal-panel" id="panel-usage">
       <div class="section-title">Token consumption · Token 消耗</div>
       <p class="sub" style="margin:0 0 10px">
-        Lifetime + rolling windows from recent gateway history · 终身累计与 24 小时 / 7 天时间窗。
+        Lifetime + rolling windows from recent gateway history · 终身累计与 1 小时 / 24 小时 / 7 天时间窗（历史为内存环形缓冲，尽力而为）。
       </p>
       <div class="card" style="padding:8px 0" id="usageWindowsWrap">
         <div class="table-wrap">
@@ -1628,14 +1773,33 @@ Model:     deepseek-flash
         <div class="usage-card"><div class="k">lifetime errors</div><div class="v" id="uErr">—</div></div>
         <div class="usage-card"><div class="k">lifetime est. USD</div><div class="v" id="uCost">—</div></div>
       </div>
-      <div class="usage-grid" style="margin-top:12px">
-        <div class="usage-card meter-tile"><div class="k">24h requests</div><div class="v" id="uReq24">—</div></div>
-        <div class="usage-card meter-tile"><div class="k">24h tokens</div><div class="v" id="uTok24">—</div></div>
-        <div class="usage-card meter-tile"><div class="k">24h est. USD</div><div class="v" id="uCost24">—</div></div>
-        <div class="usage-card meter-tile"><div class="k">7d requests</div><div class="v" id="uReq7">—</div></div>
-        <div class="usage-card meter-tile"><div class="k">7d tokens</div><div class="v" id="uTok7">—</div></div>
-        <div class="usage-card meter-tile"><div class="k">7d est. USD</div><div class="v" id="uCost7">—</div></div>
+
+      <div class="section-title" style="margin-top:14px">Usage curve · 使用曲线</div>
+      <div class="usage-chart-card" id="usageChartCard">
+        <div class="usage-chart-head">
+          <div class="chart-wins" role="tablist" aria-label="Usage window">
+            <button type="button" class="chart-win active" data-win="last_1h" role="tab" aria-selected="true">1h</button>
+            <button type="button" class="chart-win" data-win="last_24h" role="tab" aria-selected="false">24h</button>
+            <button type="button" class="chart-win" data-win="last_7d" role="tab" aria-selected="false">7d</button>
+          </div>
+          <div class="meta" id="usageChartMeta">last 1 hour · 近 1 小时</div>
+        </div>
+        <div class="usage-win-summary" id="usageWinSummary" aria-live="polite">
+          <div class="sw-cell"><div class="k">requests</div><div class="v" id="winSumReq">—</div></div>
+          <div class="sw-cell"><div class="k">tokens</div><div class="v" id="winSumTok">—</div></div>
+          <div class="sw-cell"><div class="k">errors</div><div class="v" id="winSumErr">—</div></div>
+          <div class="sw-cell"><div class="k">est. USD</div><div class="v" id="winSumCost">—</div></div>
+        </div>
+        <div class="usage-chart-wrap" id="usageChartWrap">
+          <div class="usage-chart-empty">Loading…</div>
+        </div>
+        <div class="usage-chart-legend">
+          <span class="legend-item"><i class="dot req" aria-hidden="true"></i> requests · 请求</span>
+          <span class="legend-item" id="tokLegendItem" hidden><i class="dot tok" aria-hidden="true"></i> tokens · Token</span>
+          <button type="button" class="chart-series-toggle" id="chartTokToggle" aria-pressed="false">+ tokens</button>
+        </div>
       </div>
+
       <div class="section-title" style="margin-top:14px">Recent requests · 最近请求</div>
       <div class="card" style="padding:8px 0" id="usageItemsWrap">
         <div class="empty">No traffic yet · 暂无请求</div>
@@ -2297,6 +2461,7 @@ Model:     deepseek-flash
       const w = (body && body.windows) || {};
       const periods = [
         ["lifetime · 累计", w.lifetime],
+        ["1h · 近1小时", w.last_1h],
         ["24h · 24小时", w.last_24h],
         ["7d · 7天", w.last_7d],
       ];
@@ -2321,14 +2486,202 @@ Model:     deepseek-flash
         })
         .join("");
     }
+
+    /* ── Usage curve chart (inline SVG) ── */
+    let usageSeriesCache = {};
+    let usageSeriesMeta = {};
+    let usageWinData = {};
+    let usageChartWin = "last_1h";
+    let usageShowTokens = false;
+    const USAGE_WIN_LABELS = {
+      last_1h: "last 1 hour · 近 1 小时",
+      last_24h: "last 24 hours · 近 24 小时",
+      last_7d: "last 7 days · 近 7 天",
+    };
+
+    function _updateWinSummary() {
+      const w = usageWinData[usageChartWin] || {};
+      const tok = Number(w.prompt_tokens || 0) + Number(w.completion_tokens || 0);
+      const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+      set("winSumReq", fmtN(w.requests || 0));
+      set("winSumTok", fmtN(tok));
+      set("winSumErr", fmtN(w.errors || 0));
+      set("winSumCost", _fmtUsd(w.cost_usd));
+      const meta = $("usageChartMeta");
+      if (meta) meta.textContent = USAGE_WIN_LABELS[usageChartWin] || usageChartWin;
+    }
+
+    function _chartFmtT(ts, win) {
+      const d = new Date(Number(ts) * 1000);
+      if (win === "last_7d") {
+        return (d.getMonth() + 1) + "/" + d.getDate();
+      }
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return hh + ":" + mm;
+    }
+
+    function _chartPath(points, closeArea, W, H, pad) {
+      if (!points.length) return "";
+      const n = points.length;
+      const innerW = W - pad.l - pad.r;
+      const innerH = H - pad.t - pad.b;
+      let max = 0;
+      for (const p of points) {
+        const v = Number(p) || 0;
+        if (v > max) max = v;
+      }
+      const yMax = max > 0 ? max : 1;
+      const coords = points.map((v, i) => {
+        const x = pad.l + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+        const y = pad.t + innerH - ((Number(v) || 0) / yMax) * innerH;
+        return [x, y];
+      });
+      let line = "M " + coords[0][0].toFixed(1) + " " + coords[0][1].toFixed(1);
+      for (let i = 1; i < coords.length; i++) {
+        line += " L " + coords[i][0].toFixed(1) + " " + coords[i][1].toFixed(1);
+      }
+      if (!closeArea) return line;
+      const y0 = (pad.t + innerH).toFixed(1);
+      const area =
+        line +
+        " L " + coords[coords.length - 1][0].toFixed(1) + " " + y0 +
+        " L " + coords[0][0].toFixed(1) + " " + y0 +
+        " Z";
+      return area;
+    }
+
+    function renderUsageChart() {
+      const wrap = $("usageChartWrap");
+      if (!wrap) return;
+      _updateWinSummary();
+      const pts = (usageSeriesCache && usageSeriesCache[usageChartWin]) || [];
+      const metaEl = $("usageChartMeta");
+      if (metaEl) {
+        const m = usageSeriesMeta && usageSeriesMeta[usageChartWin];
+        const bucketSec = m && m.bucket_seconds ? m.bucket_seconds : null;
+        let label = USAGE_WIN_LABELS[usageChartWin] || usageChartWin;
+        if (bucketSec) {
+          label += bucketSec < 3600 ? " · " + Math.round(bucketSec / 60) + "m bins" : bucketSec < 86400 ? " · hourly" : " · daily";
+        }
+        if (m && m.buckets) label += " · " + m.buckets + " bins";
+        metaEl.textContent = label;
+      }
+      const tokItem = $("tokLegendItem");
+      const tokBtn = $("chartTokToggle");
+      if (tokItem) tokItem.hidden = !usageShowTokens;
+      if (tokBtn) {
+        tokBtn.textContent = usageShowTokens ? "tokens ✓" : "+ tokens";
+        tokBtn.classList.toggle("active", usageShowTokens);
+        tokBtn.setAttribute("aria-pressed", usageShowTokens ? "true" : "false");
+      }
+      if (!pts.length) {
+        wrap.innerHTML = '<div class="usage-chart-empty">No series yet · 暂无曲线数据</div>';
+        return;
+      }
+      const W = 640, H = 180;
+      const pad = { l: 36, r: 10, t: 12, b: 28 };
+      const reqs = pts.map((p) => Number(p.requests) || 0);
+      const toks = pts.map((p) => Number(p.total_tokens) || 0);
+      const reqArea = _chartPath(reqs, true, W, H, pad);
+      const reqLine = _chartPath(reqs, false, W, H, pad);
+      // Tokens scaled on their own axis when secondary line is on.
+      let tokLine = "";
+      if (usageShowTokens) {
+        const n = toks.length;
+        const innerW = W - pad.l - pad.r;
+        const innerH = H - pad.t - pad.b;
+        let maxTok = 0;
+        for (const v of toks) if (v > maxTok) maxTok = v;
+        const yMax = maxTok > 0 ? maxTok : 1;
+        const coords = toks.map((v, i) => {
+          const x = pad.l + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+          const y = pad.t + innerH - ((Number(v) || 0) / yMax) * innerH;
+          return [x, y];
+        });
+        tokLine = "M " + coords[0][0].toFixed(1) + " " + coords[0][1].toFixed(1);
+        for (let i = 1; i < coords.length; i++) {
+          tokLine += " L " + coords[i][0].toFixed(1) + " " + coords[i][1].toFixed(1);
+        }
+      }
+      let maxReq = 0;
+      for (const v of reqs) if (v > maxReq) maxReq = v;
+      let maxTok2 = 0;
+      if (usageShowTokens) for (const v of toks) if (v > maxTok2) maxTok2 = v;
+      // Time labels: first / mid / last
+      const labelIdx = [0, Math.floor((pts.length - 1) / 2), pts.length - 1];
+      const tLabels = labelIdx.map((i) => {
+        const p = pts[i] || {};
+        return _chartFmtT(p.t, usageChartWin);
+      });
+      const xs = labelIdx.map((i) => {
+        const n = pts.length;
+        return n === 1
+          ? pad.l + (W - pad.l - pad.r) / 2
+          : pad.l + (i / (n - 1)) * (W - pad.l - pad.r);
+      });
+      const gridLines = [0.25, 0.5, 0.75].map((f) => {
+        const y = pad.t + (H - pad.t - pad.b) * f;
+        return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W - pad.r}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.08" stroke-width="1"/>`;
+      }).join("");
+      const labelSvg = xs.map((x, i) =>
+        `<text x="${x.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.55">${esc(tLabels[i])}</text>`
+      ).join("");
+      const svg =
+        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Usage curve">` +
+        `<defs>` +
+        `<linearGradient id="usageReqFill" x1="0" y1="0" x2="0" y2="1">` +
+        `<stop offset="0%" stop-color="#248a3d" stop-opacity="0.28"/>` +
+        `<stop offset="100%" stop-color="#248a3d" stop-opacity="0.02"/>` +
+        `</linearGradient>` +
+        `</defs>` +
+        gridLines +
+        `<text x="${pad.l}" y="${(pad.t + 4).toFixed(1)}" font-size="10" fill="currentColor" fill-opacity="0.5">${esc(fmtN(maxReq))}</text>` +
+        (reqArea ? `<path d="${reqArea}" fill="url(#usageReqFill)"/>` : "") +
+        (reqLine ? `<path d="${reqLine}" fill="none" stroke="#248a3d" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` : "") +
+        (usageShowTokens && tokLine
+          ? `<path d="${tokLine}" fill="none" stroke="#0071e3" stroke-width="1.75" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round"/>` +
+            `<text x="${W - pad.r}" y="${(pad.t + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="#0071e3" fill-opacity="0.85">${esc(fmtN(maxTok2))} tok</text>`
+          : "") +
+        labelSvg +
+        `</svg>`;
+      wrap.innerHTML = svg;
+    }
+
+    function bindUsageChartControls() {
+      document.querySelectorAll(".chart-win").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          usageChartWin = btn.getAttribute("data-win") || "last_1h";
+          document.querySelectorAll(".chart-win").forEach((b) => {
+            const on = b === btn;
+            b.classList.toggle("active", on);
+            b.setAttribute("aria-selected", on ? "true" : "false");
+          });
+          renderUsageChart();
+        });
+      });
+      const tokBtn = $("chartTokToggle");
+      if (tokBtn) {
+        tokBtn.addEventListener("click", () => {
+          usageShowTokens = !usageShowTokens;
+          renderUsageChart();
+        });
+      }
+    }
+
     async function refreshUsage() {
       const { res, body } = await api("/api/me/usage");
       if (!res.ok) return;
       const unlimited = !!body.points_unlimited || Number(body.points_balance) === -1;
       const win = body.windows || {};
       const life = win.lifetime || {};
+      const w1 = win.last_1h || {};
       const w24 = win.last_24h || {};
       const w7 = win.last_7d || {};
+      usageSeriesCache = body.series || (body.usage_windows && body.usage_windows.series) || {};
+      usageSeriesMeta = body.series_meta || (body.usage_windows && body.usage_windows.series_meta) || {};
+      usageWinData = win;
+      renderUsageChart();
       $("uReq").textContent = fmtN(body.recent_requests || life.requests || 0);
       $("uIn").textContent = fmtN(body.prompt_tokens || life.prompt_tokens || 0);
       $("uOut").textContent = fmtN(body.completion_tokens || life.completion_tokens || 0);
@@ -2340,13 +2693,6 @@ Model:     deepseek-flash
       if (uc) {
         uc.textContent = _fmtUsd(body.estimated_cost_usd != null ? body.estimated_cost_usd : life.cost_usd);
       }
-      const setIf = (id, val) => { const el = $(id); if (el) el.textContent = val; };
-      setIf("uReq24", fmtN(w24.requests || 0));
-      setIf("uTok24", fmtN(Number(w24.prompt_tokens || 0) + Number(w24.completion_tokens || 0)));
-      setIf("uCost24", _fmtUsd(w24.cost_usd));
-      setIf("uReq7", fmtN(w7.requests || 0));
-      setIf("uTok7", fmtN(Number(w7.prompt_tokens || 0) + Number(w7.completion_tokens || 0)));
-      setIf("uCost7", _fmtUsd(w7.cost_usd));
       _fillWindowsTable("usageWindowsBody", body, [
         "period", "requests", "prompt_tokens", "completion_tokens", "tokens", "errors", "cost_usd", "points",
       ]);
@@ -2360,13 +2706,12 @@ Model:     deepseek-flash
       const health = pointsHealth(bal, spent, charging, unlimited);
       const freeOrUnlimited = !charging || unlimited;
       const balLabel = unlimited ? "∞" : fmtPts(Math.max(0, bal));
-      // Overview tiles: 24h · 7d
-      const ovR = $("ovReq");
-      if (ovR) ovR.textContent = fmtN(w24.requests || 0) + " · " + fmtN(w7.requests || 0);
+      // Overview: lifetime + 24h summary (chart owns 1h/24h/7d switching)
       const tok24 = Number(w24.prompt_tokens || 0) + Number(w24.completion_tokens || 0);
-      const tok7 = Number(w7.prompt_tokens || 0) + Number(w7.completion_tokens || 0);
+      const ovR = $("ovReq");
+      if (ovR) ovR.textContent = fmtN(w24.requests || 0) + " · life " + fmtN(life.requests || 0);
       const ovT = $("ovTok");
-      if (ovT) ovT.textContent = fmtN(tok24) + " · " + fmtN(tok7);
+      if (ovT) ovT.textContent = fmtN(tok24) + " · life " + fmtN(tokTotal);
       const ovP = $("ovPoints");
       if (ovP) ovP.textContent = balLabel;
       setToneClass($("ovPointsCard"), health.tone);
@@ -2604,6 +2949,7 @@ Model:     deepseek-flash
       wrap.innerHTML = html;
     }
 
+    bindUsageChartControls();
     loadMe();
   </script>
 </body>

@@ -96,6 +96,7 @@ def test_empty_window_defaults():
 
 
 def test_window_seconds_constants():
+    assert WINDOW_SECONDS["last_1h"] == 3600
     assert WINDOW_SECONDS["last_24h"] == 86400
     assert WINDOW_SECONDS["last_7d"] == 7 * 86400
 
@@ -113,6 +114,10 @@ def test_aggregate_windows_buckets_by_age():
     )
     assert windows["lifetime"]["cost_usd"] == pytest.approx(0.01 + 0.0 + 0.001 + 0.25)
 
+    # Item finished at NOW-3600 has age == last_1h window edge → included.
+    assert windows["last_1h"]["requests"] == 1
+    assert windows["last_1h"]["prompt_tokens"] == 100
+
     assert windows["last_24h"]["requests"] == 1
     assert windows["last_24h"]["errors"] == 0
     assert windows["last_24h"]["prompt_tokens"] == 100
@@ -125,11 +130,16 @@ def test_aggregate_windows_buckets_by_age():
     assert windows["last_7d"]["completion_tokens"] == 50 + 0 + 5
     assert windows["last_7d"]["cost_usd"] == pytest.approx(0.011)
 
+    # Series attached by default
+    assert "series" in out
+    assert len(out["series"]["last_1h"]) == 12
+
 
 def test_aggregate_windows_filters_user():
     out = aggregate_windows(_synthetic_items(), now=NOW, user_id="1")
     windows = out["windows"]
     assert windows["lifetime"]["requests"] == 3
+    assert windows["last_1h"]["requests"] == 1
     assert windows["last_24h"]["requests"] == 1
     assert windows["last_7d"]["requests"] == 2
     assert windows["last_7d"]["errors"] == 1
@@ -184,6 +194,7 @@ def test_aggregate_points_log_windows():
         {"delta": 50, "created_at": NOW - 3 * 86400, "kind": "grant"},
     ]
     by = aggregate_points_log(rows, now=NOW)
+    assert by["last_1h"]["points"] == pytest.approx(10.0)
     assert by["last_24h"]["points"] == pytest.approx(10.0)
     # Grants are excluded — windows report Points spent.
     assert by["last_7d"]["points"] == pytest.approx(10 + 4)
@@ -201,6 +212,7 @@ def test_aggregate_windows_uses_points_log_when_provided():
         points_log_rows=rows,
     )
     assert out["points_source"] == "log"
+    assert out["windows"]["last_1h"]["points"] == pytest.approx(6.0)
     assert out["windows"]["last_24h"]["points"] == pytest.approx(6.0)
     # rate estimate must not override log points
     assert out["windows"]["lifetime"]["points"] == pytest.approx(6.0)
@@ -338,7 +350,7 @@ def test_me_usage_returns_window_fields(admin_client: TestClient, app):
     assert "windows" in body
     assert "usage_windows" in body
     win = body["windows"]
-    for key in ("lifetime", "last_24h", "last_7d"):
+    for key in ("lifetime", "last_1h", "last_24h", "last_7d"):
         assert key in win, key
         assert set(win[key]) >= {
             "requests",
@@ -349,6 +361,7 @@ def test_me_usage_returns_window_fields(admin_client: TestClient, app):
             "cost_usd",
             "points",
         }
+    assert win["last_1h"]["requests"] == 1
     assert win["last_24h"]["requests"] == 1
     assert win["last_24h"]["prompt_tokens"] == 20
     assert win["last_24h"]["completion_tokens"] == 10
@@ -357,6 +370,9 @@ def test_me_usage_returns_window_fields(admin_client: TestClient, app):
     assert win["lifetime"]["requests"] == 2
     # Other user's traffic must not leak into this user's windows.
     assert win["lifetime"]["prompt_tokens"] == 25
+    # Series attached and scoped to this user.
+    assert "series" in body
+    assert "last_1h" in body["series"]
     # Backward-compatible top-level fields still present.
     assert "recent_requests" in body
     assert "points_balance" in body
@@ -369,6 +385,7 @@ def test_me_usage_windows_when_no_traffic(admin_client: TestClient):
     assert body["recent_requests"] == 0
     win = body["windows"]
     assert win["lifetime"]["requests"] == 0
+    assert win["last_1h"]["requests"] == 0
     assert win["last_24h"]["requests"] == 0
     assert win["last_7d"]["requests"] == 0
 
@@ -392,12 +409,14 @@ def test_status_includes_gateway_usage_windows(admin_client: TestClient, app):
     assert "usage_windows" in body
     uw = body["usage_windows"]
     win = uw["windows"]
+    assert win["last_1h"]["requests"] >= 1
     assert win["last_24h"]["requests"] >= 1
     assert win["last_7d"]["requests"] >= 2
     assert win["lifetime"]["requests"] >= 3
     # Lifetime may come from monitor counters (override) which are still valid.
     assert "requests" in win["lifetime"]
     assert uw["history_cap"] is not None
+    assert uw.get("series")
 
 
 def test_api_stats_windows(admin_client: TestClient, app):
@@ -413,7 +432,9 @@ def test_api_stats_windows(admin_client: TestClient, app):
     body = r.json()
     assert body["ok"] is True
     assert "windows" in body
+    assert "last_1h" in body["windows"]
     assert "last_24h" in body["windows"]
+    assert "series" in body
 
 
 def test_portal_html_mentions_windows(app):
@@ -422,5 +443,6 @@ def test_portal_html_mentions_windows(app):
         assert r.status_code == 200
         html = r.text
         assert "usageWindowsBody" in html
+        assert "1h" in html
         assert "24h" in html
         assert "7d" in html or "7d" in html

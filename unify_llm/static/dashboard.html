@@ -1508,6 +1508,43 @@
     }
 
     /* ── Path chip / sparkline ── */
+    .chart-wins {
+      display: inline-flex;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+    }
+    .chart-win {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--ink-3);
+      font: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      line-height: 1.2;
+    }
+    .chart-win:hover { color: var(--ink); background: var(--bg-hover); }
+    .chart-win.active {
+      background: var(--ink);
+      color: var(--bg-panel);
+    }
+    .usage-win-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    @media (max-width: 640px) {
+      .usage-win-summary { grid-template-columns: 1fr; }
+    }
     .chip.path {
       background: var(--bg-soft);
       color: var(--ink-3);
@@ -2139,40 +2176,36 @@
 
         <section class="block">
           <div class="sec-head">
-            <h2>Windows<span class="zh">时间窗</span></h2>
-            <div class="meta" id="windowsMeta">lifetime · 24h · 7d</div>
+            <h2>Usage curve<span class="zh">用量曲线</span></h2>
+            <div class="meta" id="windowsMeta">switch window on the chart</div>
           </div>
-          <div class="kpi-grid">
-            <div class="card kpi">
-              <div class="label"><span>24h requests</span><span class="zh">24h 请求</span></div>
-              <div class="value" id="winReq24">0</div>
-              <div class="hint" id="winReq24Hint">errors 0</div>
+          <div class="card" style="padding:10px 14px" id="adminUsageSparkCard">
+            <div class="sec-head" style="margin:0 0 8px;align-items:center">
+              <div class="chart-wins" id="adminWinTabs" role="tablist" aria-label="Usage window">
+                <button type="button" class="chart-win active" data-win="last_1h" role="tab" aria-selected="true">1h</button>
+                <button type="button" class="chart-win" data-win="last_24h" role="tab" aria-selected="false">24h</button>
+                <button type="button" class="chart-win" data-win="last_7d" role="tab" aria-selected="false">7d</button>
+              </div>
+              <div class="meta" id="adminSparkMeta">last 1h · 5m bins</div>
             </div>
-            <div class="card kpi ok">
-              <div class="label"><span>24h tokens</span><span class="zh">24h tokens</span></div>
-              <div class="value ok" id="winTok24">0</div>
-              <div class="hint" id="winTok24Hint">in 0 · out 0</div>
+            <div class="usage-win-summary" id="adminWinSummary">
+              <div class="card kpi" style="padding:8px 12px">
+                <div class="label"><span>requests</span></div>
+                <div class="value" id="winSumReq">0</div>
+                <div class="hint" id="winSumReqHint">errors 0</div>
+              </div>
+              <div class="card kpi ok" style="padding:8px 12px">
+                <div class="label"><span>tokens</span></div>
+                <div class="value ok" id="winSumTok">0</div>
+                <div class="hint" id="winSumTokHint">in 0 · out 0</div>
+              </div>
+              <div class="card kpi accent" style="padding:8px 12px">
+                <div class="label"><span>est. cost</span></div>
+                <div class="value accent" id="winSumCost">$0.00</div>
+                <div class="hint">selected window</div>
+              </div>
             </div>
-            <div class="card kpi accent">
-              <div class="label"><span>24h cost</span><span class="zh">24h 费用</span></div>
-              <div class="value accent" id="winCost24">$0.00</div>
-              <div class="hint">est. from token rates</div>
-            </div>
-            <div class="card kpi">
-              <div class="label"><span>7d requests</span><span class="zh">7d 请求</span></div>
-              <div class="value" id="winReq7">0</div>
-              <div class="hint" id="winReq7Hint">errors 0</div>
-            </div>
-            <div class="card kpi ok">
-              <div class="label"><span>7d tokens</span><span class="zh">7d tokens</span></div>
-              <div class="value ok" id="winTok7">0</div>
-              <div class="hint" id="winTok7Hint">in 0 · out 0</div>
-            </div>
-            <div class="card kpi accent">
-              <div class="label"><span>7d cost</span><span class="zh">7d 费用</span></div>
-              <div class="value accent" id="winCost7">$0.00</div>
-              <div class="hint">est. from token rates</div>
-            </div>
+            <div id="adminUsageSpark" style="color:var(--ok);min-height:48px">—</div>
           </div>
           <div class="card tight" style="margin-top:12px;padding:0">
             <div class="table-wrap" id="windowsTableWrap">
@@ -4454,32 +4487,65 @@
           : "0%";
         $("kpiErrRate").textContent = errRate;
 
-        // Gateway time-window usage (lifetime / 24h / 7d)
+        // Gateway time-window usage — one chart + tab (1h / 24h / 7d)
         const uw = data.usage_windows || {};
         const windows = uw.windows || {};
         const lifeW = windows.lifetime || t;
+        const w1 = windows.last_1h || {};
         const w24 = windows.last_24h || {};
         const w7 = windows.last_7d || {};
-        $("winReq24").textContent = fmtN(w24.requests || 0);
-        $("winReq24Hint").textContent = "errors " + fmtN(w24.errors || 0);
-        $("winTok24").textContent = fmtN(w24.total_tokens || 0);
-        $("winTok24Hint").textContent =
-          "in " + fmtN(w24.prompt_tokens || 0) + " · out " + fmtN(w24.completion_tokens || 0);
-        $("winCost24").textContent = pricingOn ? fmtUSD(w24.cost_usd || 0) : "—";
-        $("winReq7").textContent = fmtN(w7.requests || 0);
-        $("winReq7Hint").textContent = "errors " + fmtN(w7.errors || 0);
-        $("winTok7").textContent = fmtN(w7.total_tokens || 0);
-        $("winTok7Hint").textContent =
-          "in " + fmtN(w7.prompt_tokens || 0) + " · out " + fmtN(w7.completion_tokens || 0);
-        $("winCost7").textContent = pricingOn ? fmtUSD(w7.cost_usd || 0) : "—";
+        const winByKey = { last_1h: w1, last_24h: w24, last_7d: w7 };
+        const selected = winByKey[window.__adminUsageWin || "last_1h"] || w1;
+        $("winSumReq").textContent = fmtN(selected.requests || 0);
+        $("winSumReqHint").textContent = "errors " + fmtN(selected.errors || 0);
+        $("winSumTok").textContent = fmtN(selected.total_tokens || 0);
+        $("winSumTokHint").textContent =
+          "in " + fmtN(selected.prompt_tokens || 0) + " · out " + fmtN(selected.completion_tokens || 0);
+        $("winSumCost").textContent = pricingOn ? fmtUSD(selected.cost_usd || 0) : "—";
         const cap = uw.history_cap ? " · history≈" + uw.history_cap : "";
         $("windowsMeta").textContent =
-          "lifetime · 24h · 7d" + cap +
+          "curve tabs 1h / 24h / 7d" + cap +
           (uw.points_source === "rate_estimate" && data.pricing && data.pricing.configured
             ? " · points est."
             : "");
+        const uSeries = uw.series || {};
+        const sparkWin = window.__adminUsageWin || "last_1h";
+        const winLabels = { last_1h: "last 1h", last_24h: "last 24h", last_7d: "last 7d" };
+        const sparkSeries = uSeries[sparkWin] || uSeries.last_1h || [];
+        const sparkEl = $("adminUsageSpark");
+        if (sparkEl) {
+          const reqVals = sparkSeries.map((p) => Number(p.requests) || 0);
+          if (reqVals.length >= 2) {
+            const W = 640, H = 48, n = reqVals.length;
+            let maxR = 0;
+            for (const v of reqVals) if (v > maxR) maxR = v;
+            const yMax = maxR > 0 ? maxR : 1;
+            const coords = reqVals.map((v, i) => {
+              const x = 2 + (i / (n - 1)) * (W - 4);
+              const y = H - 4 - ((v / yMax) * (H - 8));
+              return x.toFixed(1) + "," + y.toFixed(1);
+            }).join(" ");
+            sparkEl.innerHTML =
+              '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:48px;display:block" aria-label="Gateway requests curve">' +
+              '<polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="' + coords + '"/>' +
+              "</svg>";
+            const metaEl = $("adminSparkMeta");
+            if (metaEl) {
+              const sm = (uw.series_meta || {})[sparkWin];
+              if (sm) {
+                const unit = sm.bucket_seconds < 3600 ? Math.round(sm.bucket_seconds / 60) + "m" : sm.bucket_seconds < 86400 ? "hourly" : "daily";
+                metaEl.textContent = (winLabels[sparkWin] || sparkWin) + " · " + sm.buckets + " × " + unit + " · max " + fmtN(maxR);
+              } else {
+                metaEl.textContent = (winLabels[sparkWin] || sparkWin) + " · max " + fmtN(maxR);
+              }
+            }
+          } else {
+            sparkEl.textContent = "no recent traffic in series buffer";
+          }
+        }
         const winRows = [
           ["lifetime", lifeW],
+          ["1h", w1],
           ["24h", w24],
           ["7d", w7],
         ];
@@ -4575,6 +4641,19 @@
     }
 
     window.addEventListener("resize", () => drawChart(lastLatency));
+
+    window.__adminUsageWin = "last_1h";
+    document.getElementById("adminWinTabs")?.addEventListener("click", (e) => {
+      const btn = e.target.closest(".chart-win[data-win]");
+      if (!btn) return;
+      window.__adminUsageWin = btn.getAttribute("data-win") || "last_1h";
+      document.querySelectorAll("#adminWinTabs .chart-win").forEach((b) => {
+        const on = b === btn;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      refresh();
+    });
 
     /* Best-effort: non-admin session users are sent to the portal.
        Server APIs still enforce roles; this only improves UX. */
