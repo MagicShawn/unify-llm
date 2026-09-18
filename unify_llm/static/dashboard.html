@@ -1547,20 +1547,21 @@
       margin-bottom: 10px;
     }
     .usage-line-chart {
-      min-height: 220px;
+      height: 240px;
+      min-height: 240px;
       width: 100%;
-      height: 220px;
       color: var(--ink);
     }
     .usage-line-chart svg {
       display: block;
-      width: 100%;
-      height: 220px;
+      width: 100% !important;
+      height: 240px !important;
+      min-height: 240px;
     }
     @media (max-width: 640px) {
       .usage-win-summary { grid-template-columns: 1fr; }
       .usage-line-chart,
-      .usage-line-chart svg { min-height: 180px; height: 180px; }
+      .usage-line-chart svg { height: 200px !important; min-height: 200px; }
     }
     .chip.path {
       background: var(--bg-soft);
@@ -4512,7 +4513,7 @@
         if (sparkEl) {
           const reqVals = sparkSeries.map((p) => Number(p.requests) || 0);
           if (reqVals.length >= 2) {
-            const W = 640, H = 220, n = reqVals.length;
+            const W = 640, H = 240, n = reqVals.length;
             const pad = { l: 36, r: 12, t: 14, b: 24 };
             const innerW = W - pad.l - pad.r;
             const innerH = H - pad.t - pad.b;
@@ -4541,7 +4542,7 @@
               return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W - pad.r}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.08" stroke-width="1"/>`;
             }).join("");
             sparkEl.innerHTML =
-              '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:220px;display:block" aria-label="Gateway requests line chart">' +
+              '<svg viewBox="0 0 640 240" preserveAspectRatio="none" width="100%" height="240" style="width:100%;height:240px;display:block" aria-label="Gateway requests line chart">' +
               '<defs><linearGradient id="adminLineFill" x1="0" y1="0" x2="0" y2="1">' +
               '<stop offset="0%" stop-color="currentColor" stop-opacity="0.18"/>' +
               '<stop offset="100%" stop-color="currentColor" stop-opacity="0.02"/>' +
