@@ -2223,7 +2223,7 @@
                 <div class="hint">selected window</div>
               </div>
             </div>
-            <div id="adminUsageSpark" class="usage-line-chart" style="color:var(--ink);min-height:220px">—</div>
+            <div id="adminUsageSpark" class="usage-line-chart" style="color:var(--ink);height:240px;min-height:240px">—</div>
           </div>
         </section>
 
@@ -4511,9 +4511,25 @@
         const sparkSeries = uSeries[sparkWin] || uSeries.last_1h || [];
         const sparkEl = $("adminUsageSpark");
         if (sparkEl) {
-          const reqVals = sparkSeries.map((p) => Number(p.requests) || 0);
-          if (reqVals.length >= 2) {
-            const W = 640, H = 240, n = reqVals.length;
+          let reqVals = sparkSeries.map((p) => Number(p.requests) || 0);
+          // Fallback: bucket gateway history if series is empty/flat-zero.
+          if (!reqVals.length || reqVals.every((v) => !v)) {
+            const items = (providers || []).flatMap((p) => p.recent || []).slice(0, 200);
+            const n = 12;
+            const span = 3600;
+            const bucket = span / n;
+            const now = Date.now() / 1000;
+            reqVals = new Array(n).fill(0);
+            items.forEach((r) => {
+              const ts = Number(r.finished_at || 0);
+              if (!ts) return;
+              const age = now - ts;
+              if (age < 0 || age > span) return;
+              const idx = Math.min(n - 1, Math.max(0, Math.floor((span - age) / bucket)));
+              reqVals[idx] += 1;
+            });
+          }
+          const W = 640, H = 240, n = reqVals.length;
             const pad = { l: 36, r: 12, t: 14, b: 24 };
             const innerW = W - pad.l - pad.r;
             const innerH = H - pad.t - pad.b;
@@ -4563,13 +4579,6 @@
                 metaEl.textContent = (winLabels[sparkWin] || sparkWin) + " · max " + fmtN(maxR);
               }
             }
-          } else {
-            sparkEl.innerHTML =
-              '<div class="usage-chart-empty" style="padding:12px 0;color:var(--ink-3)">No traffic yet · 暂无请求</div>' +
-              '<svg viewBox="0 0 640 200" preserveAspectRatio="none" style="width:100%;height:200px;display:block;opacity:0.35" aria-hidden="true">' +
-              '<line x1="36" y1="160" x2="626" y2="160" stroke="currentColor" stroke-width="2" stroke-dasharray="6 4"/>' +
-              "</svg>";
-          }
         }
 
         if (lastTs && now > lastTs) {
