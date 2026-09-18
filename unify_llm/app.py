@@ -1930,7 +1930,11 @@ def create_app(
             # Prefer portal login; 302 keeps the URL clean for bookmarks.
             return RedirectResponse("/portal?next=/dashboard", status_code=302)
         html_path = STATIC_DIR / "dashboard.html"
-        return Response(html_path.read_text(encoding="utf-8"), media_type="text/html")
+        return Response(
+            html_path.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
 
     @app.get("/portal")
     async def portal() -> Response:
@@ -1940,7 +1944,11 @@ def create_app(
                 {"error": {"message": "Portal UI not installed", "type": "ConfigError"}},
                 status_code=404,
             )
-        return Response(html_path.read_text(encoding="utf-8"), media_type="text/html")
+        return Response(
+            html_path.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
 
     # ---------- shared proxy executor ----------
 
