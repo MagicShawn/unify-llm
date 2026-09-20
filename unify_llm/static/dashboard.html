@@ -53,9 +53,11 @@
       --pink: #6e6e73;
       --pink-soft: rgba(0, 0, 0, 0.04);
       --chart-grid: rgba(0, 0, 0, 0.08);
-      --chart-p50: #1d1d1f;
-      --chart-p95: #6e6e73;
+      --chart-p50: #0071e3;
+      --chart-p95: #bf5af2;
       --chart-raw: #aeaeb2;
+      --curve-main: #0071e3;
+      --curve-alt: #bf5af2;
       --scrollbar: #d1d1d6;
       --card-border: 1px solid var(--line);
       --icon-ink: #424245;
@@ -98,9 +100,11 @@
       --pink: #aeaeb2;
       --pink-soft: rgba(255, 255, 255, 0.05);
       --chart-grid: rgba(255, 255, 255, 0.10);
-      --chart-p50: #f5f5f7;
-      --chart-p95: #aeaeb2;
+      --chart-p50: #0a84ff;
+      --chart-p95: #c77dff;
       --chart-raw: #636366;
+      --curve-main: #0a84ff;
+      --curve-alt: #c77dff;
       --scrollbar: #48484a;
       --card-border: 1px solid var(--line);
       --icon-ink: #f5f5f7;
@@ -2503,6 +2507,9 @@
       const sel = $("panelSelect");
       if (sel && sel.value !== target) sel.value = target;
       if (target === "users" && typeof refreshUsers === "function") refreshUsers();
+      // Charts rendered while their panel was hidden measured 0 width —
+      // redraw now that the panel is visible (rAF waits for layout).
+      if (typeof redrawCharts === "function") redrawCharts();
     }
     document.querySelectorAll(".nav-item").forEach((btn) => {
       btn.addEventListener("click", () => switchPanel(btn.dataset.panel));
@@ -2658,6 +2665,94 @@
     const EMPTY_HISTORY = () => emptyState("☰", "No completed requests", "Finished requests will show up here");
     const EMPTY_NO_MATCH = () => emptyState("⌕", "No matches", "Try a different model filter or status");
 
+    /* ── Gateway usage spark (SVG) ──
+       Rendered at the wrapper's measured pixel size so x/y scale 1:1.
+       The old fixed 640×240 viewBox with preserveAspectRatio="none" let the
+       browser scale both axes independently: dots became ellipses, stroke
+       width varied with line direction, and slopes flattened on wide panels. */
+    let lastSparkData = { uSeries: {}, seriesMeta: {}, providers: [] };
+
+    function renderUsageSpark() {
+      const el = $("adminUsageSpark");
+      if (!el) return;
+      const { uSeries, seriesMeta, providers } = lastSparkData;
+      const sparkWin = window.__adminUsageWin || "last_1h";
+      const winLabels = { last_1h: "last 1h", last_24h: "last 24h", last_7d: "last 7d" };
+      const sparkSeries = uSeries[sparkWin] || uSeries.last_1h || [];
+      let reqVals = sparkSeries.map((p) => Number(p.requests) || 0);
+      // Fallback: bucket gateway history if series is empty/flat-zero.
+      if (!reqVals.length || reqVals.every((v) => !v)) {
+        const items = (providers || []).flatMap((p) => p.recent || []).slice(0, 200);
+        const buckets = 12;
+        const span = 3600;
+        const bucket = span / buckets;
+        const nowSec = Date.now() / 1000;
+        reqVals = new Array(buckets).fill(0);
+        items.forEach((r) => {
+          const ts = Number(r.finished_at || 0);
+          if (!ts) return;
+          const age = nowSec - ts;
+          if (age < 0 || age > span) return;
+          const idx = Math.min(buckets - 1, Math.max(0, Math.floor((span - age) / bucket)));
+          reqVals[idx] += 1;
+        });
+      }
+      const W = Math.max(320, Math.round(el.clientWidth || 640));
+      const H = Math.max(160, Math.round(el.clientHeight || 240));
+      const n = reqVals.length;
+      const pad = { l: 36, r: 12, t: 14, b: 24 };
+      const innerW = W - pad.l - pad.r;
+      const innerH = H - pad.t - pad.b;
+      let maxR = 0;
+      for (const v of reqVals) if (v > maxR) maxR = v;
+      const yMax = maxR > 0 ? maxR : 1;
+      const coords = reqVals.map((v, i) => {
+        const x = pad.l + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+        const y = pad.t + innerH - ((v / yMax) * innerH);
+        return [x, y];
+      });
+      const xsArr = coords.map((c) => c[0]);
+      const ysArr = coords.map((c) => c[1]);
+      const curve = monotoneCurve(xsArr, ysArr);
+      const line = curve ? smoothSvgPath(curve) : "";
+      const y0 = (pad.t + innerH).toFixed(1);
+      const area = line
+        ? line + " L " + coords[coords.length - 1][0].toFixed(1) + " " + y0 + " L " + coords[0][0].toFixed(1) + " " + y0 + " Z"
+        : "";
+      const step = n > 24 ? Math.ceil(n / 12) : 1;
+      let dots = "";
+      for (let i = 0; i < n; i++) {
+        if (i % step !== 0 && i !== n - 1) continue;
+        dots += `<circle cx="${coords[i][0].toFixed(1)}" cy="${coords[i][1].toFixed(1)}" r="3" fill="var(--curve-main)" stroke="var(--bg-panel)" stroke-width="1.5"/>`;
+      }
+      const grid = [0.25, 0.5, 0.75].map((f) => {
+        const y = pad.t + innerH * f;
+        return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W - pad.r}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.08" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+      }).join("");
+      el.innerHTML =
+        `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="width:100%;height:${H}px;display:block" aria-label="Gateway requests curve chart">` +
+        '<defs><linearGradient id="adminLineFill" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" style="stop-color:var(--curve-main)" stop-opacity="0.20"/>' +
+        '<stop offset="100%" style="stop-color:var(--curve-main)" stop-opacity="0.02"/>' +
+        "</linearGradient></defs>" +
+        grid +
+        `<text x="${pad.l}" y="${(pad.t + 4).toFixed(1)}" font-size="10" fill="currentColor" fill-opacity="0.5">${fmtN(maxR)}</text>` +
+        (area ? `<path d="${area}" fill="url(#adminLineFill)"/>` : "") +
+        (line ? `<path d="${line}" fill="none" stroke="var(--curve-main)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : "") +
+        dots +
+        "</svg>";
+      const metaEl = $("adminSparkMeta");
+      if (metaEl) {
+        const sm = seriesMeta[sparkWin];
+        if (sm) {
+          const unit = sm.bucket_seconds < 3600 ? Math.round(sm.bucket_seconds / 60) + "m" : sm.bucket_seconds < 86400 ? "hourly" : "daily";
+          metaEl.textContent = (winLabels[sparkWin] || sparkWin) + " · " + sm.buckets + " × " + unit + " · max " + fmtN(maxR);
+        } else {
+          metaEl.textContent = (winLabels[sparkWin] || sparkWin) + " · max " + fmtN(maxR);
+        }
+      }
+    }
+
     /* ── Chart ── */
     let lastLatency = { series: [], points: [] };
     let lastModels = [];
@@ -2676,6 +2771,89 @@
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
       ctx.stroke();
+    }
+
+    /* Monotone cubic interpolation (Fritsch–Carlson, the classic
+       chart-smoothing scheme): a fitted curve that passes through every
+       point without overshooting. */
+    function monotoneCurve(xs, ys) {
+      const n = xs.length;
+      if (n < 2) return null;
+      const dx = [], m = [];
+      for (let i = 0; i < n - 1; i++) {
+        const d = (xs[i + 1] - xs[i]) || 1e-9;
+        dx.push(d);
+        m.push((ys[i + 1] - ys[i]) / d);
+      }
+      const t = new Array(n);
+      t[0] = m[0];
+      t[n - 1] = m[n - 2];
+      for (let i = 1; i < n - 1; i++) {
+        if (m[i - 1] * m[i] <= 0) {
+          t[i] = 0;
+        } else {
+          const w1 = 2 * dx[i] + dx[i - 1];
+          const w2 = dx[i] + 2 * dx[i - 1];
+          t[i] = (w1 + w2) / (w1 / m[i - 1] + w2 / m[i]);
+        }
+      }
+      return { xs, ys, dx, t };
+    }
+
+    function smoothSvgPath(curve) {
+      const { xs, ys, dx, t } = curve;
+      let d = `M ${xs[0].toFixed(1)} ${ys[0].toFixed(1)}`;
+      for (let i = 0; i < xs.length - 1; i++) {
+        const c1x = xs[i] + dx[i] / 3, c1y = ys[i] + t[i] * dx[i] / 3;
+        const c2x = xs[i + 1] - dx[i] / 3, c2y = ys[i + 1] - t[i + 1] * dx[i] / 3;
+        d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${xs[i + 1].toFixed(1)} ${ys[i + 1].toFixed(1)}`;
+      }
+      return d;
+    }
+
+    function strokeSmoothPath(ctx, curve, color, width) {
+      if (!curve) return;
+      const { xs, ys, dx, t } = curve;
+      ctx.beginPath();
+      ctx.moveTo(xs[0], ys[0]);
+      for (let i = 0; i < xs.length - 1; i++) {
+        ctx.bezierCurveTo(
+          xs[i] + dx[i] / 3, ys[i] + t[i] * dx[i] / 3,
+          xs[i + 1] - dx[i] / 3, ys[i + 1] - t[i + 1] * dx[i] / 3,
+          xs[i + 1], ys[i + 1],
+        );
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+
+    function fillSmoothArea(ctx, curve, baseY, fillStyle) {
+      if (!curve) return;
+      const { xs, ys, dx, t } = curve;
+      ctx.beginPath();
+      ctx.moveTo(xs[0], ys[0]);
+      for (let i = 0; i < xs.length - 1; i++) {
+        ctx.bezierCurveTo(
+          xs[i] + dx[i] / 3, ys[i] + t[i] * dx[i] / 3,
+          xs[i + 1] - dx[i] / 3, ys[i + 1] - t[i + 1] * dx[i] / 3,
+          xs[i + 1], ys[i + 1],
+        );
+      }
+      ctx.lineTo(xs[xs.length - 1], baseY);
+      ctx.lineTo(xs[0], baseY);
+      ctx.closePath();
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+
+    function hexToRgba(hex, alpha) {
+      const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+      if (!m) return `rgba(0,113,227,${alpha})`;
+      const v = parseInt(m[1], 16);
+      return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${alpha})`;
     }
 
     function drawChart(latency) {
@@ -2774,39 +2952,36 @@
       ctx.fillText(tf(t1), pad.l + w, cssH - 10);
       ctx.textAlign = "left";
 
-      // raw latency thin line
+      // raw latency thin line (smoothed)
       const rawX = [], rawY = [];
       for (let i = 0; i < n; i++) {
         rawX.push(xAt(i));
         rawY.push(yAt(series[i].ms || 0));
       }
+      const rawCurve = monotoneCurve(rawX, rawY);
       ctx.save();
       ctx.globalAlpha = 0.35;
-      strokePath(ctx, rawX, rawY, cRaw, 1.2);
+      strokeSmoothPath(ctx, rawCurve, cRaw, 1.2);
       ctx.restore();
 
-      // area under p50
+      // p50 / p95 points
       const xs = [], y50 = [], y95 = [];
       for (let i = 0; i < n; i++) {
         xs.push(xAt(i));
         y50.push(yAt(series[i].p50 || 0));
         y95.push(yAt(series[i].p95 || 0));
       }
-      if (xs.length > 1) {
-        ctx.beginPath();
-        ctx.moveTo(xs[0], y50[0]);
-        for (let i = 1; i < xs.length; i++) ctx.lineTo(xs[i], y50[i]);
-        ctx.lineTo(xs[xs.length - 1], pad.t + h);
-        ctx.lineTo(xs[0], pad.t + h);
-        ctx.closePath();
+      const curve50 = monotoneCurve(xs, y50);
+      const curve95 = monotoneCurve(xs, y95);
+      // area under p50 (gradient in the p50 hue)
+      if (curve50) {
         const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + h);
-        grad.addColorStop(0, "rgba(45,212,168,0.16)");
-        grad.addColorStop(1, "rgba(45,212,168,0.01)");
-        ctx.fillStyle = grad;
-        ctx.fill();
+        grad.addColorStop(0, hexToRgba(c50, 0.18));
+        grad.addColorStop(1, hexToRgba(c50, 0.01));
+        fillSmoothArea(ctx, curve50, pad.t + h, grad);
       }
 
-      // p95 then p50 — thick visible lines
+      // p95 then p50 — thick fitted curves
       if (n === 1) {
         // single point: draw a short horizontal stub so the series is visible
         const cx = xs[0];
@@ -2814,8 +2989,8 @@
         strokePath(ctx, [cx - half, cx + half], [y95[0], y95[0]], c95, 2.2);
         strokePath(ctx, [cx - half, cx + half], [y50[0], y50[0]], c50, 2.4);
       } else {
-        strokePath(ctx, xs, y95, c95, 2.2);
-        strokePath(ctx, xs, y50, c50, 2.4);
+        strokeSmoothPath(ctx, curve95, c95, 2.2);
+        strokeSmoothPath(ctx, curve50, c50, 2.4);
       }
 
       // vertex dots — always draw for 1-2 points
@@ -4505,81 +4680,12 @@
           (uw.points_source === "rate_estimate" && data.pricing && data.pricing.configured
             ? " · points est."
             : "");
-        const uSeries = uw.series || {};
-        const sparkWin = window.__adminUsageWin || "last_1h";
-        const winLabels = { last_1h: "last 1h", last_24h: "last 24h", last_7d: "last 7d" };
-        const sparkSeries = uSeries[sparkWin] || uSeries.last_1h || [];
-        const sparkEl = $("adminUsageSpark");
-        if (sparkEl) {
-          let reqVals = sparkSeries.map((p) => Number(p.requests) || 0);
-          // Fallback: bucket gateway history if series is empty/flat-zero.
-          if (!reqVals.length || reqVals.every((v) => !v)) {
-            const items = (providers || []).flatMap((p) => p.recent || []).slice(0, 200);
-            const n = 12;
-            const span = 3600;
-            const bucket = span / n;
-            const now = Date.now() / 1000;
-            reqVals = new Array(n).fill(0);
-            items.forEach((r) => {
-              const ts = Number(r.finished_at || 0);
-              if (!ts) return;
-              const age = now - ts;
-              if (age < 0 || age > span) return;
-              const idx = Math.min(n - 1, Math.max(0, Math.floor((span - age) / bucket)));
-              reqVals[idx] += 1;
-            });
-          }
-          const W = 640, H = 240, n = reqVals.length;
-            const pad = { l: 36, r: 12, t: 14, b: 24 };
-            const innerW = W - pad.l - pad.r;
-            const innerH = H - pad.t - pad.b;
-            let maxR = 0;
-            for (const v of reqVals) if (v > maxR) maxR = v;
-            const yMax = maxR > 0 ? maxR : 1;
-            const coords = reqVals.map((v, i) => {
-              const x = pad.l + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
-              const y = pad.t + innerH - ((v / yMax) * innerH);
-              return [x, y];
-            });
-            let line = "M " + coords[0][0].toFixed(1) + " " + coords[0][1].toFixed(1);
-            for (let i = 1; i < coords.length; i++) {
-              line += " L " + coords[i][0].toFixed(1) + " " + coords[i][1].toFixed(1);
-            }
-            const y0 = (pad.t + innerH).toFixed(1);
-            const area = line + " L " + coords[coords.length - 1][0].toFixed(1) + " " + y0 + " L " + coords[0][0].toFixed(1) + " " + y0 + " Z";
-            const step = n > 24 ? Math.ceil(n / 12) : 1;
-            let dots = "";
-            for (let i = 0; i < n; i++) {
-              if (i % step !== 0 && i !== n - 1) continue;
-              dots += `<circle cx="${coords[i][0].toFixed(1)}" cy="${coords[i][1].toFixed(1)}" r="3" fill="currentColor" stroke="var(--bg-panel)" stroke-width="1.5"/>`;
-            }
-            const grid = [0.25, 0.5, 0.75].map((f) => {
-              const y = pad.t + innerH * f;
-              return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W - pad.r}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.08" stroke-width="1"/>`;
-            }).join("");
-            sparkEl.innerHTML =
-              '<svg viewBox="0 0 640 240" preserveAspectRatio="none" width="100%" height="240" style="width:100%;height:240px;display:block" aria-label="Gateway requests line chart">' +
-              '<defs><linearGradient id="adminLineFill" x1="0" y1="0" x2="0" y2="1">' +
-              '<stop offset="0%" stop-color="currentColor" stop-opacity="0.18"/>' +
-              '<stop offset="100%" stop-color="currentColor" stop-opacity="0.02"/>' +
-              "</linearGradient></defs>" +
-              grid +
-              `<text x="${pad.l}" y="${(pad.t + 4).toFixed(1)}" font-size="10" fill="currentColor" fill-opacity="0.5">${fmtN(maxR)}</text>` +
-              `<path d="${area}" fill="url(#adminLineFill)"/>` +
-              `<path d="${line}" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>` +
-              dots +
-              "</svg>";
-            const metaEl = $("adminSparkMeta");
-            if (metaEl) {
-              const sm = (uw.series_meta || {})[sparkWin];
-              if (sm) {
-                const unit = sm.bucket_seconds < 3600 ? Math.round(sm.bucket_seconds / 60) + "m" : sm.bucket_seconds < 86400 ? "hourly" : "daily";
-                metaEl.textContent = (winLabels[sparkWin] || sparkWin) + " · " + sm.buckets + " × " + unit + " · max " + fmtN(maxR);
-              } else {
-                metaEl.textContent = (winLabels[sparkWin] || sparkWin) + " · max " + fmtN(maxR);
-              }
-            }
-        }
+        lastSparkData = {
+          uSeries: uw.series || {},
+          seriesMeta: uw.series_meta || {},
+          providers: providers || [],
+        };
+        renderUsageSpark();
 
         if (lastTs && now > lastTs) {
           const dt = (now - lastTs) / 1000;
@@ -4653,7 +4759,22 @@
       }
     }
 
-    window.addEventListener("resize", () => drawChart(lastLatency));
+    /* Redraw both charts on resize (rAF-debounced). ResizeObserver also
+       catches container width changes that never fire window resize. */
+    let chartsRaf = 0;
+    function redrawCharts() {
+      if (chartsRaf) return;
+      chartsRaf = requestAnimationFrame(() => {
+        chartsRaf = 0;
+        drawChart(lastLatency);
+        renderUsageSpark();
+      });
+    }
+    window.addEventListener("resize", redrawCharts);
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(redrawCharts);
+      document.querySelectorAll("#latencyChart, #adminUsageSpark").forEach((el) => ro.observe(el));
+    }
 
     window.__adminUsageWin = "last_1h";
     document.getElementById("adminWinTabs")?.addEventListener("click", (e) => {
