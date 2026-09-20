@@ -31,6 +31,8 @@
       --warn: #b25000;
       --warn-soft: rgba(178, 80, 0, 0.10);
       --accent-soft: rgba(0, 0, 0, 0.04);
+      --curve-main: #0071e3;
+      --curve-alt: #bf5af2;
       --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.03), 0 8px 28px rgba(0, 0, 0, 0.06);
       --glass-bg: rgba(246, 246, 250, 0.52);
       --glass-bg-strong: rgba(246, 246, 250, 0.72);
@@ -55,6 +57,8 @@
       --warn: #ffd60a;
       --warn-soft: rgba(255, 214, 10, 0.12);
       --accent-soft: rgba(255, 255, 255, 0.06);
+      --curve-main: #0a84ff;
+      --curve-alt: #c77dff;
       --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.28);
       --glass-bg: rgba(28, 28, 30, 0.55);
       --glass-bg-strong: rgba(44, 44, 46, 0.68);
@@ -829,9 +833,8 @@
       border-radius: 50%;
       display: inline-block;
     }
-    .usage-chart-legend .dot.req { background: var(--ok); }
-    .usage-chart-legend .dot.tok { background: #0071e3; }
-    [data-theme="dark"] .usage-chart-legend .dot.tok { background: #0a84ff; }
+    .usage-chart-legend .dot.req { background: var(--curve-main); }
+    .usage-chart-legend .dot.tok { background: var(--curve-alt); }
     .chart-series-toggle {
       margin-left: auto;
       font-size: 12px;
@@ -844,10 +847,9 @@
     }
     .chart-series-toggle.active {
       background: var(--bg-elev);
-      border-color: color-mix(in srgb, #0071e3 35%, var(--line));
-      color: #0071e3;
+      border-color: color-mix(in srgb, var(--curve-main) 35%, var(--line));
+      color: var(--curve-main);
     }
-    [data-theme="dark"] .chart-series-toggle.active { color: #0a84ff; }
     .usage-chart-empty {
       text-align: center;
       color: var(--ink-3);
@@ -2359,6 +2361,11 @@ Model:     deepseek-flash
       document.querySelectorAll(".portal-panel").forEach((p) => {
         p.classList.toggle("active", p.id === "panel-" + name);
       });
+      // Charts rendered while their panel was hidden measured 0 width and
+      // fell back to the 640px viewBox — re-render now that it is visible.
+      if (name === "usage") {
+        try { renderUsageChart(); } catch (_) {}
+      }
       try {
         history.replaceState(null, "", "#" + name);
       } catch (_) {}
@@ -2477,44 +2484,71 @@ Model:     deepseek-flash
         const y = pad.t + innerH - ((Number(v) || 0) / yMax) * innerH;
         return [x, y];
       });
-      let line = "M " + coords[0][0].toFixed(1) + " " + coords[0][1].toFixed(1);
-      for (let i = 1; i < coords.length; i++) {
-        line += " L " + coords[i][0].toFixed(1) + " " + coords[i][1].toFixed(1);
-      }
-      if (!closeArea) return line;
-      const y0 = (pad.t + innerH).toFixed(1);
-      const area =
-        line +
-        " L " + coords[coords.length - 1][0].toFixed(1) + " " + y0 +
-        " L " + coords[0][0].toFixed(1) + " " + y0 +
-        " Z";
-      return area;
+      return _smoothPathFromCoords(coords, closeArea, pad.t + innerH);
     }
 
-    function _emptyLineSvg() {
-      const W = 640, H = 220;
+    /* Monotone cubic interpolation (Fritsch–Carlson, the classic
+       chart-smoothing scheme): a fitted curve that passes through every
+       point without overshooting. */
+    function _smoothPathFromCoords(coords, closeArea, baseY) {
+      const n = coords.length;
+      if (!n) return "";
+      if (n === 1) {
+        return `M ${coords[0][0].toFixed(1)} ${coords[0][1].toFixed(1)}`;
+      }
+      const xs = coords.map((c) => c[0]);
+      const ys = coords.map((c) => c[1]);
+      const dx = [], m = [];
+      for (let i = 0; i < n - 1; i++) {
+        const d = (xs[i + 1] - xs[i]) || 1e-9;
+        dx.push(d);
+        m.push((ys[i + 1] - ys[i]) / d);
+      }
+      const t = new Array(n);
+      t[0] = m[0];
+      t[n - 1] = m[n - 2];
+      for (let i = 1; i < n - 1; i++) {
+        if (m[i - 1] * m[i] <= 0) {
+          t[i] = 0;
+        } else {
+          const w1 = 2 * dx[i] + dx[i - 1];
+          const w2 = dx[i] + 2 * dx[i - 1];
+          t[i] = (w1 + w2) / (w1 / m[i - 1] + w2 / m[i]);
+        }
+      }
+      let line = `M ${xs[0].toFixed(1)} ${ys[0].toFixed(1)}`;
+      for (let i = 0; i < n - 1; i++) {
+        const c1x = xs[i] + dx[i] / 3, c1y = ys[i] + t[i] * dx[i] / 3;
+        const c2x = xs[i + 1] - dx[i] / 3, c2y = ys[i + 1] - t[i + 1] * dx[i] / 3;
+        line += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${xs[i + 1].toFixed(1)} ${ys[i + 1].toFixed(1)}`;
+      }
+      if (!closeArea) return line;
+      const y0 = baseY.toFixed(1);
+      return line + ` L ${xs[n - 1].toFixed(1)} ${y0} L ${xs[0].toFixed(1)} ${y0} Z`;
+    }
+
+    function _emptyLineSvg(W = 640, H = 220) {
       const grid = [0.25, 0.5, 0.75].map((f) => {
         const y = 20 + (H - 40) * f;
-        return `<line x1="40" y1="${y}" x2="${W - 14}" y2="${y}" stroke="currentColor" stroke-opacity="0.12" stroke-width="1"/>`;
+        return `<line x1="40" y1="${y}" x2="${W - 14}" y2="${y}" stroke="currentColor" stroke-opacity="0.12" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
       }).join("");
       return (
-        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:220px;display:block" aria-hidden="true">` +
+        `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="width:100%;height:${H}px;display:block" aria-hidden="true">` +
         grid +
-        `<polyline fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" points="40,${H - 24} ${W - 14},${H - 24}"/>` +
+        `<polyline fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" points="40,${H - 24} ${W - 14},${H - 24}"/>` +
         "</svg>"
       );
     }
 
-    function _emptyUsageLineSvg() {
-      const W = 640, H = 240;
+    function _emptyUsageLineSvg(W = 640, H = 240) {
       const grid = [0.3, 0.55, 0.8].map((f) => {
         const y = 24 + (H - 48) * f;
-        return `<line x1="40" y1="${y}" x2="${W - 14}" y2="${y}" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>`;
+        return `<line x1="40" y1="${y}" x2="${W - 14}" y2="${y}" stroke="currentColor" stroke-opacity="0.15" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
       }).join("");
       return (
-        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:240px;display:block" aria-hidden="true">` +
+        `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="width:100%;height:${H}px;display:block" aria-hidden="true">` +
         grid +
-        `<polyline fill="none" stroke="currentColor" stroke-opacity="0.4" stroke-width="2.5" stroke-dasharray="6 4" points="40,${H - 28} ${W - 14},${H - 28}"/>` +
+        `<polyline fill="none" stroke="currentColor" stroke-opacity="0.4" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" points="40,${H - 28} ${W - 14},${H - 28}"/>` +
         `</svg>`
       );
     }
@@ -2577,14 +2611,18 @@ Model:     deepseek-flash
         toks = pts.map((p) => Number(p.total_tokens) || 0);
         usageSeriesCache = Object.assign({}, usageSeriesCache, { [usageChartWin]: pts });
       }
+      // Render at the wrapper's measured pixel size so x/y scale 1:1
+      // (a fixed 640×240 viewBox stretched dots into ellipses and skewed
+      // stroke widths whenever the container width differed from 640px).
+      const W = Math.max(320, Math.round(wrap.clientWidth || 640));
+      const H = Math.max(160, Math.round(wrap.clientHeight || 240));
       if (!pts.length) {
         wrap.innerHTML =
           '<div class="usage-chart-empty">No traffic yet · 暂无请求（调用 API 后会出现折线）</div>' +
-          _emptyUsageLineSvg();
+          _emptyUsageLineSvg(W, H);
         return;
       }
       // Always draw the chart frame — even when the window is all zeros.
-      const W = 640, H = 240;
       const pad = { l: 40, r: 14, t: 16, b: 32 };
       const reqArea = _chartPath(reqs, true, W, H, pad);
       const reqLine = _chartPath(reqs, false, W, H, pad);
@@ -2602,27 +2640,13 @@ Model:     deepseek-flash
           if (i % step !== 0 && i !== n - 1) continue;
           const x = pad.l + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
           const y = pad.t + innerH - ((Number(reqs[i]) || 0) / yMax) * innerH;
-          reqDots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.25" fill="currentColor" stroke="var(--bg-panel)" stroke-width="1.5"/>`;
+          reqDots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.25" fill="var(--curve-main)" stroke="var(--bg-panel)" stroke-width="1.5"/>`;
         }
       }
       // Tokens scaled on their own axis when secondary line is on.
       let tokLine = "";
       if (usageShowTokens) {
-        const n = toks.length;
-        const innerW = W - pad.l - pad.r;
-        const innerH = H - pad.t - pad.b;
-        let maxTok = 0;
-        for (const v of toks) if (v > maxTok) maxTok = v;
-        const yMax = maxTok > 0 ? maxTok : 1;
-        const coords = toks.map((v, i) => {
-          const x = pad.l + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
-          const y = pad.t + innerH - ((Number(v) || 0) / yMax) * innerH;
-          return [x, y];
-        });
-        tokLine = "M " + coords[0][0].toFixed(1) + " " + coords[0][1].toFixed(1);
-        for (let i = 1; i < coords.length; i++) {
-          tokLine += " L " + coords[i][0].toFixed(1) + " " + coords[i][1].toFixed(1);
-        }
+        tokLine = _chartPath(toks, false, W, H, pad);
       }
       let maxReq = 0;
       for (const v of reqs) if (v > maxReq) maxReq = v;
@@ -2642,32 +2666,48 @@ Model:     deepseek-flash
       });
       const gridLines = [0.25, 0.5, 0.75].map((f) => {
         const y = pad.t + (H - pad.t - pad.b) * f;
-        return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W - pad.r}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.08" stroke-width="1"/>`;
+        return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W - pad.r}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity="0.08" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
       }).join("");
       const labelSvg = xs.map((x, i) =>
         `<text x="${x.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.55">${esc(tLabels[i])}</text>`
       ).join("");
       const svg =
-        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="240" style="width:100%;height:240px;display:block" role="img" aria-label="Usage line chart">` +
+        `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="width:100%;height:${H}px;display:block" role="img" aria-label="Usage curve chart">` +
         `<defs>` +
         `<linearGradient id="usageReqFill" x1="0" y1="0" x2="0" y2="1">` +
-        `<stop offset="0%" stop-color="currentColor" stop-opacity="0.24"/>` +
-        `<stop offset="100%" stop-color="currentColor" stop-opacity="0.03"/>` +
+        `<stop offset="0%" style="stop-color:var(--curve-main)" stop-opacity="0.24"/>` +
+        `<stop offset="100%" style="stop-color:var(--curve-main)" stop-opacity="0.03"/>` +
         `</linearGradient>` +
         `</defs>` +
         gridLines +
         `<text x="${pad.l}" y="${(pad.t + 4).toFixed(1)}" font-size="10" fill="currentColor" fill-opacity="0.65">${esc(fmtN(maxReq))}</text>` +
         (reqArea ? `<path d="${reqArea}" fill="url(#usageReqFill)"/>` : "") +
-        (reqLine ? `<path d="${reqLine}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : "") +
+        (reqLine ? `<path d="${reqLine}" fill="none" stroke="var(--curve-main)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : "") +
         reqDots +
         (usageShowTokens && tokLine
-          ? `<path d="${tokLine}" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.75" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round"/>` +
-            `<text x="${W - pad.r}" y="${(pad.t + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="currentColor" fill-opacity="0.65">${esc(fmtN(maxTok2))} tok</text>`
+          ? `<path d="${tokLine}" fill="none" stroke="var(--curve-alt)" stroke-opacity="0.85" stroke-width="1.75" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` +
+            `<text x="${W - pad.r}" y="${(pad.t + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--curve-alt)">${esc(fmtN(maxTok2))} tok</text>`
           : "") +
         labelSvg +
         `</svg>`;
       wrap.innerHTML = svg;
     }
+
+    /* Re-render the usage chart when its box changes size (rAF-debounced).
+       ResizeObserver catches container width changes (layout, devtools,
+       orientation) that never fire window resize. */
+    let usageChartRaf = 0;
+    function scheduleUsageChartRender() {
+      if (usageChartRaf) return;
+      usageChartRaf = requestAnimationFrame(() => {
+        usageChartRaf = 0;
+        renderUsageChart();
+      });
+    }
+    if (window.ResizeObserver && $("usageChartWrap")) {
+      new ResizeObserver(scheduleUsageChartRender).observe($("usageChartWrap"));
+    }
+    window.addEventListener("resize", scheduleUsageChartRender);
 
     function bindUsageChartControls() {
       document.querySelectorAll(".chart-win").forEach((btn) => {
